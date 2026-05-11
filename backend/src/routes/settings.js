@@ -16,22 +16,13 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
   res.json(rows.map(r => r.key));
 });
 
-// ─── GET /api/settings/:key ───────────────────────────────────────────────────
-router.get('/:key', requireAuth, requireAdmin, async (req, res) => {
-  const row = await getOne('SELECT value FROM settings WHERE key=$1', [req.params.key]);
-  if (!row) return res.status(404).json({ error: 'Chiave non trovata' });
-  try {
-    const val = JSON.parse(row.value);
-    // Mask passwords
-    if (val && typeof val === 'object') {
-      for (const k of Object.keys(val)) {
-        if ((k.includes('password') || k.includes('pass') || k.includes('secret')) && val[k]) {
-          val[k] = '********';
-        }
-      }
-    }
-    res.json(val);
-  } catch { res.json(row.value); }
+// ─── GET /api/settings/smtp ───────────────────────────────────────────────────
+router.get('/smtp', requireAuth, requireAdmin, async (req, res) => {
+  const cfg = await getSmtpConfig();
+  if (!cfg) return res.json({});
+  const safe = { ...cfg };
+  if (safe.pass) safe.pass = '********';
+  res.json(safe);
 });
 
 // ─── PUT /api/settings/smtp ───────────────────────────────────────────────────
@@ -147,6 +138,23 @@ router.put('/general', requireAuth, requireAdmin, async (req, res) => {
   );
   await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'general_config', null, req.ip);
   res.json({ message: 'Impostazioni generali salvate' });
+});
+
+// ─── GET /api/settings/:key — generic fallback, must be LAST ─────────────────
+router.get('/:key', requireAuth, requireAdmin, async (req, res) => {
+  const row = await getOne('SELECT value FROM settings WHERE key=$1', [req.params.key]);
+  if (!row) return res.status(404).json({ error: 'Chiave non trovata' });
+  try {
+    const val = JSON.parse(row.value);
+    if (val && typeof val === 'object') {
+      for (const k of Object.keys(val)) {
+        if ((k.includes('password') || k.includes('pass') || k.includes('secret')) && val[k]) {
+          val[k] = '********';
+        }
+      }
+    }
+    res.json(val);
+  } catch { res.json(row.value); }
 });
 
 module.exports = router;
