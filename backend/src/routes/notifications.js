@@ -1,0 +1,76 @@
+const { Router } = require('express');
+const { body, validationResult } = require('express-validator');
+const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
+const { query, getOne, getMany } = require('../db/database');
+
+const router = Router();
+router.use(requireAuth);
+
+// ─── GET /api/notifications ─── In-app for current user ──────────────────────
+router.get('/', async (req, res) => {
+  const { unread, page = 1, limit = 30 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const filters = [`user_id=$1`]; const params = [req.user.id]; let i = 2;
+  if (unread === 'true') { filters.push(`is_read=false`); }
+  const where = `WHERE ${filters.join(' AND ')}`;
+  const total = parseInt((await query(`SELECT COUNT(*) FROM in_app_notifications ${where}`, params)).rows[0].count);
+  const rows = await getMany(
+    `SELECT * FROM in_app_notifications ${where} ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`,
+    [...params, parseInt(limit), offset]
+  );
+  res.json({ data: rows, total, unread_count: parseInt((await query(`SELECT COUNT(*) FROM in_app_notifications WHERE user_id=$1 AND is_read=false`, [req.user.id])).rows[0].count) });
+});
+
+// ─── POST /api/notifications/read ────────────────────────────────────────────
+router.post('/read', async (req, res) => {
+  const { ids } = req.body;
+  if (Array.isArray(ids) && ids.length > 0) {
+    await query(`UPDATE in_app_notifications SET is_read=true WHERE id=ANY($1::uuid[]) AND user_id=$2`, [ids, req.user.id]);
+  } else {
+    await query(`UPDATE in_app_notifications SET is_read=true WHERE user_id=$1`, [req.user.id]);
+  }
+  res.json({ message: 'Notifiche segnate come lette' });
+});
+
+// ─── GET /api/notifications/log ──────────────────────────────────────────────
+router.get('/log', requireAdmin, async (req, res) => {
+  const { event_type, status, page = 1, limit = 50 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const params = []; let i = 1;
+  const filters = [];
+  if (event_type) { filters.push(`event_type=$${i++}`); params.push(event_type); }
+  if (status)     { filters.push(`status=$${i++}`); params.push(status); }
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const total = parseInt((await query(`SELECT COUNT(*) FROM notification_log ${where}`, params)).rows[0].count);
+  const rows = await getMany(
+    `SELECT * FROM notification_log ${where} ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`,
+    [...params, parseInt(limit), offset]
+  );
+  res.json({ data: rows, total });
+});
+
+// ─── GET /api/notifications/templates ────────────────────────────────────────
+router.get('/templates', requireAdmin, async (req, res) => {
+  const rows = await getMany('SELECT * FROM notification_templates ORDER BY event_type');
+  res.json(rows);
+});
+
+// ─── PUT /api/notifications/templates/:id ─────────────────────────────────────
+router.put('/templates/:id', requireAdmin, [
+  body('subject_template').optional().isString(),
+  body('body_html_template').optional().isString(),
+  body('is_active').optional().isBoolean(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  const sets=[]; const vals=[]; let i=1;
+  if (req.body.subject_template !== undefined)   { sets.push(`subject_template=$${i++}`); vals.push(req.body.subject_template); }
+  if (req.body.body_html_template !== undefined) { sets.push(`body_html_template=$${i++}`); vals.push(req.body.body_html_template); }
+  if (req.body.is_active !== undefined)          { sets.push(`is_active=$${i++}`); vals.push(req.body.is_active); }
+  if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo' });
+  sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
+  await query(`UPDATE notification_templates SET ${sets.join(',')} WHERE id=$${i}`, vals);
+  res.json({ message: 'Template aggiornato' });
+});
+
+module.exports = router;

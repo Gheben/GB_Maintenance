@@ -1,0 +1,144 @@
+const { Router } = require('express');
+const { body, param, validationResult } = require('express-validator');
+const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
+const { query, getOne, getMany } = require('../db/database');
+const auditService = require('../services/auditService');
+
+const router = Router();
+router.use(requireAuth, requireAdmin);
+
+// ─── GET /api/groups ──────────────────────────────────────────────────────────
+router.get('/', async (req, res) => {
+  const groups = await getMany(
+    `SELECT lg.*, COUNT(ugm.user_id)::int as member_count
+     FROM local_groups lg
+     LEFT JOIN user_group_members ugm ON ugm.group_id = lg.id
+     GROUP BY lg.id ORDER BY lg.name`
+  );
+  res.json(groups);
+});
+
+// ─── GET /api/groups/:id ──────────────────────────────────────────────────────
+router.get('/:id', async (req, res) => {
+  const group = await getOne('SELECT * FROM local_groups WHERE id=$1', [req.params.id]);
+  if (!group) return res.status(404).json({ error: 'Gruppo non trovato' });
+
+  const members = await getMany(
+    `SELECT u.id, u.username, u.display_name, u.email, u.role, u.avatar_color
+     FROM users u JOIN user_group_members ugm ON ugm.user_id=u.id
+     WHERE ugm.group_id=$1 ORDER BY u.username`,
+    [req.params.id]
+  );
+  const ldapMappings = await getMany(
+    'SELECT * FROM ldap_group_mappings WHERE local_group_id=$1',
+    [req.params.id]
+  );
+  res.json({ ...group, members, ldapMappings });
+});
+
+// ─── POST /api/groups ─────────────────────────────────────────────────────────
+router.post('/', [
+  body('name').isString().trim().isLength({ min: 2, max: 100 }),
+  body('description').optional().isString().trim(),
+  body('permissions').optional().isObject(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  try {
+    const result = await query(
+      `INSERT INTO local_groups (name, description, permissions) VALUES ($1, $2, $3) RETURNING id`,
+      [req.body.name, req.body.description || null, JSON.stringify(req.body.permissions || {})]
+    );
+    const id = result.rows[0].id;
+    await auditService.log(req.user.id, req.user.username, 'group:create', 'local_group', id, `name=${req.body.name}`, req.ip);
+    res.status(201).json({ id });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Nome gruppo già in uso' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── PUT /api/groups/:id ──────────────────────────────────────────────────────
+router.put('/:id', [
+  body('name').optional().isString().trim().isLength({ min: 2, max: 100 }),
+  body('description').optional().isString(),
+  body('permissions').optional().isObject(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const sets = []; const vals = []; let i = 1;
+  if (req.body.name !== undefined)        { sets.push(`name=$${i++}`); vals.push(req.body.name); }
+  if (req.body.description !== undefined) { sets.push(`description=$${i++}`); vals.push(req.body.description); }
+  if (req.body.permissions !== undefined) { sets.push(`permissions=$${i++}`); vals.push(JSON.stringify(req.body.permissions)); }
+  if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
+  sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
+
+  await query(`UPDATE local_groups SET ${sets.join(',')} WHERE id=$${i}`, vals);
+  await auditService.log(req.user.id, req.user.username, 'group:update', 'local_group', req.params.id, null, req.ip);
+  res.json({ message: 'Gruppo aggiornato' });
+});
+
+// ─── DELETE /api/groups/:id ───────────────────────────────────────────────────
+router.delete('/:id', async (req, res) => {
+  await query('DELETE FROM local_groups WHERE id=$1', [req.params.id]);
+  await auditService.log(req.user.id, req.user.username, 'group:delete', 'local_group', req.params.id, null, req.ip);
+  res.json({ message: 'Gruppo eliminato' });
+});
+
+// ─── POST /api/groups/:id/members ─────────────────────────────────────────────
+router.post('/:id/members', [
+  body('user_ids').isArray({ min: 1 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  for (const uid of req.body.user_ids) {
+    await query(
+      `INSERT INTO user_group_members (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [uid, req.params.id]
+    );
+  }
+  res.json({ message: 'Membri aggiunti' });
+});
+
+// ─── DELETE /api/groups/:id/members/:userId ───────────────────────────────────
+router.delete('/:id/members/:userId', async (req, res) => {
+  await query(
+    'DELETE FROM user_group_members WHERE group_id=$1 AND user_id=$2',
+    [req.params.id, req.params.userId]
+  );
+  res.json({ message: 'Membro rimosso' });
+});
+
+// ─── LDAP Mappings ────────────────────────────────────────────────────────────
+router.get('/ldap/mappings', async (req, res) => {
+  const mappings = await getMany(
+    `SELECT lm.*, lg.name as group_name FROM ldap_group_mappings lm
+     LEFT JOIN local_groups lg ON lg.id=lm.local_group_id ORDER BY lm.ldap_group_dn`
+  );
+  res.json(mappings);
+});
+
+router.post('/ldap/mappings', [
+  body('ldap_group_dn').isString().trim().isLength({ min: 1 }),
+  body('local_group_id').optional().isUUID(),
+  body('role').optional().isIn(['admin','change_manager','operator','viewer','subscriber']),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const result = await query(
+    `INSERT INTO ldap_group_mappings (ldap_group_dn, local_group_id, role) VALUES ($1,$2,$3) RETURNING id`,
+    [req.body.ldap_group_dn, req.body.local_group_id || null, req.body.role || null]
+  );
+  res.status(201).json({ id: result.rows[0].id });
+});
+
+router.delete('/ldap/mappings/:id', async (req, res) => {
+  await query('DELETE FROM ldap_group_mappings WHERE id=$1', [req.params.id]);
+  res.json({ message: 'Mapping eliminato' });
+});
+
+module.exports = router;

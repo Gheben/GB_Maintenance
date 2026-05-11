@@ -1,0 +1,96 @@
+version: '3.9'
+
+# GB_Maintenance — Maintenance Management System
+# Host disk layout:
+#   /opt/gbmaintenance/
+#   ├── docker-compose.yml
+#   ├── .env
+#   ├── data/
+#   │   └── postgres/   ← PostgreSQL data directory
+#   └── logs/
+#       └── app.log
+
+services:
+
+  # Creates host folders before services start (Synology-compatible)
+  init-dirs:
+    image: alpine
+    command: sh -c "mkdir -p /host/data/postgres /host/logs"
+    volumes:
+      - type: bind
+        source: .
+        target: /host
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: gbmaintenance-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-gbmaintenance}
+      - POSTGRES_USER=${POSTGRES_USER:-gbmaint}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme_strong_password}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - gbmaintenance-net
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gbmaint} -d ${POSTGRES_DB:-gbmaintenance}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      init-dirs:
+        condition: service_completed_successfully
+
+  backend:
+    depends_on:
+      init-dirs:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gbmaintenance-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NODE_ENV=production
+      - PORT=4680
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - LOG_FILE=/app/logs/app.log
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - gbmaintenance-net
+    expose:
+      - "4680"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4680/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gbmaintenance-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-4681}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - gbmaintenance-net
+
+networks:
+  gbmaintenance-net:
+    driver: bridge

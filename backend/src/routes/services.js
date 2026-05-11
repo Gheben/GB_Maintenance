@@ -1,0 +1,205 @@
+const { Router } = require('express');
+const { body, validationResult } = require('express-validator');
+const { requireAuth, requireOperator, requireAdmin } = require('../middleware/authMiddleware');
+const { query, getOne, getMany } = require('../db/database');
+const auditService = require('../services/auditService');
+const wsService = require('../services/wsService');
+
+const router = Router();
+router.use(requireAuth);
+
+const CRITICALITIES = ['critical','high','medium','low'];
+const STATUSES = ['operational','degraded','partial_outage','major_outage','under_maintenance'];
+
+// ─── GET /api/services ────────────────────────────────────────────────────────
+router.get('/', async (req, res) => {
+  const { search, criticality, status, page = 1, limit = 50 } = req.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const params = []; let i = 1;
+  const filters = ['s.is_active=true'];
+
+  if (search)      { filters.push(`(s.name ILIKE $${i} OR s.description ILIKE $${i})`); params.push(`%${search}%`); i++; }
+  if (criticality) { filters.push(`s.criticality=$${i++}`); params.push(criticality); }
+  if (status)      { filters.push(`s.status=$${i++}`); params.push(status); }
+
+  const where = `WHERE ${filters.join(' AND ')}`;
+  const countRes = await query(`SELECT COUNT(*) FROM services s ${where}`, params);
+  const total = parseInt(countRes.rows[0].count);
+
+  const rows = await getMany(
+    `SELECT s.*, u.display_name as owner_name,
+       (SELECT COUNT(*)::int FROM service_subscribers ss WHERE ss.service_id=s.id) as subscriber_count,
+       (SELECT COUNT(*)::int FROM service_assets sa WHERE sa.service_id=s.id) as asset_count
+     FROM services s LEFT JOIN users u ON u.id=s.owner_id
+     ${where} ORDER BY s.name LIMIT $${i++} OFFSET $${i}`,
+    [...params, parseInt(limit), offset]
+  );
+  res.json({ data: rows, total, page: parseInt(page), limit: parseInt(limit) });
+});
+
+// ─── GET /api/services/:id ────────────────────────────────────────────────────
+router.get('/:id', async (req, res) => {
+  const service = await getOne(
+    `SELECT s.*, u.display_name as owner_name
+     FROM services s LEFT JOIN users u ON u.id=s.owner_id
+     WHERE s.id=$1`,
+    [req.params.id]
+  );
+  if (!service) return res.status(404).json({ error: 'Servizio non trovato' });
+
+  const assets = await getMany(
+    `SELECT a.id, a.name, a.category, a.status, a.criticality
+     FROM assets a JOIN service_assets sa ON sa.asset_id=a.id WHERE sa.service_id=$1`,
+    [req.params.id]
+  );
+  const subscribers = await getMany(
+    `SELECT ss.*, u.display_name, u.username, u.avatar_color
+     FROM service_subscribers ss LEFT JOIN users u ON u.id=ss.user_id
+     WHERE ss.service_id=$1 ORDER BY ss.created_at DESC`,
+    [req.params.id]
+  );
+  res.json({ ...service, assets, subscribers });
+});
+
+// ─── GET /api/services/:id/uptime ─────────────────────────────────────────────
+router.get('/:id/uptime', async (req, res) => {
+  const days = parseInt(req.query.days || '90');
+  // Get linked assets and their uptime
+  const assets = await getMany(
+    `SELECT a.id FROM service_assets sa JOIN assets a ON a.id=sa.asset_id WHERE sa.service_id=$1`,
+    [req.params.id]
+  );
+  if (assets.length === 0) return res.json({ days: [], uptime_percent: 100 });
+
+  const assetIds = assets.map(a => a.id);
+  // Get status history for all assets in last N days
+  const history = await getMany(
+    `SELECT entity_id, status, created_at FROM status_history
+     WHERE entity_type='asset' AND entity_id=ANY($1::uuid[]) AND created_at > NOW() - INTERVAL '${days} days'
+     ORDER BY created_at ASC`,
+    [assetIds]
+  );
+  res.json({ history, asset_count: assetIds.length });
+});
+
+// ─── POST /api/services ───────────────────────────────────────────────────────
+router.post('/', requireOperator, [
+  body('name').isString().trim().isLength({ min: 1, max: 200 }),
+  body('criticality').optional().isIn(CRITICALITIES),
+  body('description').optional().isString(),
+  body('owner_id').optional().isUUID(),
+  body('sla_uptime_percent').optional().isFloat({ min: 0, max: 100 }),
+  body('is_public').optional().isBoolean(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  try {
+    const slug = _slugify(req.body.name) + '-' + Date.now().toString(36);
+    const result = await query(
+      `INSERT INTO services (name, slug, description, criticality, owner_id, sla_uptime_percent, is_public)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [req.body.name, slug, req.body.description||null, req.body.criticality||'medium',
+       req.body.owner_id||null, req.body.sla_uptime_percent||99.9, req.body.is_public||false]
+    );
+    const id = result.rows[0].id;
+    await query(`INSERT INTO status_history (entity_type, entity_id, status, changed_by) VALUES ('service',$1,'operational',$2)`, [id, req.user.username]);
+    await auditService.log(req.user.id, req.user.username, 'service:create', 'service', id, `name=${req.body.name}`, req.ip, req.get('user-agent'));
+    res.status(201).json({ id });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Nome servizio già in uso' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── PUT /api/services/:id ────────────────────────────────────────────────────
+router.put('/:id', requireOperator, async (req, res) => {
+  const allowed = ['name','description','criticality','owner_id','sla_uptime_percent','is_public','is_active'];
+  const sets=[]; const vals=[]; let i=1;
+  for (const f of allowed) {
+    if (req.body[f] !== undefined) { sets.push(`${f}=$${i++}`); vals.push(req.body[f]); }
+  }
+  if (sets.length===0) return res.status(400).json({ error: 'Nessun campo' });
+  sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
+  await query(`UPDATE services SET ${sets.join(',')} WHERE id=$${i}`, vals);
+  await auditService.log(req.user.id, req.user.username, 'service:update', 'service', req.params.id, null, req.ip, req.get('user-agent'));
+  res.json({ message: 'Servizio aggiornato' });
+});
+
+// ─── PATCH /api/services/:id/status ──────────────────────────────────────────
+router.patch('/:id/status', requireOperator, [
+  body('status').isIn(STATUSES),
+  body('reason').optional().isString(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  await query(`UPDATE services SET status=$1, updated_at=NOW() WHERE id=$2`, [req.body.status, req.params.id]);
+  await query(
+    `INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason) VALUES ('service',$1,$2,$3,$4)`,
+    [req.params.id, req.body.status, req.user.username, req.body.reason||null]
+  );
+  wsService.broadcast({ type: 'service_status_changed', serviceId: req.params.id, status: req.body.status });
+  res.json({ message: 'Stato aggiornato' });
+});
+
+// ─── DELETE /api/services/:id ─────────────────────────────────────────────────
+router.delete('/:id', requireAdmin, async (req, res) => {
+  await query('UPDATE services SET is_active=false, updated_at=NOW() WHERE id=$1', [req.params.id]);
+  await auditService.log(req.user.id, req.user.username, 'service:delete', 'service', req.params.id, null, req.ip, req.get('user-agent'));
+  res.json({ message: 'Servizio disattivato' });
+});
+
+// ─── POST /api/services/:id/assets ───────────────────────────────────────────
+router.post('/:id/assets', requireOperator, [body('asset_id').isUUID()], async (req, res) => {
+  await query(`INSERT INTO service_assets (service_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, req.body.asset_id]);
+  res.status(201).json({ message: 'Asset collegato' });
+});
+
+router.delete('/:id/assets/:assetId', requireOperator, async (req, res) => {
+  await query('DELETE FROM service_assets WHERE service_id=$1 AND asset_id=$2', [req.params.id, req.params.assetId]);
+  res.json({ message: 'Asset scollegato' });
+});
+
+// ─── Subscribers ─────────────────────────────────────────────────────────────
+router.post('/:id/subscribe', requireAuth, [
+  body('email').optional().isEmail(),
+  body('notify_maintenance').optional().isBoolean(),
+  body('notify_incidents').optional().isBoolean(),
+  body('notify_recovery').optional().isBoolean(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const userId = req.user.id;
+  const email = req.body.email || req.user.email || null;
+  try {
+    await query(
+      `INSERT INTO service_subscribers (service_id, user_id, email, notify_maintenance, notify_incidents, notify_recovery)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (service_id, user_id) WHERE user_id IS NOT NULL
+       DO UPDATE SET notify_maintenance=$4, notify_incidents=$5, notify_recovery=$6`,
+      [req.params.id, userId, email,
+       req.body.notify_maintenance ?? true,
+       req.body.notify_incidents ?? true,
+       req.body.notify_recovery ?? true]
+    );
+    res.json({ message: 'Iscrizione effettuata' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/:id/subscribe', requireAuth, async (req, res) => {
+  await query('DELETE FROM service_subscribers WHERE service_id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+  res.json({ message: 'Iscrizione rimossa' });
+});
+
+router.delete('/:id/subscribers/:subId', requireAdmin, async (req, res) => {
+  await query('DELETE FROM service_subscribers WHERE id=$1 AND service_id=$2', [req.params.subId, req.params.id]);
+  res.json({ message: 'Iscritto rimosso' });
+});
+
+function _slugify(text) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+module.exports = router;

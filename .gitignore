@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+.vite/
+
+# Environment
+.env
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+logs/
+
+# Database / data
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+*.swo
+
+# Test
+coverage/
