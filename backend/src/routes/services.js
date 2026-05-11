@@ -28,9 +28,19 @@ router.get('/', async (req, res) => {
 
   const rows = await getMany(
     `SELECT s.*, u.display_name as owner_name, u.email as owner_email,
+       lg.name as owner_group_name,
+       COALESCE(
+         CASE s.owner_type
+           WHEN 'local_group' THEN lg.name
+           WHEN 'ldap_group'  THEN s.owner_ldap_name
+           ELSE u.display_name
+         END
+       , '') as owner_label,
        (SELECT COUNT(*)::int FROM service_subscribers ss WHERE ss.service_id=s.id) as subscriber_count,
        (SELECT COUNT(*)::int FROM service_assets sa WHERE sa.service_id=s.id) as asset_count
-     FROM services s LEFT JOIN users u ON u.id=s.owner_id
+     FROM services s
+     LEFT JOIN users u ON u.id=s.owner_id
+     LEFT JOIN local_groups lg ON lg.id=s.owner_group_id
      ${where} ORDER BY s.system_name NULLS LAST, s.name LIMIT $${i++} OFFSET $${i}`,
     [...params, parseInt(limit), offset]
   );
@@ -40,8 +50,18 @@ router.get('/', async (req, res) => {
 // ─── GET /api/services/:id ────────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   const service = await getOne(
-    `SELECT s.*, u.display_name as owner_name, u.email as owner_email, u.avatar_color as owner_avatar_color
-     FROM services s LEFT JOIN users u ON u.id=s.owner_id
+    `SELECT s.*, u.display_name as owner_name, u.email as owner_email, u.avatar_color as owner_avatar_color,
+       lg.name as owner_group_name,
+       COALESCE(
+         CASE s.owner_type
+           WHEN 'local_group' THEN lg.name
+           WHEN 'ldap_group'  THEN s.owner_ldap_name
+           ELSE u.display_name
+         END
+       , '') as owner_label
+     FROM services s
+     LEFT JOIN users u ON u.id=s.owner_id
+     LEFT JOIN local_groups lg ON lg.id=s.owner_group_id
      WHERE s.id=$1`,
     [req.params.id]
   );
@@ -87,7 +107,11 @@ router.post('/', requireOperator, [
   body('name').isString().trim().isLength({ min: 1, max: 200 }),
   body('criticality').optional().isIn(CRITICALITIES),
   body('description').optional().isString(),
-  body('owner_id').optional().isUUID(),
+  body('owner_id').optional({ nullable: true }).isUUID(),
+  body('owner_type').optional().isIn(['user','local_group','ldap_group']),
+  body('owner_group_id').optional({ nullable: true }).isUUID(),
+  body('owner_ldap_dn').optional({ nullable: true }).isString(),
+  body('owner_ldap_name').optional({ nullable: true }).isString().trim(),
   body('system_name').optional().isString().trim(),
   body('sla_uptime_percent').optional().isFloat({ min: 0, max: 100 }),
   body('is_public').optional().isBoolean(),
@@ -98,10 +122,15 @@ router.post('/', requireOperator, [
   try {
     const slug = _slugify(req.body.name) + '-' + Date.now().toString(36);
     const result = await query(
-      `INSERT INTO services (name, slug, description, criticality, owner_id, system_name, sla_uptime_percent, is_public)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      `INSERT INTO services (name, slug, description, criticality, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name, system_name, sla_uptime_percent, is_public)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
       [req.body.name, slug, req.body.description||null, req.body.criticality||'medium',
-       req.body.owner_id||null, req.body.system_name||null, req.body.sla_uptime_percent||99.9, req.body.is_public||false]
+       req.body.owner_type === 'user' ? (req.body.owner_id||null) : null,
+       req.body.owner_type || 'user',
+       req.body.owner_type === 'local_group' ? (req.body.owner_group_id||null) : null,
+       req.body.owner_type === 'ldap_group' ? (req.body.owner_ldap_dn||null) : null,
+       req.body.owner_type === 'ldap_group' ? (req.body.owner_ldap_name||null) : null,
+       req.body.system_name||null, req.body.sla_uptime_percent||99.9, req.body.is_public||false]
     );
     const id = result.rows[0].id;
     await query(`INSERT INTO status_history (entity_type, entity_id, status, changed_by) VALUES ('service',$1,'operational',$2)`, [id, req.user.username]);
@@ -115,7 +144,7 @@ router.post('/', requireOperator, [
 
 // ─── PUT /api/services/:id ────────────────────────────────────────────────────
 router.put('/:id', requireOperator, async (req, res) => {
-  const allowed = ['name','description','criticality','owner_id','system_name','sla_uptime_percent','is_public','is_active'];
+  const allowed = ['name','description','criticality','owner_id','owner_type','owner_group_id','owner_ldap_dn','owner_ldap_name','system_name','sla_uptime_percent','is_public','is_active'];
   const sets=[]; const vals=[]; let i=1;
   for (const f of allowed) {
     if (req.body[f] !== undefined) { sets.push(`${f}=$${i++}`); vals.push(req.body[f]); }

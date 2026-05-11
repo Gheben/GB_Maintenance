@@ -50,12 +50,14 @@ export default function ServiceDetail() {
               {service.url && <a href={service.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-brand-600 hover:underline"><ExternalLink size={13} />{service.url}</a>}
               {service.slug && <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{service.slug}</span>}
             </div>
-            {service.owner_name && (
+            {(service.owner_label || service.owner_name || service.owner_group_name || service.owner_ldap_name) && (
               <div className="mt-3 flex items-center gap-2 text-sm">
                 <User size={14} className="text-gray-400" />
                 <span className="font-medium text-gray-700 dark:text-gray-300">Owner:</span>
-                <span>{service.owner_name}</span>
-                {service.owner_email && (
+                <span>{service.owner_label || service.owner_name || service.owner_group_name || service.owner_ldap_name}</span>
+                {service.owner_type === 'local_group' && <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded">gruppo locale</span>}
+                {service.owner_type === 'ldap_group' && <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">gruppo LDAP</span>}
+                {service.owner_email && service.owner_type !== 'local_group' && service.owner_type !== 'ldap_group' && (
                   <a href={`mailto:${service.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs">
                     <Mail size={12} />{service.owner_email}
                   </a>

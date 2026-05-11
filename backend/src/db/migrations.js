@@ -481,6 +481,16 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS system_name VARCHAR(200)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_services_system ON services(system_name)`);
     }
+  },
+  {
+    version: 4,
+    name: 'service_owner_extended',
+    up: async (client) => {
+      await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS owner_type VARCHAR(20) DEFAULT 'user'`);
+      await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS owner_group_id UUID REFERENCES local_groups(id) ON DELETE SET NULL`);
+      await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS owner_ldap_dn TEXT`);
+      await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS owner_ldap_name VARCHAR(200)`);
+    }
   }
 ];
 

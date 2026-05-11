@@ -87,6 +87,14 @@ router.post('/ldap/test', requireAuth, requireAdmin, async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+// ─── GET /api/settings/ldap/groups ───────────────────────────────────────────
+router.get('/ldap/groups', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const groups = await ldapService.searchGroups(req.query.q || '');
+    res.json(groups);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── GET/PUT /api/settings/saml ───────────────────────────────────────────────
 router.get('/saml', requireAuth, requireAdmin, async (req, res) => {
   const cfg = await samlService.getSamlSettings();

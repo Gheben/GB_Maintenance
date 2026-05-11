@@ -172,4 +172,36 @@ async function _resolveRoleFromGroups(memberOf) {
   return highestRole;
 }
 
-module.exports = { getLdapSettings, saveLdapSettings, authenticateUser, testLdapConnection };
+module.exports = { getLdapSettings, saveLdapSettings, authenticateUser, testLdapConnection, searchGroups };
+
+async function searchGroups(q) {
+  const cfg = await getLdapSettings();
+  if (!cfg || !cfg.enabled) return [];
+  if (!ldap) return [];
+
+  const client = _createClient(cfg);
+  try {
+    await _bind(client, _bindPrincipal(cfg), _bindPassword(cfg));
+    const searchBase = cfg.search_base || cfg.base_dn;
+    const escaped = q ? ldap.escape(q) : '';
+    const filter = q
+      ? `(&(objectClass=group)(cn=*${escaped}*))`
+      : `(objectClass=group)`;
+    const entries = await _search(client, searchBase, {
+      filter,
+      scope: 'sub',
+      attributes: ['dn', 'cn', 'description'],
+      sizeLimit: 50,
+    });
+    return entries.map(e => ({
+      dn: e.dn,
+      name: e.cn || e.dn,
+      description: e.description || '',
+    }));
+  } catch (err) {
+    logger.warn('LDAP group search failed:', err.message);
+    return [];
+  } finally {
+    client.destroy();
+  }
+}

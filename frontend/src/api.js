@@ -144,6 +144,7 @@ export const settingsApi = {
   getLdap: () => api.get('/settings/ldap'),
   saveLdap: (data) => api.put('/settings/ldap', data),
   testLdap: (data) => api.post('/settings/ldap/test', data),
+  searchLdapGroups: (q) => api.get('/settings/ldap/groups', { params: { q } }),
   getSaml: () => api.get('/settings/saml'),
   saveSaml: (data) => api.put('/settings/saml', data),
   getWebhooks: () => api.get('/settings/webhooks'),

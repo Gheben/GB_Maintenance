@@ -5,8 +5,8 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
 import { Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
-import { servicesApi, usersApi } from '../api'
-import { Plus, Search, RefreshCw } from 'lucide-react'
+import { servicesApi, usersApi, groupsApi, settingsApi } from '../api'
+import { Plus, Search, RefreshCw, Users, User, Database } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Services() {
@@ -19,7 +19,12 @@ export default function Services() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [users, setUsers] = useState([])
-  const [form, setForm] = useState({ name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, owner_id: '', system_name: '' })
+  const [localGroups, setLocalGroups] = useState([])
+  const [ldapEnabled, setLdapEnabled] = useState(false)
+  const [ldapSearch, setLdapSearch] = useState('')
+  const [ldapResults, setLdapResults] = useState([])
+  const [ldapLoading, setLdapLoading] = useState(false)
+  const [form, setForm] = useState({ name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, owner_type: 'user', owner_id: '', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '', system_name: '' })
 
   const load = useCallback(() => {
     setLoading(true)
@@ -35,20 +40,37 @@ export default function Services() {
       const list = Array.isArray(r.data) ? r.data : (r.data.data || [])
       setUsers(list)
     }).catch(() => {})
+    groupsApi.list().then(r => setLocalGroups(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    settingsApi.getLdap().then(r => setLdapEnabled(!!(r.data?.enabled))).catch(() => {})
   }, [])
 
   const handleCreate = async (e) => {
     e.preventDefault()
+    const payload = {
+      ...form,
+      owner_id: form.owner_type === 'user' ? (form.owner_id || undefined) : undefined,
+      owner_group_id: form.owner_type === 'local_group' ? (form.owner_group_id || undefined) : undefined,
+      owner_ldap_dn: form.owner_type === 'ldap_group' ? (form.owner_ldap_dn || undefined) : undefined,
+      owner_ldap_name: form.owner_type === 'ldap_group' ? (form.owner_ldap_name || undefined) : undefined,
+      system_name: form.system_name || undefined,
+    }
     try {
-      await servicesApi.create({
-        ...form,
-        owner_id: form.owner_id || undefined,
-        system_name: form.system_name || undefined,
-      })
+      await servicesApi.create(payload)
       toast.success('Servizio creato')
       setShowCreate(false)
       load()
     } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+  }
+
+  const handleLdapSearch = async (q) => {
+    setLdapSearch(q)
+    if (!q || q.length < 2) { setLdapResults([]); return }
+    setLdapLoading(true)
+    try {
+      const r = await settingsApi.searchLdapGroups(q)
+      setLdapResults(r.data || [])
+    } catch { setLdapResults([]) }
+    finally { setLdapLoading(false) }
   }
 
   return (
@@ -81,7 +103,7 @@ export default function Services() {
                     <td className="px-4 py-3 text-xs text-gray-500">{s.system_name ? <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 font-medium">{s.system_name}</span> : '—'}</td>
                     <td className="px-4 py-3"><CriticalityBadge criticality={s.criticality} /></td>
                     <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{s.owner_name || <span className="text-gray-300">—</span>}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{s.owner_label || s.owner_name || <span className="text-gray-300">—</span>}</td>
                     <td className="px-4 py-3 text-gray-500">{s.asset_count ?? 0}</td>
                     <td className="px-4 py-3 text-gray-500">{s.sla_uptime_percent}%</td>
                     <td className="px-4 py-3">{s.is_public ? '✅' : '—'}</td>
@@ -111,10 +133,58 @@ export default function Services() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Owner</label>
-                <select className="input" value={form.owner_id} onChange={e => setForm(f => ({ ...f, owner_id: e.target.value }))}>
-                  <option value="">— Nessuno —</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.display_name} ({u.username})</option>)}
-                </select>
+                {/* type selector */}
+                <div className="flex gap-1 mb-2">
+                  {[
+                    { key: 'user', label: 'Utente', icon: <User size={11} /> },
+                    { key: 'local_group', label: 'Gruppo locale', icon: <Users size={11} /> },
+                    ...(ldapEnabled ? [{ key: 'ldap_group', label: 'Gruppo LDAP', icon: <Database size={11} /> }] : []),
+                  ].map(t => (
+                    <button key={t.key} type="button"
+                      onClick={() => setForm(f => ({ ...f, owner_type: t.key, owner_id: '', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))}
+                      className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors ${form.owner_type === t.key ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-300 text-gray-600 hover:border-brand-400'}`}>
+                      {t.icon}{t.label}
+                    </button>
+                  ))}
+                </div>
+                {form.owner_type === 'user' && (
+                  <select className="input" value={form.owner_id} onChange={e => setForm(f => ({ ...f, owner_id: e.target.value }))}>
+                    <option value="">— Nessuno —</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.display_name || u.username} ({u.auth_type || 'local'})</option>)}
+                  </select>
+                )}
+                {form.owner_type === 'local_group' && (
+                  <select className="input" value={form.owner_group_id} onChange={e => setForm(f => ({ ...f, owner_group_id: e.target.value }))}>
+                    <option value="">— Nessun gruppo —</option>
+                    {localGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                )}
+                {form.owner_type === 'ldap_group' && (
+                  <div className="relative">
+                    <input className="input" placeholder="Cerca gruppo LDAP (min 2 caratteri)..."
+                      value={form.owner_ldap_dn ? form.owner_ldap_name : ldapSearch}
+                      onChange={e => {
+                        if (form.owner_ldap_dn) setForm(f => ({ ...f, owner_ldap_dn: '', owner_ldap_name: '' }))
+                        handleLdapSearch(e.target.value)
+                      }} />
+                    {form.owner_ldap_dn && (
+                      <span className="absolute right-2 top-2 text-xs text-green-600 font-medium">✓ selezionato</span>
+                    )}
+                    {ldapLoading && <p className="text-xs text-gray-400 mt-1">Ricerca in corso...</p>}
+                    {ldapResults.length > 0 && !form.owner_ldap_dn && (
+                      <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                        {ldapResults.map(g => (
+                          <button key={g.dn} type="button"
+                            onClick={() => { setForm(f => ({ ...f, owner_ldap_dn: g.dn, owner_ldap_name: g.name })); setLdapResults([]) }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 dark:hover:bg-gray-700">
+                            <span className="font-medium">{g.name}</span>
+                            {g.description && <span className="text-xs text-gray-400 ml-2">{g.description}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
