@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Server, Package, CalendarClock, AlertTriangle,
   Calendar, Globe, Bell, BarChart2, Users, Settings, Key, ScrollText,
-  ClipboardList, Ban, LogOut
+  ClipboardList, Ban, LogOut, BookOpen
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -23,6 +23,8 @@ const NAV = [
   { to: '/apikeys', icon: Key, label: 'API Keys', perm: 'apikeys' },
   { to: '/audit', icon: ScrollText, label: 'Audit Log', perm: 'audit' },
   { to: '/settings', icon: Settings, label: 'Impostazioni', perm: 'settings' },
+  null, // divider
+  { href: '/docs', icon: BookOpen, label: 'API Docs', perm: 'apikeys' },
 ]
 
 export function Sidebar() {
@@ -45,6 +47,15 @@ export function Sidebar() {
           if (!item) return <div key={i} className="my-2 border-t border-gray-700" />
           if (!hasPermission(item.perm)) return null
           const Icon = item.icon
+          if (item.href) {
+            return (
+              <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white">
+                <Icon size={17} />
+                {item.label}
+              </a>
+            )
+          }
           return (
             <NavLink key={item.to} to={item.to} end={item.to === '/'}
               className={({ isActive }) =>

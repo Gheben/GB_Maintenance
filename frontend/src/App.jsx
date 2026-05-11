@@ -46,7 +46,6 @@ export default function App() {
               <Route path="/maintenance" element={<P perm="maintenance"><Maintenance /></P>} />
               <Route path="/calendar" element={<P perm="maintenance"><Calendar /></P>} />
               <Route path="/maintenance/:id" element={<P perm="maintenance"><MaintenanceDetail /></P>} />
-              <Route path="/maintenance/:id" element={<P perm="maintenance"><MaintenanceDetail /></P>} />
               <Route path="/incidents" element={<P perm="incidents"><Incidents /></P>} />
               <Route path="/incidents/:id" element={<P perm="incidents"><IncidentDetail /></P>} />
               <Route path="/notifications" element={<P perm="notifications"><Notifications /></P>} />
