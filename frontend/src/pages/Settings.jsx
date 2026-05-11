@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Layout } from '../components/Layout'
 import { settingsApi } from '../api'
 import { toast } from '../components/Toast'
+import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle } from 'lucide-react'
 
 function Section({ title, children }) {
   return (
@@ -16,6 +17,14 @@ export default function Settings() {
   const [tab, setTab] = useState('smtp')
   const [smtp, setSmtp] = useState({ host: '', port: 587, secure: false, user: '', pass: '', from: '' })
   const [ldap, setLdap] = useState({ url: '', base_dn: '', bind_dn: '', bind_password: '', user_filter: '', username_attr: 'sAMAccountName' })
+  const [saml, setSaml] = useState({
+    enabled: false, auto_redirect: false, require_group_match: false,
+    sp_base_url: window.location.origin, sp_entity_id: '',
+    idp_sso_url: '', idp_slo_url: '', idp_cert: '',
+    sp_private_key: '', sp_cert: '',
+    username_attribute: '', display_name_attribute: 'displayName',
+    email_attribute: 'email', default_role: 'viewer',
+  })
   const [general, setGeneral] = useState({ app_name: 'GB Maintenance', app_url: '' })
   const [webhooks, setWebhooks] = useState([])
   const [loading, setLoading] = useState(false)
@@ -23,6 +32,7 @@ export default function Settings() {
   useEffect(() => {
     settingsApi.getSmtp().then(r => setSmtp(r.data)).catch(() => {})
     settingsApi.getLdap().then(r => setLdap(prev => ({ ...prev, ...r.data }))).catch(() => {})
+    settingsApi.getSaml().then(r => setSaml(prev => ({ ...prev, ...r.data }))).catch(() => {})
     settingsApi.getGeneral().then(r => setGeneral(r.data)).catch(() => {})
     settingsApi.getWebhooks().then(r => setWebhooks(r.data)).catch(() => {})
   }, [])
@@ -53,6 +63,15 @@ export default function Settings() {
     try { await settingsApi.saveGeneral(general); toast.success('Impostazioni salvate') }
     catch (err) { toast.error(err.response?.data?.error || 'Errore') }
   }
+
+  const saveSaml = async (e) => {
+    e.preventDefault(); setLoading(true)
+    try { await settingsApi.saveSaml(saml); toast.success('Configurazione SAML salvata') }
+    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    finally { setLoading(false) }
+  }
+
+  const spBaseUrl = saml.sp_base_url || window.location.origin
 
   const TABS = [['smtp','SMTP'],['ldap','LDAP'],['saml','SAML'],['webhooks','Webhook'],['general','Generale']]
 
@@ -104,8 +123,158 @@ export default function Settings() {
         )}
 
         {tab === 'saml' && (
-          <Section title="Configurazione SAML">
-            <p className="text-sm text-gray-500">Configurazione SAML disponibile tramite API oppure importando il metadata XML dell'IdP.</p>
+          <Section title="Autenticazione SAML 2.0 / SSO">
+            <form onSubmit={saveSaml} className="space-y-5">
+              <p className="text-sm text-gray-500">
+                Abilita il login tramite un Identity Provider SAML (es. NetScaler, ADFS, Azure AD).
+                Il Service Provider è configurato come SP-initiated (il browser viene reindirizzato all&apos;IdP e poi tornato qui).
+              </p>
+
+              {/* Enable */}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" id="saml-enabled" checked={saml.enabled}
+                  onChange={e => setSaml(s => ({ ...s, enabled: e.target.checked, auto_redirect: e.target.checked ? s.auto_redirect : false }))}
+                  className="w-4 h-4 accent-brand-600" />
+                <span className="text-sm font-medium">Abilita autenticazione SAML 2.0</span>
+              </label>
+
+              {/* Auto-redirect */}
+              {saml.enabled && (
+                <label className="flex items-start gap-3 cursor-pointer bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3">
+                  <input type="checkbox" checked={!!saml.auto_redirect}
+                    onChange={e => setSaml(s => ({ ...s, auto_redirect: e.target.checked }))}
+                    className="w-4 h-4 accent-blue-600 mt-0.5 shrink-0" />
+                  <div>
+                    <span className="text-sm font-medium">Reindirizzamento automatico SSO (auto-redirect)</span>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Quando abilitato, il browser viene reindirizzato direttamente all&apos;Identity Provider (NetScaler)
+                      senza mostrare il form di login locale. Il login locale rimane accessibile su{' '}
+                      <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">/login?local</code>.
+                    </p>
+                  </div>
+                </label>
+              )}
+
+              {/* Dati da comunicare all'IdP */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4 space-y-3">
+                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">Dati da comunicare all&apos;amministratore IdP</p>
+                <div className="space-y-2">
+                  <div>
+                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">ACS URL (Assertion Consumer Service):</span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <code className="flex-1 text-xs bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded px-2 py-1 break-all">{spBaseUrl}/api/auth/saml/acs</code>
+                      <button type="button" onClick={() => { navigator.clipboard.writeText(`${spBaseUrl}/api/auth/saml/acs`); toast.success('Copiato') }}
+                        className="p-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded" title="Copia"><Copy size={13} /></button>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">SP Entity ID:</span>
+                    <code className="block text-xs bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded px-2 py-1 mt-0.5 break-all">
+                      {saml.sp_entity_id || `${spBaseUrl}/api/auth/saml/metadata`}
+                    </code>
+                  </div>
+                  <div>
+                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">SP Metadata XML:</span>
+                    <a href="/api/auth/saml/metadata" target="_blank" rel="noreferrer"
+                      className="flex items-center gap-1 text-xs text-blue-700 dark:text-blue-300 underline mt-0.5 hover:text-blue-900">
+                      <ExternalLink size={11} /> /api/auth/saml/metadata
+                    </a>
+                  </div>
+                  <div>
+                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">SLO URL (Single Logout):</span>
+                    <code className="block text-xs bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded px-2 py-1 mt-0.5 break-all">{spBaseUrl}/api/auth/saml/slo</code>
+                  </div>
+                  <div>
+                    <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">Binding:</span>
+                    <span className="text-xs text-blue-800 dark:text-blue-200 ml-1">HTTP-POST</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* SP Config */}
+              <div>
+                <label className="block text-xs font-medium mb-1">SP Base URL <span className="text-gray-400 font-normal">(URL pubblico di questa applicazione)</span></label>
+                <input className="input" placeholder="https://maintenance.azienda.it"
+                  value={saml.sp_base_url}
+                  onChange={e => setSaml(s => ({ ...s, sp_base_url: e.target.value }))} />
+                <p className="text-xs text-gray-400 mt-1">Deve corrispondere all&apos;URL con cui gli utenti accedono all&apos;applicazione.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">SP Entity ID <span className="text-gray-400 font-normal">(lascia vuoto per usare il default)</span></label>
+                <input className="input" placeholder={`${spBaseUrl}/api/auth/saml/metadata`}
+                  value={saml.sp_entity_id}
+                  onChange={e => setSaml(s => ({ ...s, sp_entity_id: e.target.value }))} />
+              </div>
+
+              {/* IdP Config */}
+              <div>
+                <label className="block text-xs font-medium mb-1">IdP SSO URL <span className="text-gray-400 font-normal">(URL di login dell&apos;Identity Provider)</span></label>
+                <input className="input" placeholder="https://nfactor.azienda.it/saml/login"
+                  value={saml.idp_sso_url}
+                  onChange={e => setSaml(s => ({ ...s, idp_sso_url: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">IdP SLO URL <span className="text-gray-400 font-normal">(Single Logout — opzionale)</span></label>
+                <input className="input" placeholder="https://nfactor.azienda.it/cgi/tmlogout"
+                  value={saml.idp_slo_url}
+                  onChange={e => setSaml(s => ({ ...s, idp_slo_url: e.target.value }))} />
+                <p className="text-xs text-gray-400 mt-1">Se configurato, il logout da questa app terminerà anche la sessione sull&apos;Identity Provider (NetScaler).</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Certificato IdP (X.509 PEM)</label>
+                <textarea className="input font-mono text-xs" rows={6}
+                  placeholder={'-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----'}
+                  value={saml.idp_cert}
+                  onChange={e => setSaml(s => ({ ...s, idp_cert: e.target.value }))} />
+                <p className="text-xs text-gray-400 mt-1">Incolla il certificato X.509 fornito dall&apos;amministratore NetScaler. Accettato con o senza intestazione PEM.</p>
+              </div>
+
+              {/* Attribute mapping */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium mb-1">Attributo username <span className="text-gray-400 font-normal">(vuoto = NameID)</span></label>
+                  <input className="input text-xs" placeholder="NameID (default)"
+                    value={saml.username_attribute}
+                    onChange={e => setSaml(s => ({ ...s, username_attribute: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">Attributo display name</label>
+                  <input className="input text-xs" placeholder="displayName"
+                    value={saml.display_name_attribute}
+                    onChange={e => setSaml(s => ({ ...s, display_name_attribute: e.target.value }))} />
+                </div>
+              </div>
+
+              {/* Default role */}
+              <div>
+                <label className="block text-xs font-medium mb-1">Ruolo predefinito per nuovi utenti SAML</label>
+                <select className="input" value={saml.default_role}
+                  onChange={e => setSaml(s => ({ ...s, default_role: e.target.value }))}>
+                  {['admin','change_manager','operator','viewer','subscriber'].map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Il ruolo può essere modificato individualmente in &quot;Gestione utenti&quot; dopo il primo accesso.</p>
+              </div>
+
+              {/* Require group match */}
+              <label className="flex items-start gap-3 cursor-pointer bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-4 py-3">
+                <input type="checkbox" checked={!!saml.require_group_match}
+                  onChange={e => setSaml(s => ({ ...s, require_group_match: e.target.checked }))}
+                  className="w-4 h-4 accent-red-600 mt-0.5 shrink-0" />
+                <div>
+                  <span className="text-sm font-medium">Nega l&apos;accesso se nessun gruppo LDAP corrisponde</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Quando abilitato, gli utenti autenticati dall&apos;IdP ma non appartenenti a nessun gruppo LDAP mappato
+                    vengono <strong>bloccati</strong>. Quando disabilitato (default) ricevono il <em>Ruolo predefinito</em> configurato sopra.
+                  </p>
+                </div>
+              </label>
+
+              <div className="flex justify-end pt-1">
+                <button type="submit" className="btn-primary flex items-center gap-2" disabled={loading}>
+                  <Save size={14} />{loading ? 'Salvataggio...' : 'Salva configurazione SAML'}
+                </button>
+              </div>
+            </form>
           </Section>
         )}
 

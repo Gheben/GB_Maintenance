@@ -23,16 +23,27 @@ async function saveSamlSettings(cfg) {
   );
 }
 
+function _stripPem(cert) {
+  if (!cert) return '';
+  return cert.replace(/-----BEGIN CERTIFICATE-----|-----END CERTIFICATE-----|-----BEGIN CERT-----|-----END CERT-----|\s/g, '');
+}
+
 function _getSamlInstance(cfg) {
   if (!nodeSaml) throw new Error('@node-saml/node-saml non è installato');
-  const appUrl = process.env.APP_URL || 'http://localhost:4681';
+  const appUrl = cfg.sp_base_url || process.env.APP_URL || 'http://localhost:4681';
+  const entryPoint = cfg.idp_sso_url || cfg.entry_point || '';
+  const issuer = cfg.sp_entity_id || cfg.issuer || 'gbmaintenance';
+  const rawCert = cfg.idp_cert || '';
+  // accept full PEM or raw base64
+  const idpCert = rawCert.includes('-----BEGIN') ? _stripPem(rawCert) : rawCert.replace(/\s/g, '');
   return new nodeSaml.SAML({
     callbackUrl: `${appUrl}/api/auth/saml/acs`,
-    entryPoint: cfg.entry_point,
-    issuer: cfg.issuer || 'gbmaintenance',
-    idpCert: cfg.idp_cert || '',
+    entryPoint,
+    issuer,
+    idpCert,
     privateKey: cfg.sp_private_key || undefined,
     decryptionPvk: cfg.sp_private_key || undefined,
+    logoutUrl: cfg.idp_slo_url || undefined,
     wantAssertionsSigned: false,
     signatureAlgorithm: 'sha256',
   });
@@ -71,9 +82,12 @@ async function validateCallback(req) {
     });
   });
 
-  const username = profile[cfg.username_attr || 'nameID'] || profile.nameID;
-  const email    = profile[cfg.email_attr || 'email'] || profile['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] || null;
-  const display  = profile[cfg.display_name_attr || 'displayName'] || profile['http://schemas.microsoft.com/identity/claims/displayname'] || username;
+  const usernameAttr = cfg.username_attribute || cfg.username_attr;
+  const username = (usernameAttr && profile[usernameAttr]) || profile.nameID;
+  const emailAttr = cfg.email_attribute || cfg.email_attr;
+  const email    = (emailAttr && profile[emailAttr]) || profile['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] || null;
+  const displayAttr = cfg.display_name_attribute || cfg.display_name_attr;
+  const display  = (displayAttr && profile[displayAttr]) || profile['http://schemas.microsoft.com/identity/claims/displayname'] || username;
   const role     = cfg.default_role || 'viewer';
   const perms    = JSON.stringify(ROLE_DEFAULTS[role] || {});
 
