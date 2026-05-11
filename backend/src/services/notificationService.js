@@ -73,25 +73,37 @@ async function sendWebhook(url, payload) {
 
 // ─── Get subscribers for a maintenance window ─────────────────────────────────
 async function getMaintenanceSubscribers(maintenanceId) {
-  // Get assets linked to maintenance
+  const emails = new Set();
+  const userIds = new Set();
+
+  // Get assets linked to maintenance (via maintenance_assets)
   const assets = await getMany(
     `SELECT asset_id FROM maintenance_assets WHERE maintenance_id=$1`,
     [maintenanceId]
   );
-  if (assets.length === 0) return [];
 
-  const assetIds = assets.map(a => a.asset_id);
+  // Get services linked directly (via maintenance_services) + via assets
+  let allServiceIds = new Set();
 
-  // Get services linked to those assets
-  const services = await getMany(
-    `SELECT DISTINCT service_id FROM service_assets WHERE asset_id = ANY($1::uuid[])`,
-    [assetIds]
+  if (assets.length > 0) {
+    const assetIds = assets.map(a => a.asset_id);
+    const assetServices = await getMany(
+      `SELECT DISTINCT service_id FROM service_assets WHERE asset_id = ANY($1::uuid[])`,
+      [assetIds]
+    );
+    assetServices.forEach(s => allServiceIds.add(s.service_id));
+  }
+
+  const directServices = await getMany(
+    `SELECT service_id FROM maintenance_services WHERE maintenance_id=$1`,
+    [maintenanceId]
   );
-  if (services.length === 0) return [];
+  directServices.forEach(s => allServiceIds.add(s.service_id));
 
-  const serviceIds = services.map(s => s.service_id);
+  const serviceIds = [...allServiceIds];
+  if (serviceIds.length === 0) return { emails: [], userIds: [] };
 
-  // Get subscribers of those services + service owners
+  // Subscribers
   const subs = await getMany(
     `SELECT DISTINCT ss.email, u.email as user_email, u.id as user_id, ss.notify_maintenance
      FROM service_subscribers ss
@@ -100,7 +112,7 @@ async function getMaintenanceSubscribers(maintenanceId) {
     [serviceIds]
   );
 
-  // Also notify service owners
+  // Service owners
   const owners = await getMany(
     `SELECT DISTINCT s.owner_id as user_id, u.email as user_email
      FROM services s JOIN users u ON u.id=s.owner_id
@@ -108,15 +120,11 @@ async function getMaintenanceSubscribers(maintenanceId) {
     [serviceIds]
   );
 
-  const emails = new Set();
-  const userIds = new Set();
-
   for (const sub of subs) {
     if (sub.email) emails.add(sub.email);
     if (sub.user_email) emails.add(sub.user_email);
     if (sub.user_id) userIds.add(sub.user_id);
   }
-  // Include owners
   for (const o of owners) {
     if (o.user_email) emails.add(o.user_email);
     if (o.user_id) userIds.add(o.user_id);

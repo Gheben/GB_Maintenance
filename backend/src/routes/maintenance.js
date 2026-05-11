@@ -85,18 +85,28 @@ router.get('/:id', async (req, res) => {
      FROM assets a JOIN maintenance_assets ma ON ma.asset_id=a.id WHERE ma.maintenance_id=$1`,
     [req.params.id]
   );
-  // Affected services (via asset links)
+
+  // Directly linked services
+  const directServices = await getMany(
+    `SELECT s.id, s.name, s.status, s.criticality
+     FROM services s JOIN maintenance_services ms ON ms.service_id=s.id WHERE ms.maintenance_id=$1`,
+    [req.params.id]
+  );
+
+  // Also derive affected services via asset links
   const assetIds = assets.map(a => a.id);
-  let affectedServices = [];
+  let assetDerivedServices = [];
   if (assetIds.length > 0) {
-    affectedServices = await getMany(
+    assetDerivedServices = await getMany(
       `SELECT DISTINCT s.id, s.name, s.status, s.criticality
        FROM services s JOIN service_assets sa ON sa.service_id=s.id
-       WHERE sa.asset_id=ANY($1::uuid[])`,
-      [assetIds]
+       WHERE sa.asset_id=ANY($1::uuid[])
+         AND s.id NOT IN (SELECT service_id FROM maintenance_services WHERE maintenance_id=$2)`,
+      [assetIds, req.params.id]
     );
   }
-  res.json({ ...maint, assets, affectedServices });
+
+  res.json({ ...maint, assets, services: directServices, affectedServices: assetDerivedServices });
 });
 
 // ─── POST /api/maintenance ────────────────────────────────────────────────────
@@ -108,6 +118,7 @@ router.post('/', requireOperator, [
   body('scheduled_end').isISO8601(),
   body('description').optional().isString(),
   body('asset_ids').optional().isArray(),
+  body('service_ids').optional().isArray(),
   body('template_id').optional().isUUID(),
   body('recurrence_type').optional().isIn(['none','daily','weekly','monthly','custom']),
   body('recurrence_cron').optional().isString(),
@@ -158,6 +169,13 @@ router.post('/', requireOperator, [
     }
   }
 
+  // Link services directly
+  if (Array.isArray(req.body.service_ids)) {
+    for (const sid of req.body.service_ids) {
+      await query(`INSERT INTO maintenance_services (maintenance_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, sid]);
+    }
+  }
+
   await auditService.log(req.user.id, req.user.username, 'maintenance:create', 'maintenance', id, req.body.title, req.ip, req.get('user-agent'));
 
   // Notify if scheduled
@@ -189,6 +207,14 @@ router.put('/:id', requireOperator, async (req, res) => {
     await query('DELETE FROM maintenance_assets WHERE maintenance_id=$1', [req.params.id]);
     for (const aid of req.body.asset_ids) {
       await query(`INSERT INTO maintenance_assets (maintenance_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, aid]);
+    }
+  }
+
+  // Update linked services
+  if (Array.isArray(req.body.service_ids)) {
+    await query('DELETE FROM maintenance_services WHERE maintenance_id=$1', [req.params.id]);
+    for (const sid of req.body.service_ids) {
+      await query(`INSERT INTO maintenance_services (maintenance_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, sid]);
     }
   }
 

@@ -491,6 +491,20 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS owner_ldap_dn TEXT`);
       await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS owner_ldap_name VARCHAR(200)`);
     }
+  },
+  {
+    version: 5,
+    name: 'maintenance_services_link',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS maintenance_services (
+          maintenance_id UUID NOT NULL REFERENCES maintenance_windows(id) ON DELETE CASCADE,
+          service_id     UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+          PRIMARY KEY (maintenance_id, service_id)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_maint_services_maint ON maintenance_services(maintenance_id)`);
+    }
   }
 ];
 

@@ -57,26 +57,41 @@ router.get('/', async (req, res) => {
 
   let involvedMap = {};
   if (allMaintIds.length > 0) {
-    const placeholders = allMaintIds.map((_, i) => `$${i + 1}`).join(',');
     const involvedRows = await getMany(
       `SELECT DISTINCT mwa.maintenance_id,
               COALESCE(u.display_name, u.username) AS name, u.id AS user_id
-       FROM maintenance_window_assets mwa
+       FROM maintenance_assets mwa
        JOIN service_assets sa ON sa.asset_id = mwa.asset_id
        LEFT JOIN service_subscribers ss ON ss.service_id = sa.service_id
        LEFT JOIN users u ON u.id = ss.user_id
-       WHERE mwa.maintenance_id IN (${placeholders})
+       WHERE mwa.maintenance_id = ANY($1::uuid[])
          AND u.id IS NOT NULL
        UNION
        SELECT DISTINCT mwa.maintenance_id,
               COALESCE(u.display_name, u.username) AS name, u.id AS user_id
-       FROM maintenance_window_assets mwa
+       FROM maintenance_assets mwa
        JOIN service_assets sa ON sa.asset_id = mwa.asset_id
        JOIN services sv ON sv.id = sa.service_id
        LEFT JOIN users u ON u.id = sv.owner_id
-       WHERE mwa.maintenance_id IN (${placeholders})
+       WHERE mwa.maintenance_id = ANY($1::uuid[])
+         AND u.id IS NOT NULL
+       UNION
+       SELECT DISTINCT ms.maintenance_id,
+              COALESCE(u.display_name, u.username) AS name, u.id AS user_id
+       FROM maintenance_services ms
+       LEFT JOIN service_subscribers ss ON ss.service_id = ms.service_id
+       LEFT JOIN users u ON u.id = ss.user_id
+       WHERE ms.maintenance_id = ANY($1::uuid[])
+         AND u.id IS NOT NULL
+       UNION
+       SELECT DISTINCT ms.maintenance_id,
+              COALESCE(u.display_name, u.username) AS name, u.id AS user_id
+       FROM maintenance_services ms
+       JOIN services sv ON sv.id = ms.service_id
+       LEFT JOIN users u ON u.id = sv.owner_id
+       WHERE ms.maintenance_id = ANY($1::uuid[])
          AND u.id IS NOT NULL`,
-      [...allMaintIds, ...allMaintIds]
+      [allMaintIds]
     ).catch(() => []);
 
     for (const row of involvedRows) {

@@ -80,6 +80,45 @@ export default function MaintenanceDetail() {
             ))}
           </div>
         </div>
+
+        {/* Directly linked services */}
+        {(mw.services?.length > 0 || mw.affectedServices?.length > 0) && (
+          <div className="card p-5">
+            <h3 className="font-medium mb-3">Servizi coinvolti</h3>
+            {mw.services?.length > 0 && (
+              <>
+                <p className="text-xs text-gray-500 mb-2 uppercase tracking-wide">Selezionati</p>
+                <div className="space-y-2 mb-4">
+                  {mw.services.map(s => (
+                    <Link key={s.id} to={`/services/${s.id}`} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <span className="text-sm">{s.name}</span>
+                      <div className="flex gap-2">
+                        <CriticalityBadge criticality={s.criticality} />
+                        <StatusBadge status={s.status} />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
+            {mw.affectedServices?.length > 0 && (
+              <>
+                <p className="text-xs text-gray-500 mb-2 uppercase tracking-wide">Derivati dagli asset</p>
+                <div className="space-y-2">
+                  {mw.affectedServices.map(s => (
+                    <Link key={s.id} to={`/services/${s.id}`} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <span className="text-sm">{s.name}</span>
+                      <div className="flex gap-2">
+                        <CriticalityBadge criticality={s.criticality} />
+                        <StatusBadge status={s.status} />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {rejectModal && (

@@ -5,13 +5,87 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
 import { Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
-import { maintenanceApi, templatesApi, assetsApi } from '../api'
-import { Plus, Search, RefreshCw } from 'lucide-react'
+import { maintenanceApi, templatesApi, assetsApi, servicesApi } from '../api'
+import { Plus, Search, RefreshCw, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 
 const TYPES = ['planned','emergency','upgrade','security_patch','infrastructure','other']
 const IMPACTS = ['critical','high','medium','low']
+
+function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = 'name', badgeKey }) {
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState(false)
+
+  const filtered = allItems.filter(item =>
+    item[nameKey].toLowerCase().includes(search.toLowerCase())
+  )
+  const selected = allItems.filter(i => selectedIds.includes(i.id))
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-medium">{label}</label>
+        <button type="button" onClick={() => setOpen(o => !o)} className="text-xs text-brand-600 hover:underline flex items-center gap-1">
+          {open ? <><ChevronUp size={13}/> Chiudi</> : <><ChevronDown size={13}/> Seleziona</>}
+        </button>
+      </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map(item => (
+            <span key={item.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+              {item[nameKey]}
+              {badgeKey && item[badgeKey] && <span className="opacity-60">({item[badgeKey]})</span>}
+              <button type="button" onClick={() => onToggle(item.id)} className="hover:text-red-500"><X size={11}/></button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {open && (
+        <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+          <div className="p-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
+            <div className="relative">
+              <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="input pl-7 py-1 text-sm"
+                placeholder="Cerca..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+            {filtered.length === 0 ? (
+              <div className="text-center py-4 text-sm text-gray-500">Nessun risultato</div>
+            ) : filtered.map(item => (
+              <label key={item.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(item.id)}
+                  onChange={() => onToggle(item.id)}
+                  className="rounded"
+                />
+                <span className="flex-1">{item[nameKey]}</span>
+                {badgeKey && item[badgeKey] && (
+                  <span className="text-xs text-gray-400">{item[badgeKey]}</span>
+                )}
+                {item.status && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                    item.status === 'operational' ? 'bg-green-100 text-green-700' :
+                    item.status === 'degraded' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>{item.status}</span>
+                )}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Maintenance() {
   const [items, setItems] = useState([])
@@ -22,9 +96,12 @@ export default function Maintenance() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [templates, setTemplates] = useState([])
+  const [allAssets, setAllAssets] = useState([])
+  const [allServices, setAllServices] = useState([])
   const [form, setForm] = useState({
     title: '', type: 'planned', impact_level: 'medium', description: '',
-    scheduled_start: '', scheduled_end: '', template_id: ''
+    scheduled_start: '', scheduled_end: '', template_id: '',
+    asset_ids: [], service_ids: []
   })
 
   const load = useCallback(() => {
@@ -37,14 +114,37 @@ export default function Maintenance() {
   useEffect(() => { load() }, [load])
   useEffect(() => { templatesApi.list().then(r => setTemplates(r.data)) }, [])
 
+  useEffect(() => {
+    if (showCreate) {
+      assetsApi.list({ limit: 500 }).then(r => setAllAssets(Array.isArray(r.data) ? r.data : (r.data.data || [])))
+      servicesApi.list({ limit: 500 }).then(r => setAllServices(Array.isArray(r.data) ? r.data : (r.data.data || [])))
+    }
+  }, [showCreate])
+
+  const toggleAsset = (id) => {
+    setForm(f => ({
+      ...f,
+      asset_ids: f.asset_ids.includes(id) ? f.asset_ids.filter(x => x !== id) : [...f.asset_ids, id]
+    }))
+  }
+  const toggleService = (id) => {
+    setForm(f => ({
+      ...f,
+      service_ids: f.service_ids.includes(id) ? f.service_ids.filter(x => x !== id) : [...f.service_ids, id]
+    }))
+  }
+
   const handleCreate = async (e) => {
     e.preventDefault()
     try {
       const payload = { ...form }
       if (!payload.template_id) delete payload.template_id
+      if (!payload.asset_ids.length) delete payload.asset_ids
+      if (!payload.service_ids.length) delete payload.service_ids
       await maintenanceApi.create(payload)
       toast.success('Manutenzione creata')
       setShowCreate(false)
+      setForm({ title: '', type: 'planned', impact_level: 'medium', description: '', scheduled_start: '', scheduled_end: '', template_id: '', asset_ids: [], service_ids: [] })
       load()
     } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
   }
@@ -76,12 +176,12 @@ export default function Maintenance() {
 
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="min-w-[640px] w-full text-sm">
+          <table className="min-w-[700px] w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>{['Titolo','Tipo','Impatto','Stato','Inizio','Fine'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+              <tr>{['Titolo','Tipo','Impatto','Stato','Asset','Inizio','Fine'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {loading ? <tr><td colSpan={6} className="text-center py-8 text-gray-500">Caricamento...</td></tr>
+              {loading ? <tr><td colSpan={7} className="text-center py-8 text-gray-500">Caricamento...</td></tr>
                 : items.map(m => (
                   <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-4 py-3 font-medium">
@@ -90,6 +190,11 @@ export default function Maintenance() {
                     <td className="px-4 py-3 text-gray-500">{m.type}</td>
                     <td className="px-4 py-3"><CriticalityBadge criticality={m.impact_level} /></td>
                     <td className="px-4 py-3"><StatusBadge status={m.status} /></td>
+                    <td className="px-4 py-3 text-center">
+                      {m.asset_count > 0
+                        ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">{m.asset_count}</span>
+                        : <span className="text-gray-300">—</span>}
+                    </td>
                     <td className="px-4 py-3 text-gray-500">{format(new Date(m.scheduled_start), 'dd/MM HH:mm', { locale: it })}</td>
                     <td className="px-4 py-3 text-gray-500">{format(new Date(m.scheduled_end), 'dd/MM HH:mm', { locale: it })}</td>
                   </tr>
@@ -141,6 +246,26 @@ export default function Maintenance() {
                 <input className="input" type="datetime-local" required value={form.scheduled_end} onChange={e => setForm(f => ({ ...f, scheduled_end: e.target.value }))} />
               </div>
             </div>
+
+            {/* Asset & Service picker */}
+            <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-4 bg-gray-50 dark:bg-gray-800/50">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Asset e Servizi coinvolti</p>
+              <ItemPicker
+                label="Asset"
+                allItems={allAssets}
+                selectedIds={form.asset_ids}
+                onToggle={toggleAsset}
+                badgeKey="category"
+              />
+              <ItemPicker
+                label="Servizi"
+                allItems={allServices}
+                selectedIds={form.service_ids}
+                onToggle={toggleService}
+                badgeKey="criticality"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">Descrizione</label>
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
@@ -155,3 +280,4 @@ export default function Maintenance() {
     </Layout>
   )
 }
+
