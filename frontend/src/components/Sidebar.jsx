@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Server, Package, CalendarClock, AlertTriangle,
   Calendar, Globe, Bell, BarChart2, Users, Settings, Key, ScrollText,
-  ClipboardList, Ban, ChevronRight, Wrench, LogOut
+  ClipboardList, Ban, LogOut
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -17,8 +17,7 @@ const NAV = [
   { to: '/notifications', icon: Bell, label: 'Notifiche', perm: 'notifications' },
   { to: '/reports', icon: BarChart2, label: 'Report', perm: 'reports' },
   null, // divider
-  { to: '/users', icon: Users, label: 'Utenti', perm: 'users' },
-  { to: '/groups', icon: ClipboardList, label: 'Gruppi', perm: 'users' },
+  { to: '/users', icon: Users, label: 'Utenti & Gruppi', perm: 'users' },
   { to: '/templates', icon: ClipboardList, label: 'Template', perm: 'maintenance' },
   { to: '/blackout', icon: Ban, label: 'Blackout', perm: 'maintenance' },
   { to: '/apikeys', icon: Key, label: 'API Keys', perm: 'apikeys' },

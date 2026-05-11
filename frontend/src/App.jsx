@@ -51,6 +51,7 @@ export default function App() {
               <Route path="/incidents/:id" element={<P perm="incidents"><IncidentDetail /></P>} />
               <Route path="/notifications" element={<P perm="notifications"><Notifications /></P>} />
               <Route path="/users" element={<P perm="users"><Users /></P>} />
+              <Route path="/groups" element={<Navigate to="/users?tab=groups" replace />} />
               <Route path="/settings" element={<P perm="settings"><Settings /></P>} />
               <Route path="/reports" element={<P perm="reports"><Reports /></P>} />
               <Route path="/apikeys" element={<P perm="apikeys"><ApiKeys /></P>} />
