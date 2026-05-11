@@ -1,0 +1,26 @@
+# Avvia solo PostgreSQL per sviluppo locale
+# Usa porta 15432 sull'host per evitare conflitti con altri postgres installati
+#
+# Utilizzo:
+#   docker compose -f docker-compose.dev.yml up -d
+#   poi: cd backend && node src/index.js
+#        cd frontend && npm run dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gbmaintenance-postgres-dev
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-gbmaintenance}
+      - POSTGRES_USER=${POSTGRES_USER:-gbmaint}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gbmaintpassowrd!}
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - ./data/postgres-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gbmaint} -d ${POSTGRES_DB:-gbmaintenance}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
