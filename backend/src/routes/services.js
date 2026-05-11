@@ -27,11 +27,11 @@ router.get('/', async (req, res) => {
   const total = parseInt(countRes.rows[0].count);
 
   const rows = await getMany(
-    `SELECT s.*, u.display_name as owner_name,
+    `SELECT s.*, u.display_name as owner_name, u.email as owner_email,
        (SELECT COUNT(*)::int FROM service_subscribers ss WHERE ss.service_id=s.id) as subscriber_count,
        (SELECT COUNT(*)::int FROM service_assets sa WHERE sa.service_id=s.id) as asset_count
      FROM services s LEFT JOIN users u ON u.id=s.owner_id
-     ${where} ORDER BY s.name LIMIT $${i++} OFFSET $${i}`,
+     ${where} ORDER BY s.system_name NULLS LAST, s.name LIMIT $${i++} OFFSET $${i}`,
     [...params, parseInt(limit), offset]
   );
   res.json({ data: rows, total, page: parseInt(page), limit: parseInt(limit) });
@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
 // ─── GET /api/services/:id ────────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   const service = await getOne(
-    `SELECT s.*, u.display_name as owner_name
+    `SELECT s.*, u.display_name as owner_name, u.email as owner_email, u.avatar_color as owner_avatar_color
      FROM services s LEFT JOIN users u ON u.id=s.owner_id
      WHERE s.id=$1`,
     [req.params.id]
@@ -88,6 +88,7 @@ router.post('/', requireOperator, [
   body('criticality').optional().isIn(CRITICALITIES),
   body('description').optional().isString(),
   body('owner_id').optional().isUUID(),
+  body('system_name').optional().isString().trim(),
   body('sla_uptime_percent').optional().isFloat({ min: 0, max: 100 }),
   body('is_public').optional().isBoolean(),
 ], async (req, res) => {
@@ -97,10 +98,10 @@ router.post('/', requireOperator, [
   try {
     const slug = _slugify(req.body.name) + '-' + Date.now().toString(36);
     const result = await query(
-      `INSERT INTO services (name, slug, description, criticality, owner_id, sla_uptime_percent, is_public)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      `INSERT INTO services (name, slug, description, criticality, owner_id, system_name, sla_uptime_percent, is_public)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [req.body.name, slug, req.body.description||null, req.body.criticality||'medium',
-       req.body.owner_id||null, req.body.sla_uptime_percent||99.9, req.body.is_public||false]
+       req.body.owner_id||null, req.body.system_name||null, req.body.sla_uptime_percent||99.9, req.body.is_public||false]
     );
     const id = result.rows[0].id;
     await query(`INSERT INTO status_history (entity_type, entity_id, status, changed_by) VALUES ('service',$1,'operational',$2)`, [id, req.user.username]);
@@ -114,7 +115,7 @@ router.post('/', requireOperator, [
 
 // ─── PUT /api/services/:id ────────────────────────────────────────────────────
 router.put('/:id', requireOperator, async (req, res) => {
-  const allowed = ['name','description','criticality','owner_id','sla_uptime_percent','is_public','is_active'];
+  const allowed = ['name','description','criticality','owner_id','system_name','sla_uptime_percent','is_public','is_active'];
   const sets=[]; const vals=[]; let i=1;
   for (const f of allowed) {
     if (req.body[f] !== undefined) { sets.push(`${f}=$${i++}`); vals.push(req.body[f]); }

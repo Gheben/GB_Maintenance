@@ -6,7 +6,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Server, Trash2, Plus, ExternalLink } from 'lucide-react'
+import { Server, Trash2, Plus, ExternalLink, User, Mail } from 'lucide-react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 
@@ -46,9 +46,22 @@ export default function ServiceDetail() {
             {service.description && <p className="text-gray-500 mt-1">{service.description}</p>}
             <div className="flex flex-wrap gap-6 mt-3 text-sm text-gray-600">
               {service.sla_target && <span>SLA target: <strong>{service.sla_target}%</strong></span>}
+              {service.system_name && <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 text-xs font-medium">{service.system_name}</span>}
               {service.url && <a href={service.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-brand-600 hover:underline"><ExternalLink size={13} />{service.url}</a>}
               {service.slug && <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{service.slug}</span>}
             </div>
+            {service.owner_name && (
+              <div className="mt-3 flex items-center gap-2 text-sm">
+                <User size={14} className="text-gray-400" />
+                <span className="font-medium text-gray-700 dark:text-gray-300">Owner:</span>
+                <span>{service.owner_name}</span>
+                {service.owner_email && (
+                  <a href={`mailto:${service.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs">
+                    <Mail size={12} />{service.owner_email}
+                  </a>
+                )}
+              </div>
+            )}
           </div>
           <button className="p-2 text-red-500 hover:bg-red-50 rounded-lg" onClick={() => setShowDelete(true)}><Trash2 size={18} /></button>
         </div>

@@ -13,11 +13,17 @@ const TABS = [
   { id: 'groups', label: 'Gruppi Locali' },
 ]
 
+function AuthBadge({ authType }) {
+  if (authType === 'ldap') return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">LDAP</span>
+  return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">Local</span>
+}
+
 // â”€â”€â”€ Tab Utenti â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function UsersTab() {
   const [users, setUsers] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  const [authFilter, setAuthFilter] = useState('all')
   const [showCreate, setShowCreate] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [form, setForm] = useState({ username: '', display_name: '', email: '', password: '', role: 'operator' })
@@ -40,31 +46,44 @@ function UsersTab() {
     catch (err) { toast.error(err.response?.data?.error || 'Errore') }
   }
 
+  const filtered = authFilter === 'all' ? users : users.filter(u => u.auth_type === authFilter)
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">Tipo:</span>
+          {['all','local','ldap'].map(f => (
+            <button key={f} onClick={() => setAuthFilter(f)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${authFilter === f ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {f === 'all' ? 'Tutti' : f.toUpperCase()}
+            </button>
+          ))}
+          {authFilter !== 'all' && <span className="text-xs text-gray-400">({filtered.length} mostrati)</span>}
+        </div>
         <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />Nuovo Utente</button>
       </div>
 
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
-            <tr>{['Username','Nome','Email','Ruolo','Stato','Azioni'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+            <tr>{['Username','Nome','Email','Auth','Ruolo','Stato','Azioni'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-            {users.map(u => (
+            {filtered.map(u => (
               <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                 <td className="px-4 py-3 font-mono text-xs">{u.username}</td>
                 <td className="px-4 py-3">{u.display_name}</td>
                 <td className="px-4 py-3 text-gray-500">{u.email}</td>
+                <td className="px-4 py-3"><AuthBadge authType={u.auth_type} /></td>
                 <td className="px-4 py-3"><span className="badge bg-gray-100 text-gray-700">{u.role}</span></td>
-                <td className="px-4 py-3">{u.is_active ? 'âœ…' : 'â›”'}</td>
+                <td className="px-4 py-3">{u.is_active ? '✅' : '⛔'}</td>
                 <td className="px-4 py-3">
                   <button className="p-1 text-red-500 hover:bg-red-50 rounded" onClick={() => setDeleteTarget(u)}><Trash2 size={14} /></button>
                 </td>
               </tr>
             ))}
-            {users.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-gray-500">Nessun utente</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-gray-500">Nessun utente</td></tr>}
           </tbody>
         </table>
         <div className="p-4"><Pagination page={page} limit={20} total={total} onChange={setPage} /></div>

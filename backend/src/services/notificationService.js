@@ -91,12 +91,20 @@ async function getMaintenanceSubscribers(maintenanceId) {
 
   const serviceIds = services.map(s => s.service_id);
 
-  // Get subscribers of those services
+  // Get subscribers of those services + service owners
   const subs = await getMany(
     `SELECT DISTINCT ss.email, u.email as user_email, u.id as user_id, ss.notify_maintenance
      FROM service_subscribers ss
      LEFT JOIN users u ON u.id = ss.user_id
      WHERE ss.service_id = ANY($1::uuid[]) AND ss.notify_maintenance = true`,
+    [serviceIds]
+  );
+
+  // Also notify service owners
+  const owners = await getMany(
+    `SELECT DISTINCT s.owner_id as user_id, u.email as user_email
+     FROM services s JOIN users u ON u.id=s.owner_id
+     WHERE s.id = ANY($1::uuid[]) AND s.owner_id IS NOT NULL AND u.is_active=true`,
     [serviceIds]
   );
 
@@ -107,6 +115,11 @@ async function getMaintenanceSubscribers(maintenanceId) {
     if (sub.email) emails.add(sub.email);
     if (sub.user_email) emails.add(sub.user_email);
     if (sub.user_id) userIds.add(sub.user_id);
+  }
+  // Include owners
+  for (const o of owners) {
+    if (o.user_email) emails.add(o.user_email);
+    if (o.user_id) userIds.add(o.user_id);
   }
 
   return { emails: [...emails], userIds: [...userIds] };
@@ -186,6 +199,17 @@ async function notifyIncident(incidentId, eventType) {
           if (s.email) emails.add(s.email);
           if (s.user_email) emails.add(s.user_email);
           if (s.user_id) userIds.add(s.user_id);
+        });
+        // Also notify service owners
+        const owners = await getMany(
+          `SELECT DISTINCT s.owner_id as user_id, u.email as user_email
+           FROM services s JOIN users u ON u.id=s.owner_id
+           WHERE s.id = ANY($1::uuid[]) AND s.owner_id IS NOT NULL AND u.is_active=true`,
+          [serviceIds]
+        );
+        owners.forEach(o => {
+          if (o.user_email) emails.add(o.user_email);
+          if (o.user_id) userIds.add(o.user_id);
         });
       }
     }

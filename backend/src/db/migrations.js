@@ -473,6 +473,14 @@ const MIGRATIONS = [
         `, [t.name, t.event_type, t.subject_template, t.body_html_template]);
       }
     }
+  },
+  {
+    version: 3,
+    name: 'services_system_name',
+    up: async (client) => {
+      await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS system_name VARCHAR(200)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_services_system ON services(system_name)`);
+    }
   }
 ];
 
