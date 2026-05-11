@@ -19,7 +19,79 @@ router.get('/', async (req, res) => {
      FROM incidents i WHERE i.status != 'resolved' ORDER BY i.started_at DESC LIMIT 10`
   );
 
-  // Ongoing/upcoming maintenance
+  // In-progress maintenance (currently running)
+  const in_progress_maintenance = await getMany(
+    `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
+            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.description
+     FROM maintenance_windows mw
+     WHERE mw.status = 'in_progress'
+     ORDER BY mw.actual_start DESC NULLS LAST LIMIT 10`
+  );
+
+  // Upcoming maintenance (scheduled, not yet started)
+  const upcoming_maintenance = await getMany(
+    `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
+            mw.scheduled_start, mw.scheduled_end, mw.description
+     FROM maintenance_windows mw
+     WHERE mw.status = 'scheduled'
+       AND mw.scheduled_start > NOW() - INTERVAL '1 hour'
+     ORDER BY mw.scheduled_start ASC LIMIT 20`
+  );
+
+  // Recently completed maintenance (last 7 days)
+  const recent_maintenance = await getMany(
+    `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
+            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.actual_end, mw.notes, mw.description
+     FROM maintenance_windows mw
+     WHERE mw.status = 'completed'
+       AND mw.actual_end > NOW() - INTERVAL '7 days'
+     ORDER BY mw.actual_end DESC LIMIT 10`
+  );
+
+  // For each maintenance (in_progress + upcoming + recent), get involved users count
+  const allMaintIds = [
+    ...in_progress_maintenance,
+    ...upcoming_maintenance,
+    ...recent_maintenance,
+  ].map(m => m.id);
+
+  let involvedMap = {};
+  if (allMaintIds.length > 0) {
+    const placeholders = allMaintIds.map((_, i) => `$${i + 1}`).join(',');
+    const involvedRows = await getMany(
+      `SELECT DISTINCT mwa.maintenance_id,
+              COALESCE(u.display_name, u.username) AS name, u.id AS user_id
+       FROM maintenance_window_assets mwa
+       JOIN service_assets sa ON sa.asset_id = mwa.asset_id
+       LEFT JOIN service_subscribers ss ON ss.service_id = sa.service_id
+       LEFT JOIN users u ON u.id = ss.user_id
+       WHERE mwa.maintenance_id IN (${placeholders})
+         AND u.id IS NOT NULL
+       UNION
+       SELECT DISTINCT mwa.maintenance_id,
+              COALESCE(u.display_name, u.username) AS name, u.id AS user_id
+       FROM maintenance_window_assets mwa
+       JOIN service_assets sa ON sa.asset_id = mwa.asset_id
+       JOIN services sv ON sv.id = sa.service_id
+       LEFT JOIN users u ON u.id = sv.owner_id
+       WHERE mwa.maintenance_id IN (${placeholders})
+         AND u.id IS NOT NULL`,
+      [...allMaintIds, ...allMaintIds]
+    ).catch(() => []);
+
+    for (const row of involvedRows) {
+      if (!involvedMap[row.maintenance_id]) involvedMap[row.maintenance_id] = [];
+      if (!involvedMap[row.maintenance_id].find(x => x.user_id === row.user_id)) {
+        involvedMap[row.maintenance_id].push({ name: row.name, user_id: row.user_id });
+      }
+    }
+  }
+
+  // Attach involved users to each maintenance item
+  function attachUsers(list) {
+    return list.map(m => ({ ...m, involved_users: involvedMap[m.id] || [] }));
+  }
+
   const maintenance = await getMany(
     `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
             mw.scheduled_start, mw.scheduled_end, mw.description
@@ -48,7 +120,11 @@ router.get('/', async (req, res) => {
     overall_status: overallStatus,
     services,
     active_incidents: incidents,
-    upcoming_maintenance: maintenance,
+    in_progress_maintenance: attachUsers(in_progress_maintenance),
+    upcoming_maintenance: attachUsers(upcoming_maintenance),
+    recent_maintenance: attachUsers(recent_maintenance),
+    // Legacy field kept for backward compat
+    maintenance_summary: maintenance,
     last_updated: new Date().toISOString(),
   });
 });

@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import { Layout } from '../components/Layout'
 import { settingsApi } from '../api'
 import { toast } from '../components/Toast'
-import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle } from 'lucide-react'
+import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle } from 'lucide-react'
 
 function Section({ title, children }) {
   return (
-    <div className="card p-6 space-y-4">
+    <div className="card p-5 sm:p-6 space-y-4">
       <h2 className="font-semibold text-base border-b border-gray-100 dark:border-gray-700 pb-2">{title}</h2>
       {children}
     </div>
@@ -16,7 +16,20 @@ function Section({ title, children }) {
 export default function Settings() {
   const [tab, setTab] = useState('smtp')
   const [smtp, setSmtp] = useState({ host: '', port: 587, secure: false, user: '', pass: '', from: '' })
-  const [ldap, setLdap] = useState({ url: '', base_dn: '', bind_dn: '', bind_password: '', user_filter: '', username_attr: 'sAMAccountName' })
+  const [ldap, setLdap] = useState({
+    enabled: false,
+    url: '',
+    domain: '',
+    base_dn: '',
+    bind_username: '',
+    bind_password: '',
+    skip_cert_verify: false,
+    user_filter: '(sAMAccountName={{username}})',
+    ad_mode: true,
+  })
+  const [ldapSavedHasPassword, setLdapSavedHasPassword] = useState(false)
+  const [ldapTesting, setLdapTesting] = useState(false)
+  const [ldapTestResult, setLdapTestResult] = useState(null)
   const [saml, setSaml] = useState({
     enabled: false, auto_redirect: false, require_group_match: false,
     sp_base_url: window.location.origin, sp_entity_id: '',
@@ -31,7 +44,21 @@ export default function Settings() {
 
   useEffect(() => {
     settingsApi.getSmtp().then(r => setSmtp(r.data)).catch(() => {})
-    settingsApi.getLdap().then(r => setLdap(prev => ({ ...prev, ...r.data }))).catch(() => {})
+    settingsApi.getLdap().then(r => {
+      const d = r.data || {}
+      setLdapSavedHasPassword(!!(d.bind_password || d.ldap_service_password))
+      setLdap({
+        enabled: d.enabled || false,
+        url: d.url || d.ldap_server || '',
+        domain: d.domain || d.ldap_domain || '',
+        base_dn: d.base_dn || d.ldap_base_dn || '',
+        bind_username: d.bind_username || d.ldap_service_username || '',
+        bind_password: '',
+        skip_cert_verify: d.skip_cert_verify || false,
+        user_filter: d.user_filter || '(sAMAccountName={{username}})',
+        ad_mode: d.ad_mode !== false,
+      })
+    }).catch(() => {})
     settingsApi.getSaml().then(r => setSaml(prev => ({ ...prev, ...r.data }))).catch(() => {})
     settingsApi.getGeneral().then(r => setGeneral(r.data)).catch(() => {})
     settingsApi.getWebhooks().then(r => setWebhooks(r.data)).catch(() => {})
@@ -53,9 +80,30 @@ export default function Settings() {
 
   const saveLdap = async (e) => {
     e.preventDefault(); setLoading(true)
-    try { await settingsApi.saveLdap(ldap); toast.success('LDAP salvato') }
+    try {
+      await settingsApi.saveLdap(ldap)
+      toast.success('LDAP salvato')
+      if (ldap.bind_password) setLdapSavedHasPassword(true)
+    }
     catch (err) { toast.error(err.response?.data?.error || 'Errore') }
     finally { setLoading(false) }
+  }
+
+  const testLdap = async () => {
+    setLdapTesting(true); setLdapTestResult(null)
+    try {
+      const res = await settingsApi.testLdap(ldap)
+      setLdapTestResult({ ok: true, message: res.data?.message || 'Connessione riuscita' })
+    } catch (err) {
+      setLdapTestResult({ ok: false, message: err.response?.data?.error || 'Test fallito' })
+    } finally {
+      setLdapTesting(false)
+    }
+  }
+
+  function computeBaseDn(domain) {
+    if (!domain) return ''
+    return domain.split('.').map(p => `DC=${p}`).join(',')
   }
 
   const saveGeneral = async (e) => {
@@ -73,7 +121,7 @@ export default function Settings() {
 
   const spBaseUrl = saml.sp_base_url || window.location.origin
 
-  const TABS = [['smtp','SMTP'],['ldap','LDAP'],['saml','SAML'],['webhooks','Webhook'],['general','Generale']]
+  const TABS = [['smtp','SMTP'],['ldap','LDAP / AD'],['saml','SAML'],['webhooks','Webhook'],['general','Generale']]
 
   return (
     <Layout title="Impostazioni">
@@ -104,22 +152,121 @@ export default function Settings() {
         )}
 
         {tab === 'ldap' && (
-          <Section title="Configurazione LDAP">
-            <form onSubmit={saveLdap} className="space-y-3">
-              <div><label className="block text-xs font-medium mb-1">URL LDAP *</label><input className="input" placeholder="ldap://dc.example.com:389" value={ldap.url || ''} onChange={e => setLdap(f => ({ ...f, url: e.target.value }))} /></div>
-              <div><label className="block text-xs font-medium mb-1">Base DN *</label><input className="input" placeholder="DC=example,DC=com" value={ldap.base_dn || ''} onChange={e => setLdap(f => ({ ...f, base_dn: e.target.value }))} /></div>
-              <div><label className="block text-xs font-medium mb-1">Bind DN</label><input className="input" value={ldap.bind_dn || ''} onChange={e => setLdap(f => ({ ...f, bind_dn: e.target.value }))} /></div>
-              <div><label className="block text-xs font-medium mb-1">Bind Password</label><input className="input" type="password" placeholder="••••••••" value={ldap.bind_password === '********' ? '' : ldap.bind_password || ''} onChange={e => setLdap(f => ({ ...f, bind_password: e.target.value }))} /></div>
-              <div><label className="block text-xs font-medium mb-1">User filter</label><input className="input" placeholder="(objectClass=person)" value={ldap.user_filter || ''} onChange={e => setLdap(f => ({ ...f, user_filter: e.target.value }))} /></div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" className="btn-secondary" onClick={async () => {
-                  try { await settingsApi.testLdap(ldap); toast.success('LDAP OK') }
-                  catch (err) { toast.error(err.response?.data?.error || 'Test fallito') }
-                }}>Test</button>
-                <button type="submit" className="btn-primary" disabled={loading}>Salva</button>
+          <form onSubmit={saveLdap} className="space-y-4">
+            {/* Enable */}
+            <div className="card p-5">
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input type="checkbox" checked={ldap.enabled}
+                  onChange={e => setLdap(f => ({ ...f, enabled: e.target.checked }))}
+                  className="w-4 h-4 accent-brand-600" />
+                <span className="font-semibold text-gray-800 dark:text-gray-100">Abilita autenticazione LDAP / Active Directory</span>
+              </label>
+              {ldap.enabled && (
+                <p className="mt-2 text-sm text-cyan-700 dark:text-cyan-300">LDAP abilitato — gli utenti potranno accedere con le credenziali di dominio.</p>
+              )}
+            </div>
+
+            <div className={`space-y-4 transition-opacity duration-200 ${!ldap.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+              {/* Connessione */}
+              <div className="card p-5 space-y-4">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Connessione LDAP</h3>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Server LDAP</label>
+                  <input className="input" value={ldap.url}
+                    onChange={e => setLdap(f => ({ ...f, url: e.target.value }))}
+                    placeholder="ldaps://dc.azienda.local  oppure  ldap://192.168.1.10" />
+                  <p className="mt-1 text-xs text-gray-400">Usa <code>ldaps://</code> per LDAP over TLS (porta 636), <code>ldap://</code> per connessione non cifrata (porta 389).</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Dominio Active Directory</label>
+                  <input className="input" value={ldap.domain}
+                    onChange={e => setLdap(f => ({ ...f, domain: e.target.value }))}
+                    placeholder="azienda.local" />
+                  <p className="mt-1 text-xs text-gray-400">Usato per il bind del service account nel formato <code>username@dominio</code>.</p>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-gray-500">Base DN</label>
+                    {ldap.domain && (
+                      <button type="button"
+                        onClick={() => setLdap(f => ({ ...f, base_dn: computeBaseDn(f.domain) }))}
+                        className="text-xs text-brand-600 hover:underline">
+                        Deriva dal dominio
+                      </button>
+                    )}
+                  </div>
+                  <input className="input font-mono text-xs" value={ldap.base_dn}
+                    onChange={e => setLdap(f => ({ ...f, base_dn: e.target.value }))}
+                    placeholder="DC=azienda,DC=local" />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer text-sm select-none">
+                  <input type="checkbox" checked={ldap.skip_cert_verify}
+                    onChange={e => setLdap(f => ({ ...f, skip_cert_verify: e.target.checked }))}
+                    className="accent-brand-600" />
+                  Ignora verifica certificato TLS
+                </label>
               </div>
-            </form>
-          </Section>
+
+              {/* Service Account */}
+              <div className="card p-5 space-y-4">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Service account</h3>
+                <p className="text-xs text-gray-400">Account usato per cercare gli utenti in AD. Si autentica come <code>username@dominio</code>.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Username</label>
+                    <input className="input" value={ldap.bind_username}
+                      onChange={e => setLdap(f => ({ ...f, bind_username: e.target.value }))}
+                      placeholder="ServiceMaintenance" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
+                    <input type="password" className="input" value={ldap.bind_password}
+                      onChange={e => setLdap(f => ({ ...f, bind_password: e.target.value }))}
+                      placeholder={ldapSavedHasPassword ? '••••••••  (lascia vuoto per mantenere)' : 'Password service account'} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Ricerca utenti */}
+              <div className="card p-5 space-y-4">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Ricerca utenti</h3>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">User filter</label>
+                  <input className="input font-mono text-xs" value={ldap.user_filter}
+                    onChange={e => setLdap(f => ({ ...f, user_filter: e.target.value }))}
+                    placeholder="(sAMAccountName={{username}})" />
+                  <p className="mt-1 text-xs text-gray-400">{'Usa {{username}} come segnaposto per lo username inserito al login.'}</p>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer text-sm select-none">
+                  <input type="checkbox" checked={ldap.ad_mode}
+                    onChange={e => setLdap(f => ({ ...f, ad_mode: e.target.checked }))}
+                    className="accent-brand-600" />
+                  <span>
+                    Modalità Active Directory
+                    <span className="text-gray-400 text-xs ml-1 font-normal">(gruppi nidificati via LDAP_MATCHING_RULE_IN_CHAIN)</span>
+                  </span>
+                </label>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-4 flex-wrap">
+                <button type="button" onClick={testLdap} disabled={ldapTesting || !ldap.url}
+                  className="btn-secondary flex items-center gap-2 disabled:opacity-50">
+                  <Server size={15} />{ldapTesting ? 'Test in corso...' : 'Test connessione'}
+                </button>
+                {ldapTestResult && (
+                  <span className={`flex items-center gap-1.5 text-sm font-medium ${ldapTestResult.ok ? 'text-green-600' : 'text-red-600'}`}>
+                    {ldapTestResult.ok ? <CheckCircle size={15} /> : <XCircle size={15} />}
+                    {ldapTestResult.message}
+                  </span>
+                )}
+                <div className="flex-1" />
+                <button type="submit" className="btn-primary flex items-center gap-2" disabled={loading}>
+                  <Save size={14} />{loading ? 'Salvataggio...' : 'Salva impostazioni LDAP'}
+                </button>
+              </div>
+            </div>
+          </form>
         )}
 
         {tab === 'saml' && (

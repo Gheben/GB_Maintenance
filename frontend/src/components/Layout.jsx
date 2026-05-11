@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { useWebSocket } from '../hooks/useWebSocket'
@@ -6,6 +7,17 @@ import { useEffect } from 'react'
 
 export function Layout({ title, children }) {
   const { fetchNotifications } = useNotifications()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem('sidebar_collapsed') === 'true'
+  )
+
+  function toggleCollapse() {
+    setSidebarCollapsed(v => {
+      localStorage.setItem('sidebar_collapsed', String(!v))
+      return !v
+    })
+  }
 
   useWebSocket((msg) => {
     if (['maintenance_created','incident_created','notification'].includes(msg.type)) {
@@ -16,11 +28,16 @@ export function Layout({ title, children }) {
   useEffect(() => { fetchNotifications() }, [])
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <Header title={title} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={toggleCollapse}
+      />
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <Header title={title} onOpenSidebar={() => setSidebarOpen(true)} />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>
   )

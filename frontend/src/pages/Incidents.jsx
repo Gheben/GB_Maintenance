@@ -55,7 +55,8 @@ export default function Incidents() {
         </div>
 
         <div className="card overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="min-w-[640px] w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>{['Titolo','Severità','Stato','Aperto il','Risolto il'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
             </thead>
@@ -74,6 +75,7 @@ export default function Incidents() {
                 ))}
             </tbody>
           </table>
+          </div>
           <div className="p-4"><Pagination page={page} limit={20} total={total} onChange={setPage} /></div>
         </div>
       </div>
