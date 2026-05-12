@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Server, Package, CalendarClock, AlertTriangle,
-  Calendar, Globe, Bell, BarChart2, Users, Settings, Key, ScrollText,
-  ClipboardList, Ban, LogOut, BookOpen, ChevronLeft, ChevronRight, X
+  Calendar, Globe, Bell, BarChart2, Users, Settings, ScrollText,
+  Ban, LogOut, BookOpen, ChevronLeft, ChevronRight, X
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -19,9 +19,7 @@ const NAV = [
   { to: '/reports', icon: BarChart2, label: 'Report', perm: 'reports' },
   { divider: true },
   { to: '/users', icon: Users, label: 'Utenti & Gruppi', perm: 'users' },
-  { to: '/templates', icon: ClipboardList, label: 'Template', perm: 'maintenance' },
   { to: '/blackout', icon: Ban, label: 'Blackout', perm: 'maintenance' },
-  { to: '/apikeys', icon: Key, label: 'API Keys', perm: 'apikeys' },
   { to: '/audit', icon: ScrollText, label: 'Audit Log', perm: 'audit' },
   { to: '/settings', icon: Settings, label: 'Impostazioni', perm: 'settings' },
   { divider: true },

@@ -150,7 +150,7 @@ function GroupsTab() {
 
   const handleAddMember = async (e) => {
     e.preventDefault()
-    try { await groupsApi.addMember(selected.id, { user_id: memberInput }); toast.success('Membro aggiunto'); setMemberInput(''); loadDetail(selected.id) }
+    try { await groupsApi.addMember(selected.id, memberInput); toast.success('Membro aggiunto'); setMemberInput(''); loadDetail(selected.id) }
     catch (err) { toast.error(err.response?.data?.error || 'ID utente non valido') }
   }
 

@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Layout } from '../components/Layout'
-import { settingsApi } from '../api'
+import { Modal, ConfirmDialog } from '../components/Modal'
+import { settingsApi, templatesApi, apikeysApi } from '../api'
 import { toast } from '../components/Toast'
-import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle } from 'lucide-react'
+import { format } from 'date-fns'
+import { it } from 'date-fns/locale'
+import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2 } from 'lucide-react'
+
+const TYPES = ['planned','emergency','upgrade','security_patch','infrastructure','other']
+const IMPACTS = ['critical','high','medium','low']
 
 function Section({ title, children }) {
   return (
@@ -39,8 +45,20 @@ export default function Settings() {
     email_attribute: 'email', default_role: 'viewer',
   })
   const [general, setGeneral] = useState({ app_name: 'GB Maintenance', app_url: '' })
-  const [webhooks, setWebhooks] = useState([])
   const [loading, setLoading] = useState(false)
+
+  // Templates state
+  const [templates, setTemplates] = useState([])
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false)
+  const [deleteTargetTemplate, setDeleteTargetTemplate] = useState(null)
+  const [templateForm, setTemplateForm] = useState({ name: '', type: 'planned', impact_level: 'medium', duration_minutes: 60, description: '' })
+
+  // API Keys state
+  const [keys, setKeys] = useState([])
+  const [showCreateKey, setShowCreateKey] = useState(false)
+  const [newKey, setNewKey] = useState(null)
+  const [deleteTargetKey, setDeleteTargetKey] = useState(null)
+  const [keyForm, setKeyForm] = useState({ name: '', expires_at: '' })
 
   useEffect(() => {
     settingsApi.getSmtp().then(r => setSmtp(r.data)).catch(() => {})
@@ -61,8 +79,12 @@ export default function Settings() {
     }).catch(() => {})
     settingsApi.getSaml().then(r => setSaml(prev => ({ ...prev, ...r.data }))).catch(() => {})
     settingsApi.getGeneral().then(r => setGeneral(r.data)).catch(() => {})
-    settingsApi.getWebhooks().then(r => setWebhooks(r.data)).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (tab === 'templates') templatesApi.list().then(r => setTemplates(r.data)).catch(() => {})
+    if (tab === 'apikeys') apikeysApi.list().then(r => setKeys(r.data)).catch(() => {})
+  }, [tab])
 
   const saveSmtp = async (e) => {
     e.preventDefault(); setLoading(true)
@@ -119,9 +141,37 @@ export default function Settings() {
     finally { setLoading(false) }
   }
 
+  const handleCreateTemplate = async (e) => {
+    e.preventDefault()
+    try { await templatesApi.create(templateForm); toast.success('Template creato'); setShowCreateTemplate(false); setTemplateForm({ name: '', type: 'planned', impact_level: 'medium', duration_minutes: 60, description: '' }); templatesApi.list().then(r => setTemplates(r.data)) }
+    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+  }
+
+  const handleDeleteTemplate = async () => {
+    try { await templatesApi.delete(deleteTargetTemplate.id); toast.success('Template eliminato'); setDeleteTargetTemplate(null); templatesApi.list().then(r => setTemplates(r.data)) }
+    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+  }
+
+  const handleCreateKey = async (e) => {
+    e.preventDefault()
+    try {
+      const payload = { name: keyForm.name }
+      if (keyForm.expires_at) payload.expires_at = keyForm.expires_at
+      const res = await apikeysApi.create(payload)
+      setNewKey(res.data.key)
+      setShowCreateKey(false)
+      apikeysApi.list().then(r => setKeys(r.data))
+    } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+  }
+
+  const handleDeleteKey = async () => {
+    try { await apikeysApi.delete(deleteTargetKey.id); toast.success('Chiave eliminata'); setDeleteTargetKey(null); apikeysApi.list().then(r => setKeys(r.data)) }
+    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+  }
+
   const spBaseUrl = saml.sp_base_url || window.location.origin
 
-  const TABS = [['smtp','SMTP'],['ldap','LDAP / AD'],['saml','SAML'],['webhooks','Webhook'],['general','Generale']]
+  const TABS = [['smtp','SMTP & Email'],['ldap','LDAP / AD'],['saml','SAML / SSO'],['templates','Template'],['apikeys','API Keys'],['general','Sistema']]
 
   return (
     <Layout title="Impostazioni">
@@ -425,23 +475,56 @@ export default function Settings() {
           </Section>
         )}
 
-        {tab === 'webhooks' && (
-          <Section title="Webhook">
-            <p className="text-sm text-gray-500 mb-2">Aggiungi endpoint per ricevere notifiche via webhook (Teams, Slack, custom).</p>
-            {webhooks.map((w, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input className="input flex-1" placeholder="URL webhook" value={w.url || ''} onChange={e => setWebhooks(wh => { const a = [...wh]; a[i] = { ...a[i], url: e.target.value }; return a })} />
-                <select className="input w-32" value={w.type || 'generic'} onChange={e => setWebhooks(wh => { const a = [...wh]; a[i] = { ...a[i], type: e.target.value }; return a })}>
-                  {['generic','teams','slack'].map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <button className="btn-danger py-2 px-2" onClick={() => setWebhooks(wh => wh.filter((_, j) => j !== i))}>✕</button>
-              </div>
-            ))}
-            <div className="flex gap-3 pt-1">
-              <button className="btn-secondary" onClick={() => setWebhooks(w => [...w, { url: '', type: 'generic' }])}>+ Aggiungi</button>
-              <button className="btn-primary" onClick={async () => { await settingsApi.saveWebhooks(webhooks); toast.success('Webhook salvati') }}>Salva</button>
+        {tab === 'templates' && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <button className="btn-primary" onClick={() => setShowCreateTemplate(true)}><Plus size={15} />Nuovo Template</button>
             </div>
-          </Section>
+            <div className="space-y-3">
+              {templates.map(t => (
+                <div key={t.id} className="card p-4 flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{t.name}</p>
+                    <p className="text-xs text-gray-500">{t.type} · {t.impact_level} · {t.duration_minutes} min</p>
+                    {t.description && <p className="text-xs text-gray-400 mt-1">{t.description}</p>}
+                  </div>
+                  <button className="p-1 text-red-500 hover:bg-red-50 rounded" onClick={() => setDeleteTargetTemplate(t)}><Trash2 size={14} /></button>
+                </div>
+              ))}
+              {templates.length === 0 && <p className="text-center text-gray-500 py-8">Nessun template</p>}
+            </div>
+          </div>
+        )}
+
+        {tab === 'apikeys' && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <button className="btn-primary" onClick={() => setShowCreateKey(true)}><Plus size={15} />Nuova Chiave</button>
+            </div>
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-[500px] w-full text-sm">
+                  <thead className="bg-gray-50 dark:bg-gray-700/50">
+                    <tr>{['Nome','Prefisso','Scadenza','Ultima uso','Azioni'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {keys.map(k => (
+                      <tr key={k.id}>
+                        <td className="px-4 py-3">{k.name}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{k.key_prefix}...</td>
+                        <td className="px-4 py-3 text-gray-500">{k.expires_at ? format(new Date(k.expires_at), 'dd/MM/yyyy', { locale: it }) : '∞'}</td>
+                        <td className="px-4 py-3 text-gray-500">{k.last_used_at ? format(new Date(k.last_used_at), 'dd/MM HH:mm', { locale: it }) : '—'}</td>
+                        <td className="px-4 py-3">
+                          <button className="p-1 text-red-500 hover:bg-red-50 rounded" onClick={() => setDeleteTargetKey(k)}><Trash2 size={14} /></button>
+                        </td>
+                      </tr>
+                    ))}
+                    {keys.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-gray-500">Nessuna chiave API</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         )}
 
         {tab === 'general' && (
@@ -456,6 +539,65 @@ export default function Settings() {
           </Section>
         )}
       </div>
+
+      {/* Template modals */}
+      {showCreateTemplate && (
+        <Modal title="Nuovo Template" onClose={() => setShowCreateTemplate(false)}>
+          <form onSubmit={handleCreateTemplate} className="space-y-4">
+            <div><label className="block text-sm font-medium mb-1">Nome *</label><input className="input" required value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="block text-sm font-medium mb-1">Tipo</label>
+                <select className="input" value={templateForm.type} onChange={e => setTemplateForm(f => ({ ...f, type: e.target.value }))}>
+                  {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select></div>
+              <div><label className="block text-sm font-medium mb-1">Impatto</label>
+                <select className="input" value={templateForm.impact_level} onChange={e => setTemplateForm(f => ({ ...f, impact_level: e.target.value }))}>
+                  {IMPACTS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select></div>
+            </div>
+            <div><label className="block text-sm font-medium mb-1">Durata (min)</label><input className="input" type="number" min="1" value={templateForm.duration_minutes} onChange={e => setTemplateForm(f => ({ ...f, duration_minutes: parseInt(e.target.value) }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Descrizione</label><textarea className="input" rows={2} value={templateForm.description} onChange={e => setTemplateForm(f => ({ ...f, description: e.target.value }))} /></div>
+            <div className="flex justify-end gap-3">
+              <button type="button" className="btn-secondary" onClick={() => setShowCreateTemplate(false)}>Annulla</button>
+              <button type="submit" className="btn-primary">Crea</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {deleteTargetTemplate && (
+        <ConfirmDialog title="Elimina Template" message={`Eliminare "${deleteTargetTemplate.name}"?`} danger confirmLabel="Elimina"
+          onConfirm={handleDeleteTemplate} onCancel={() => setDeleteTargetTemplate(null)} />
+      )}
+
+      {/* API Keys modals */}
+      {showCreateKey && (
+        <Modal title="Nuova API Key" onClose={() => setShowCreateKey(false)} size="sm">
+          <form onSubmit={handleCreateKey} className="space-y-4">
+            <div><label className="block text-sm font-medium mb-1">Nome *</label><input className="input" required value={keyForm.name} onChange={e => setKeyForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Scadenza (opzionale)</label><input type="datetime-local" className="input" value={keyForm.expires_at} onChange={e => setKeyForm(f => ({ ...f, expires_at: e.target.value }))} /></div>
+            <div className="flex justify-end gap-3">
+              <button type="button" className="btn-secondary" onClick={() => setShowCreateKey(false)}>Annulla</button>
+              <button type="submit" className="btn-primary">Crea</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {newKey && (
+        <Modal title="Chiave creata" onClose={() => setNewKey(null)} size="sm">
+          <p className="text-sm text-gray-600 mb-3">Copia questa chiave — non sarà più visualizzabile.</p>
+          <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border">
+            <code className="flex-1 text-xs break-all">{newKey}</code>
+            <button onClick={() => { navigator.clipboard.writeText(newKey); toast.success('Copiata') }}><Copy size={16} /></button>
+          </div>
+          <div className="flex justify-end mt-4">
+            <button className="btn-primary" onClick={() => setNewKey(null)}>Ho salvato la chiave</button>
+          </div>
+        </Modal>
+      )}
+      {deleteTargetKey && (
+        <ConfirmDialog title="Elimina Chiave" message={`Eliminare "${deleteTargetKey.name}"?`} danger confirmLabel="Elimina"
+          onConfirm={handleDeleteKey} onCancel={() => setDeleteTargetKey(null)} />
+      )}
     </Layout>
   )
 }
