@@ -4,7 +4,7 @@ import { Modal, ConfirmDialog } from '../components/Modal'
 import { settingsApi, templatesApi, apikeysApi, notificationsApi } from '../api'
 import { toast } from '../components/Toast'
 import { format } from 'date-fns'
-import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, RotateCcw, Clock, FileCode, RefreshCw } from 'lucide-react'
+import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, RotateCcw, Clock, FileCode, RefreshCw } from 'lucide-react'
 
 const TYPES = ['planned','emergency','upgrade','security_patch','infrastructure','other']
 const IMPACTS = ['critical','high','medium','low']
@@ -60,11 +60,20 @@ export default function Settings() {
   })
   const [general, setGeneral] = useState({ app_name: 'GB Maintenance', app_url: '' })
   const [loading, setLoading] = useState(false)
+  const [showSmtpPass, setShowSmtpPass] = useState(false)
+  const [smtpResult, setSmtpResult] = useState(null)
+  const [testEmail, setTestEmail] = useState('')
+  const [testing, setTesting] = useState(false)
+  const [samlDirty, setSamlDirty] = useState(false)
+  const [samlSaving, setSamlSaving] = useState(false)
+  const [samlResult, setSamlResult] = useState(null)
 
   // NTP / Timezone
-  const [ntp, setNtp] = useState({ ntp_server: 'pool.ntp.org', timezone: 'Europe/Rome' })
+  const [ntp, setNtp] = useState({ ntp_server: 'pool.ntp.org', timezone: 'Europe/Rome', note: '' })
   const [ntpDirty, setNtpDirty] = useState(false)
   const [ntpSaving, setNtpSaving] = useState(false)
+  const [ntpSyncing, setNtpSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState(null)
 
   // Notification templates
   const [notifTemplates, setNotifTemplates] = useState([])
@@ -125,17 +134,18 @@ export default function Settings() {
   }, [tab])
 
   const saveSmtp = async (e) => {
-    e.preventDefault(); setLoading(true)
-    try { await settingsApi.saveSmtp(smtp); toast.success('SMTP saved') }
-    catch (err) { toast.error(err.response?.data?.error || 'Error') }
+    e.preventDefault(); setLoading(true); setSmtpResult(null)
+    try { await settingsApi.saveSmtp(smtp); setSmtpResult({ success: true, message: 'SMTP settings saved.' }) }
+    catch (err) { setSmtpResult({ success: false, message: err.response?.data?.error || 'Save error.' }) }
     finally { setLoading(false) }
   }
 
-  const testSmtp = async () => {
-    setLoading(true)
-    try { await settingsApi.testSmtp(smtp); toast.success('SMTP working') }
-    catch (err) { toast.error(err.response?.data?.error || 'Test failed') }
-    finally { setLoading(false) }
+  const handleTestSmtp = async () => {
+    if (!testEmail) return
+    setTesting(true); setSmtpResult(null)
+    try { await settingsApi.testSmtp(testEmail); setSmtpResult({ success: true, message: `Test email sent to ${testEmail}.` }) }
+    catch (err) { setSmtpResult({ success: false, message: err.response?.data?.error || 'Error sending test email.' }) }
+    finally { setTesting(false) }
   }
 
   const saveLdap = async (e) => {
@@ -180,6 +190,19 @@ export default function Settings() {
     finally { setNtpSaving(false) }
   }
 
+  const handleQueryNtp = async () => {
+    setNtpSyncing(true); setSyncResult(null)
+    try {
+      const r = await settingsApi.queryNtp(ntp.ntp_server)
+      const d = r.data
+      const offsetSec = d.offset_ms != null ? (d.offset_ms / 1000).toFixed(2) : null
+      const sign = d.offset_ms >= 0 ? '+' : ''
+      setSyncResult({ success: true, message: `NTP OK — server: ${d.ntp_server || ntp.ntp_server}${d.ntp_time ? ' — time: ' + new Date(d.ntp_time).toLocaleString() : ''}${offsetSec != null ? ' — offset: ' + sign + offsetSec + 's' : ''}` })
+    } catch (err) {
+      setSyncResult({ success: false, message: err.response?.data?.error || 'NTP query failed.' })
+    } finally { setNtpSyncing(false) }
+  }
+
   const selectNotifTemplate = (tpl) => {
     setSelectedNotifId(tpl.id)
     setNotifForm({ subject_template: tpl.subject_template || '', body_html_template: tpl.body_html_template || '' })
@@ -201,10 +224,10 @@ export default function Settings() {
   }
 
   const saveSaml = async (e) => {
-    e.preventDefault(); setLoading(true)
-    try { await settingsApi.saveSaml(saml); toast.success('SAML configuration saved') }
-    catch (err) { toast.error(err.response?.data?.error || 'Error') }
-    finally { setLoading(false) }
+    e.preventDefault(); setSamlSaving(true); setSamlResult(null)
+    try { await settingsApi.saveSaml(saml); setSamlDirty(false); setSamlResult({ success: true, message: 'SAML configuration saved.' }) }
+    catch (err) { setSamlResult({ success: false, message: err.response?.data?.error || 'Save error.' }) }
+    finally { setSamlSaving(false) }
   }
 
   const handleCreateTemplate = async (e) => {
@@ -250,21 +273,85 @@ export default function Settings() {
         </div>
 
         {tab === 'smtp' && (
-          <Section title="SMTP Configuration">
-            <form onSubmit={saveSmtp} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-medium mb-1">Host *</label><input className="input" required value={smtp.host} onChange={e => setSmtp(f => ({ ...f, host: e.target.value }))} /></div>
-                <div><label className="block text-xs font-medium mb-1">Port</label><input className="input" type="number" value={smtp.port} onChange={e => setSmtp(f => ({ ...f, port: parseInt(e.target.value) }))} /></div>
+          <div className="space-y-6">
+            <div className="card p-5 sm:p-6 space-y-5">
+              <h2 className="font-semibold text-base border-b border-gray-100 dark:border-gray-700 pb-2">SMTP Configuration</h2>
+              <p className="text-sm text-gray-500">Used to send email notifications when maintenance events occur.</p>
+              <form onSubmit={saveSmtp} className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium mb-1">SMTP Server</label>
+                    <input className="input" placeholder="smtp.company.com" value={smtp.host}
+                      onChange={e => { setSmtp(f => ({ ...f, host: e.target.value })); setSmtpResult(null) }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Port</label>
+                    <input className="input" type="number" placeholder="587" value={smtp.port}
+                      onChange={e => { setSmtp(f => ({ ...f, port: parseInt(e.target.value) })); setSmtpResult(null) }} />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" id="smtp-secure" checked={smtp.secure}
+                      onChange={e => { setSmtp(f => ({ ...f, secure: e.target.checked })); setSmtpResult(null) }} className="w-4 h-4 accent-brand-600" />
+                    <label htmlFor="smtp-secure" className="text-sm text-gray-700">Direct TLS (SSL, port 465) — disable for STARTTLS</label>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" id="smtp-ignoreTls" checked={smtp.ignoreTls || false}
+                      onChange={e => { setSmtp(f => ({ ...f, ignoreTls: e.target.checked })); setSmtpResult(null) }} className="w-4 h-4 accent-brand-600" />
+                    <label htmlFor="smtp-ignoreTls" className="text-sm text-gray-700">Skip STARTTLS — relay without authentication (e.g. internal port 25)</label>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">SMTP User</label>
+                  <input className="input" type="email" placeholder="maintenance@company.com"
+                    value={smtp.user} onChange={e => { setSmtp(f => ({ ...f, user: e.target.value })); setSmtpResult(null) }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">Password <span className="text-gray-400 font-normal">(leave blank to keep current)</span></label>
+                  <div className="relative">
+                    <input className="input pr-10" type={showSmtpPass ? 'text' : 'password'}
+                      placeholder="••••••••" value={smtp.pass === '********' ? '' : smtp.pass}
+                      onChange={e => { setSmtp(f => ({ ...f, pass: e.target.value })); setSmtpResult(null) }} autoComplete="new-password" />
+                    <button type="button" onClick={() => setShowSmtpPass(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showSmtpPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">Sender (From)</label>
+                  <input className="input" placeholder='GB Maintenance <maintenance@company.com>'
+                    value={smtp.from} onChange={e => { setSmtp(f => ({ ...f, from: e.target.value })); setSmtpResult(null) }} />
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button type="submit" disabled={loading} className="btn-primary flex items-center gap-2">
+                    <Save size={15} />{loading ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="card p-5 sm:p-6 space-y-4">
+              <h2 className="font-semibold text-base border-b border-gray-100 dark:border-gray-700 pb-2">Email test</h2>
+              <p className="text-sm text-gray-500">Send a test email using the current (already saved) SMTP configuration.</p>
+              <div className="flex gap-3">
+                <input className="input flex-1" type="email" placeholder="recipient@example.com"
+                  value={testEmail} onChange={e => setTestEmail(e.target.value)} />
+                <button onClick={handleTestSmtp} disabled={testing || !testEmail}
+                  className="btn-primary flex items-center gap-2 whitespace-nowrap disabled:opacity-50">
+                  <Send size={15} />{testing ? 'Sending...' : 'Send test'}
+                </button>
               </div>
-              <div><label className="block text-xs font-medium mb-1">Username</label><input className="input" value={smtp.user} onChange={e => setSmtp(f => ({ ...f, user: e.target.value }))} /></div>
-              <div><label className="block text-xs font-medium mb-1">Password</label><input className="input" type="password" placeholder="••••••••" value={smtp.pass === '********' ? '' : smtp.pass} onChange={e => setSmtp(f => ({ ...f, pass: e.target.value }))} /></div>
-              <div><label className="block text-xs font-medium mb-1">From</label><input className="input" value={smtp.from} onChange={e => setSmtp(f => ({ ...f, from: e.target.value }))} /></div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" className="btn-secondary" disabled={loading} onClick={testSmtp}>Test connection</button>
-                <button type="submit" className="btn-primary" disabled={loading}>Save</button>
+            </div>
+
+            {smtpResult && (
+              <div className={`flex items-start gap-3 p-4 rounded-lg border ${smtpResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                {smtpResult.success ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+                <p className="text-sm">{smtpResult.message}</p>
               </div>
-            </form>
-          </Section>
+            )}
+          </div>
         )}
 
         {tab === 'ldap' && (
@@ -396,7 +483,7 @@ export default function Settings() {
               {/* Enable */}
               <label className="flex items-center gap-3 cursor-pointer">
                 <input type="checkbox" id="saml-enabled" checked={saml.enabled}
-                  onChange={e => setSaml(s => ({ ...s, enabled: e.target.checked, auto_redirect: e.target.checked ? s.auto_redirect : false }))}
+                  onChange={e => { setSaml(s => ({ ...s, enabled: e.target.checked, auto_redirect: e.target.checked ? s.auto_redirect : false })); setSamlDirty(true) }}
                   className="w-4 h-4 accent-brand-600" />
                 <span className="text-sm font-medium">Enable SAML 2.0 authentication</span>
               </label>
@@ -405,7 +492,7 @@ export default function Settings() {
               {saml.enabled && (
                 <label className="flex items-start gap-3 cursor-pointer bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3">
                   <input type="checkbox" checked={!!saml.auto_redirect}
-                    onChange={e => setSaml(s => ({ ...s, auto_redirect: e.target.checked }))}
+                    onChange={e => { setSaml(s => ({ ...s, auto_redirect: e.target.checked })); setSamlDirty(true) }}
                     className="w-4 h-4 accent-blue-600 mt-0.5 shrink-0" />
                   <div>
                     <span className="text-sm font-medium">Automatic SSO redirect (auto-redirect)</span>
@@ -417,6 +504,23 @@ export default function Settings() {
                   </div>
                 </label>
               )}
+
+              {/* LDAP group mapping integration note */}
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4 space-y-2">
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 uppercase tracking-wide">Integration with LDAP group mapping</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  If group mappings are configured in <strong>User management → LDAP / Active Directory</strong>,
+                  the system applies them automatically to SAML users too: at each login the user&rsquo;s AD groups
+                  are retrieved and the role is assigned based on the configured mapping.
+                  Only if no group matches is the <em>Default role</em> configured below used.
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  <strong>Tip:</strong> ask the IdP admin to include the{' '}
+                  <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded">memberOf</code> attribute in the SAML assertion —
+                  this reduces traffic to the Domain Controller and ensures group resolution
+                  even if the DC is temporarily unreachable.
+                </p>
+              </div>
 
               {/* Dati da comunicare all'IdP */}
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4 space-y-3">
@@ -459,14 +563,14 @@ export default function Settings() {
                 <label className="block text-xs font-medium mb-1">SP Base URL <span className="text-gray-400 font-normal">(public URL of this application)</span></label>
                 <input className="input" placeholder="https://maintenance.company.com"
                   value={saml.sp_base_url}
-                  onChange={e => setSaml(s => ({ ...s, sp_base_url: e.target.value }))} />
+                  onChange={e => { setSaml(s => ({ ...s, sp_base_url: e.target.value })); setSamlDirty(true) }} />
                 <p className="text-xs text-gray-400 mt-1">Must match the URL users use to access the application.</p>
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1">SP Entity ID <span className="text-gray-400 font-normal">(leave empty to use default)</span></label>
                 <input className="input" placeholder={`${spBaseUrl}/api/auth/saml/metadata`}
                   value={saml.sp_entity_id}
-                  onChange={e => setSaml(s => ({ ...s, sp_entity_id: e.target.value }))} />
+                  onChange={e => { setSaml(s => ({ ...s, sp_entity_id: e.target.value })); setSamlDirty(true) }} />
               </div>
 
               {/* IdP Config */}
@@ -474,13 +578,13 @@ export default function Settings() {
                 <label className="block text-xs font-medium mb-1">IdP SSO URL <span className="text-gray-400 font-normal">(Identity Provider login URL)</span></label>
                 <input className="input" placeholder="https://idp.company.com/saml/login"
                   value={saml.idp_sso_url}
-                  onChange={e => setSaml(s => ({ ...s, idp_sso_url: e.target.value }))} />
+                  onChange={e => { setSaml(s => ({ ...s, idp_sso_url: e.target.value })); setSamlDirty(true) }} />
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1">IdP SLO URL <span className="text-gray-400 font-normal">(Single Logout — optional)</span></label>
                 <input className="input" placeholder="https://idp.company.com/logout"
                   value={saml.idp_slo_url}
-                  onChange={e => setSaml(s => ({ ...s, idp_slo_url: e.target.value }))} />
+                  onChange={e => { setSaml(s => ({ ...s, idp_slo_url: e.target.value })); setSamlDirty(true) }} />
                   <p className="text-xs text-gray-400 mt-1">If configured, logging out of this app will also terminate the session on the Identity Provider.</p>
               </div>
               <div>
@@ -488,7 +592,7 @@ export default function Settings() {
                 <textarea className="input font-mono text-xs" rows={6}
                   placeholder={'-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----'}
                   value={saml.idp_cert}
-                  onChange={e => setSaml(s => ({ ...s, idp_cert: e.target.value }))} />
+                  onChange={e => { setSaml(s => ({ ...s, idp_cert: e.target.value })); setSamlDirty(true) }} />
                   <p className="text-xs text-gray-400 mt-1">Paste the X.509 certificate provided by the NetScaler administrator. Accepted with or without PEM header.</p>
               </div>
 
@@ -498,13 +602,13 @@ export default function Settings() {
                   <label className="block text-xs font-medium mb-1">Username attribute <span className="text-gray-400 font-normal">(empty = NameID)</span></label>
                   <input className="input text-xs" placeholder="NameID (default)"
                     value={saml.username_attribute}
-                    onChange={e => setSaml(s => ({ ...s, username_attribute: e.target.value }))} />
+                    onChange={e => { setSaml(s => ({ ...s, username_attribute: e.target.value })); setSamlDirty(true) }} />
                 </div>
                 <div>
                   <label className="block text-xs font-medium mb-1">Display name attribute</label>
                   <input className="input text-xs" placeholder="displayName"
                     value={saml.display_name_attribute}
-                    onChange={e => setSaml(s => ({ ...s, display_name_attribute: e.target.value }))} />
+                    onChange={e => { setSaml(s => ({ ...s, display_name_attribute: e.target.value })); setSamlDirty(true) }} />
                 </div>
               </div>
 
@@ -512,7 +616,7 @@ export default function Settings() {
               <div>
                 <label className="block text-xs font-medium mb-1">Default role for new SAML users</label>
                 <select className="input" value={saml.default_role}
-                  onChange={e => setSaml(s => ({ ...s, default_role: e.target.value }))}>
+                  onChange={e => { setSaml(s => ({ ...s, default_role: e.target.value })); setSamlDirty(true) }}>
                   {['admin','change_manager','operator','viewer','subscriber'].map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
                   <p className="text-xs text-gray-400 mt-1">The role can be changed individually in "User management" after first login.</p>
@@ -521,7 +625,7 @@ export default function Settings() {
               {/* Require group match */}
               <label className="flex items-start gap-3 cursor-pointer bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg px-4 py-3">
                 <input type="checkbox" checked={!!saml.require_group_match}
-                  onChange={e => setSaml(s => ({ ...s, require_group_match: e.target.checked }))}
+                  onChange={e => { setSaml(s => ({ ...s, require_group_match: e.target.checked })); setSamlDirty(true) }}
                   className="w-4 h-4 accent-red-600 mt-0.5 shrink-0" />
                 <div>
                     <span className="text-sm font-medium">Deny access if no LDAP group matches</span>
@@ -532,11 +636,18 @@ export default function Settings() {
                 </div>
               </label>
 
-              <div className="flex justify-end pt-1">
-                <button type="submit" className="btn-primary flex items-center gap-2" disabled={loading}>
-                  <Save size={14} />{loading ? 'Saving...' : 'Save SAML configuration'}
+              <div className="flex items-center gap-3 pt-1">
+                <button type="submit" className="btn-primary flex items-center gap-2" disabled={samlSaving}>
+                  <Save size={14} />{samlSaving ? 'Saving...' : 'Save SAML configuration'}
                 </button>
               </div>
+
+              {samlResult && (
+                <div className={`flex items-start gap-3 p-3 rounded-lg border text-sm ${samlResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                  {samlResult.success ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                  {samlResult.message}
+                </div>
+              )}
             </form>
           </Section>
         )}
@@ -748,19 +859,40 @@ export default function Settings() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium mb-1">NTP Server</label>
-                    <input className="input font-mono" placeholder="pool.ntp.org"
-                      value={ntp.ntp_server}
-                      onChange={e => { setNtp(n => ({ ...n, ntp_server: e.target.value })); setNtpDirty(true) }} />
-                    <p className="text-xs text-gray-400 mt-1">es. <code>pool.ntp.org</code>, <code>ntp.inrim.it</code>, <code>time.windows.com</code></p>
+                    <div className="flex gap-2">
+                      <input className="input font-mono flex-1" placeholder="pool.ntp.org"
+                        value={ntp.ntp_server}
+                        onChange={e => { setNtp(n => ({ ...n, ntp_server: e.target.value })); setNtpDirty(true) }} />
+                      <button type="button" onClick={handleQueryNtp} disabled={ntpSyncing || !ntp.ntp_server}
+                        className="btn-secondary flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50">
+                        <RefreshCw size={13} className={ntpSyncing ? 'animate-spin' : ''} />{ntpSyncing ? 'Querying...' : 'Query NTP'}
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">e.g. <code>pool.ntp.org</code>, <code>ntp.inrim.it</code>, <code>time.windows.com</code></p>
                   </div>
                   <div>
                     <label className="block text-xs font-medium mb-1">Timezone (IANA)</label>
                     <input className="input font-mono" placeholder="Europe/Rome"
                       value={ntp.timezone}
                       onChange={e => { setNtp(n => ({ ...n, timezone: e.target.value })); setNtpDirty(true) }} />
-                    <p className="text-xs text-gray-400 mt-1">es. <code>Europe/Rome</code>, <code>UTC</code>, <code>America/New_York</code></p>
+                    <p className="text-xs text-gray-400 mt-1">e.g. <code>Europe/Rome</code>, <code>UTC</code>, <code>America/New_York</code></p>
                   </div>
                 </div>
+
+                {syncResult && (
+                  <div className={`flex items-start gap-3 p-3 rounded-lg border text-sm ${syncResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                    {syncResult.success ? <CheckCircle size={15} /> : <AlertCircle size={15} />}
+                    {syncResult.message}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-medium mb-1">Notes</label>
+                  <textarea className="input" rows={3} placeholder="Optional notes about this configuration..."
+                    value={ntp.note || ''}
+                    onChange={e => { setNtp(n => ({ ...n, note: e.target.value })); setNtpDirty(true) }} />
+                </div>
+
                 <div className="flex justify-end pt-1">
                   <button type="submit" disabled={ntpSaving || !ntpDirty}
                     className="btn-primary flex items-center gap-2 disabled:opacity-50">
