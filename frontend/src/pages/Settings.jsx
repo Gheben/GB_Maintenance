@@ -4,25 +4,24 @@ import { Modal, ConfirmDialog } from '../components/Modal'
 import { settingsApi, templatesApi, apikeysApi, notificationsApi } from '../api'
 import { toast } from '../components/Toast'
 import { format } from 'date-fns'
-import { it } from 'date-fns/locale'
 import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, RotateCcw, Clock, FileCode, RefreshCw } from 'lucide-react'
 
 const TYPES = ['planned','emergency','upgrade','security_patch','infrastructure','other']
 const IMPACTS = ['critical','high','medium','low']
 
 const NOTIF_VARIABLES = [
-  { key: '{{title}}',           desc: 'Titolo manutenzione' },
-  { key: '{{id}}',              desc: 'ID manutenzione' },
-  { key: '{{type}}',            desc: 'Tipo (planned, emergency, ...)' },
-  { key: '{{impact_level}}',    desc: 'Livello impatto (critical, high, ...)' },
-  { key: '{{status}}',          desc: 'Stato corrente' },
-  { key: '{{scheduled_start}}', desc: 'Inizio pianificato' },
-  { key: '{{scheduled_end}}',   desc: 'Fine pianificata' },
-  { key: '{{actual_start}}',    desc: 'Inizio effettivo' },
-  { key: '{{actual_end}}',      desc: 'Fine effettiva' },
-  { key: '{{description}}',     desc: 'Descrizione' },
-  { key: '{{notes}}',           desc: 'Note' },
-  { key: '{{app_url}}',         desc: 'URL applicazione' },
+  { key: '{{title}}',           desc: 'Maintenance title' },
+  { key: '{{id}}',              desc: 'Maintenance ID' },
+  { key: '{{type}}',            desc: 'Type (planned, emergency, ...)' },
+  { key: '{{impact_level}}',    desc: 'Impact level (critical, high, ...)' },
+  { key: '{{status}}',          desc: 'Current status' },
+  { key: '{{scheduled_start}}', desc: 'Scheduled start' },
+  { key: '{{scheduled_end}}',   desc: 'Scheduled end' },
+  { key: '{{actual_start}}',    desc: 'Actual start' },
+  { key: '{{actual_end}}',      desc: 'Actual end' },
+  { key: '{{description}}',     desc: 'Description' },
+  { key: '{{notes}}',           desc: 'Notes' },
+  { key: '{{app_url}}',         desc: 'Application URL' },
 ]
 
 function Section({ title, children }) {
@@ -127,15 +126,15 @@ export default function Settings() {
 
   const saveSmtp = async (e) => {
     e.preventDefault(); setLoading(true)
-    try { await settingsApi.saveSmtp(smtp); toast.success('SMTP salvato') }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await settingsApi.saveSmtp(smtp); toast.success('SMTP saved') }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setLoading(false) }
   }
 
   const testSmtp = async () => {
     setLoading(true)
-    try { await settingsApi.testSmtp(smtp); toast.success('SMTP funzionante') }
-    catch (err) { toast.error(err.response?.data?.error || 'Test fallito') }
+    try { await settingsApi.testSmtp(smtp); toast.success('SMTP working') }
+    catch (err) { toast.error(err.response?.data?.error || 'Test failed') }
     finally { setLoading(false) }
   }
 
@@ -143,10 +142,10 @@ export default function Settings() {
     e.preventDefault(); setLoading(true)
     try {
       await settingsApi.saveLdap(ldap)
-      toast.success('LDAP salvato')
+      toast.success('LDAP saved')
       if (ldap.bind_password) setLdapSavedHasPassword(true)
     }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setLoading(false) }
   }
 
@@ -154,9 +153,9 @@ export default function Settings() {
     setLdapTesting(true); setLdapTestResult(null)
     try {
       const res = await settingsApi.testLdap(ldap)
-      setLdapTestResult({ ok: true, message: res.data?.message || 'Connessione riuscita' })
+      setLdapTestResult({ ok: true, message: res.data?.message || 'Connection successful' })
     } catch (err) {
-      setLdapTestResult({ ok: false, message: err.response?.data?.error || 'Test fallito' })
+      setLdapTestResult({ ok: false, message: err.response?.data?.error || 'Test failed' })
     } finally {
       setLdapTesting(false)
     }
@@ -169,15 +168,15 @@ export default function Settings() {
 
   const saveGeneral = async (e) => {
     e.preventDefault()
-    try { await settingsApi.saveGeneral(general); toast.success('Impostazioni salvate') }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await settingsApi.saveGeneral(general); toast.success('Settings saved') }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const saveNtp = async (e) => {
     e.preventDefault()
     setNtpSaving(true)
-    try { await settingsApi.saveNtp(ntp); setNtpDirty(false); toast.success('Configurazione NTP salvata') }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await settingsApi.saveNtp(ntp); setNtpDirty(false); toast.success('NTP configuration saved') }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setNtpSaving(false) }
   }
 
@@ -195,28 +194,28 @@ export default function Settings() {
     try {
       await notificationsApi.updateTemplate(selectedNotifId, notifForm)
       setNotifDirty(false)
-      toast.success('Template notifica salvato')
+      toast.success('Notification template saved')
       notificationsApi.templates().then(r => setNotifTemplates(r.data)).catch(() => {})
-    } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setNotifSaving(false) }
   }
 
   const saveSaml = async (e) => {
     e.preventDefault(); setLoading(true)
-    try { await settingsApi.saveSaml(saml); toast.success('Configurazione SAML salvata') }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await settingsApi.saveSaml(saml); toast.success('SAML configuration saved') }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setLoading(false) }
   }
 
   const handleCreateTemplate = async (e) => {
     e.preventDefault()
-    try { await templatesApi.create(templateForm); toast.success('Template creato'); setShowCreateTemplate(false); setTemplateForm({ name: '', type: 'planned', impact_level: 'medium', duration_minutes: 60, description: '' }); templatesApi.list().then(r => setTemplates(r.data)) }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await templatesApi.create(templateForm); toast.success('Template created'); setShowCreateTemplate(false); setTemplateForm({ name: '', type: 'planned', impact_level: 'medium', duration_minutes: 60, description: '' }); templatesApi.list().then(r => setTemplates(r.data)) }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const handleDeleteTemplate = async () => {
-    try { await templatesApi.delete(deleteTargetTemplate.id); toast.success('Template eliminato'); setDeleteTargetTemplate(null); templatesApi.list().then(r => setTemplates(r.data)) }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await templatesApi.delete(deleteTargetTemplate.id); toast.success('Template deleted'); setDeleteTargetTemplate(null); templatesApi.list().then(r => setTemplates(r.data)) }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const handleCreateKey = async (e) => {
@@ -232,16 +231,16 @@ export default function Settings() {
   }
 
   const handleDeleteKey = async () => {
-    try { await apikeysApi.delete(deleteTargetKey.id); toast.success('Chiave eliminata'); setDeleteTargetKey(null); apikeysApi.list().then(r => setKeys(r.data)) }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await apikeysApi.delete(deleteTargetKey.id); toast.success('Key deleted'); setDeleteTargetKey(null); apikeysApi.list().then(r => setKeys(r.data)) }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const spBaseUrl = saml.sp_base_url || window.location.origin
 
-  const TABS = [['smtp','SMTP & Email'],['ldap','LDAP / AD'],['saml','SAML / SSO'],['templates','Template'],['apikeys','API Keys'],['general','Sistema']]
+  const TABS = [['smtp','SMTP & Email'],['ldap','LDAP / AD'],['saml','SAML / SSO'],['templates','Templates'],['apikeys','API Keys'],['general','System']]
 
   return (
-    <Layout title="Impostazioni">
+    <Layout title="Settings">
       <div className="max-w-2xl space-y-4">
         <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 flex-wrap">
           {TABS.map(([k,l]) => (
@@ -251,18 +250,18 @@ export default function Settings() {
         </div>
 
         {tab === 'smtp' && (
-          <Section title="Configurazione SMTP">
+          <Section title="SMTP Configuration">
             <form onSubmit={saveSmtp} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-medium mb-1">Host *</label><input className="input" required value={smtp.host} onChange={e => setSmtp(f => ({ ...f, host: e.target.value }))} /></div>
-                <div><label className="block text-xs font-medium mb-1">Porta</label><input className="input" type="number" value={smtp.port} onChange={e => setSmtp(f => ({ ...f, port: parseInt(e.target.value) }))} /></div>
+                <div><label className="block text-xs font-medium mb-1">Port</label><input className="input" type="number" value={smtp.port} onChange={e => setSmtp(f => ({ ...f, port: parseInt(e.target.value) }))} /></div>
               </div>
               <div><label className="block text-xs font-medium mb-1">Username</label><input className="input" value={smtp.user} onChange={e => setSmtp(f => ({ ...f, user: e.target.value }))} /></div>
               <div><label className="block text-xs font-medium mb-1">Password</label><input className="input" type="password" placeholder="••••••••" value={smtp.pass === '********' ? '' : smtp.pass} onChange={e => setSmtp(f => ({ ...f, pass: e.target.value }))} /></div>
               <div><label className="block text-xs font-medium mb-1">From</label><input className="input" value={smtp.from} onChange={e => setSmtp(f => ({ ...f, from: e.target.value }))} /></div>
               <div className="flex gap-3 pt-2">
-                <button type="button" className="btn-secondary" disabled={loading} onClick={testSmtp}>Test connessione</button>
-                <button type="submit" className="btn-primary" disabled={loading}>Salva</button>
+                <button type="button" className="btn-secondary" disabled={loading} onClick={testSmtp}>Test connection</button>
+                <button type="submit" className="btn-primary" disabled={loading}>Save</button>
               </div>
             </form>
           </Section>
@@ -276,30 +275,30 @@ export default function Settings() {
                 <input type="checkbox" checked={ldap.enabled}
                   onChange={e => setLdap(f => ({ ...f, enabled: e.target.checked }))}
                   className="w-4 h-4 accent-brand-600" />
-                <span className="font-semibold text-gray-800 dark:text-gray-100">Abilita autenticazione LDAP / Active Directory</span>
+              <span className="font-semibold text-gray-800 dark:text-gray-100">Enable LDAP / Active Directory authentication</span>
               </label>
               {ldap.enabled && (
-                <p className="mt-2 text-sm text-cyan-700 dark:text-cyan-300">LDAP abilitato — gli utenti potranno accedere con le credenziali di dominio.</p>
+                <p className="mt-2 text-sm text-cyan-700 dark:text-cyan-300">LDAP enabled — users can log in with domain credentials.</p>
               )}
             </div>
 
             <div className={`space-y-4 transition-opacity duration-200 ${!ldap.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
               {/* Connessione */}
               <div className="card p-5 space-y-4">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Connessione LDAP</h3>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">LDAP Connection</h3>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Server LDAP</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">LDAP Server</label>
                   <input className="input" value={ldap.url}
                     onChange={e => setLdap(f => ({ ...f, url: e.target.value }))}
                     placeholder="ldaps://dc.azienda.local  oppure  ldap://192.168.1.10" />
-                  <p className="mt-1 text-xs text-gray-400">Usa <code>ldaps://</code> per LDAP over TLS (porta 636), <code>ldap://</code> per connessione non cifrata (porta 389).</p>
+                  <p className="mt-1 text-xs text-gray-400">Use <code>ldaps://</code> for LDAP over TLS (port 636), <code>ldap://</code> for unencrypted (port 389).</p>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Dominio Active Directory</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Active Directory Domain</label>
                   <input className="input" value={ldap.domain}
                     onChange={e => setLdap(f => ({ ...f, domain: e.target.value }))}
-                    placeholder="azienda.local" />
-                  <p className="mt-1 text-xs text-gray-400">Usato per il bind del service account nel formato <code>username@dominio</code>.</p>
+                    placeholder="company.local" />
+                  <p className="mt-1 text-xs text-gray-400">Used to bind the service account as <code>username@domain</code>.</p>
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -308,7 +307,7 @@ export default function Settings() {
                       <button type="button"
                         onClick={() => setLdap(f => ({ ...f, base_dn: computeBaseDn(f.domain) }))}
                         className="text-xs text-brand-600 hover:underline">
-                        Deriva dal dominio
+                        Derive from domain
                       </button>
                     )}
                   </div>
@@ -320,14 +319,14 @@ export default function Settings() {
                   <input type="checkbox" checked={ldap.skip_cert_verify}
                     onChange={e => setLdap(f => ({ ...f, skip_cert_verify: e.target.checked }))}
                     className="accent-brand-600" />
-                  Ignora verifica certificato TLS
+                  Ignore TLS certificate verification
                 </label>
               </div>
 
               {/* Service Account */}
               <div className="card p-5 space-y-4">
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Service account</h3>
-                <p className="text-xs text-gray-400">Account usato per cercare gli utenti in AD. Si autentica come <code>username@dominio</code>.</p>
+                <p className="text-xs text-gray-400">Account used to search users in AD. Authenticates as <code>username@domain</code>.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Username</label>
@@ -339,28 +338,28 @@ export default function Settings() {
                     <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
                     <input type="password" className="input" value={ldap.bind_password}
                       onChange={e => setLdap(f => ({ ...f, bind_password: e.target.value }))}
-                      placeholder={ldapSavedHasPassword ? '••••••••  (lascia vuoto per mantenere)' : 'Password service account'} />
+                      placeholder={ldapSavedHasPassword ? '••••••••  (leave empty to keep current)' : 'Service account password'} />
                   </div>
                 </div>
               </div>
 
               {/* Ricerca utenti */}
               <div className="card p-5 space-y-4">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Ricerca utenti</h3>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">User search</h3>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">User filter</label>
                   <input className="input font-mono text-xs" value={ldap.user_filter}
                     onChange={e => setLdap(f => ({ ...f, user_filter: e.target.value }))}
                     placeholder="(sAMAccountName={{username}})" />
-                  <p className="mt-1 text-xs text-gray-400">{'Usa {{username}} come segnaposto per lo username inserito al login.'}</p>
+                  <p className="mt-1 text-xs text-gray-400">{'Use {{username}} as placeholder for the username entered at login.'}</p>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer text-sm select-none">
                   <input type="checkbox" checked={ldap.ad_mode}
                     onChange={e => setLdap(f => ({ ...f, ad_mode: e.target.checked }))}
                     className="accent-brand-600" />
                   <span>
-                    Modalità Active Directory
-                    <span className="text-gray-400 text-xs ml-1 font-normal">(gruppi nidificati via LDAP_MATCHING_RULE_IN_CHAIN)</span>
+                    Active Directory mode
+                    <span className="text-gray-400 text-xs ml-1 font-normal">(nested groups via LDAP_MATCHING_RULE_IN_CHAIN)</span>
                   </span>
                 </label>
               </div>
@@ -369,7 +368,7 @@ export default function Settings() {
               <div className="flex items-center gap-4 flex-wrap">
                 <button type="button" onClick={testLdap} disabled={ldapTesting || !ldap.url}
                   className="btn-secondary flex items-center gap-2 disabled:opacity-50">
-                  <Server size={15} />{ldapTesting ? 'Test in corso...' : 'Test connessione'}
+                  <Server size={15} />{ldapTesting ? 'Testing...' : 'Test connection'}
                 </button>
                 {ldapTestResult && (
                   <span className={`flex items-center gap-1.5 text-sm font-medium ${ldapTestResult.ok ? 'text-green-600' : 'text-red-600'}`}>
@@ -379,7 +378,7 @@ export default function Settings() {
                 )}
                 <div className="flex-1" />
                 <button type="submit" className="btn-primary flex items-center gap-2" disabled={loading}>
-                  <Save size={14} />{loading ? 'Salvataggio...' : 'Salva impostazioni LDAP'}
+                  <Save size={14} />{loading ? 'Saving...' : 'Save LDAP settings'}
                 </button>
               </div>
             </div>
@@ -387,11 +386,11 @@ export default function Settings() {
         )}
 
         {tab === 'saml' && (
-          <Section title="Autenticazione SAML 2.0 / SSO">
+          <Section title="SAML 2.0 / SSO Authentication">
             <form onSubmit={saveSaml} className="space-y-5">
               <p className="text-sm text-gray-500">
-                Abilita il login tramite un Identity Provider SAML (es. NetScaler, ADFS, Azure AD).
-                Il Service Provider è configurato come SP-initiated (il browser viene reindirizzato all&apos;IdP e poi tornato qui).
+                Enable login through a SAML Identity Provider (e.g. NetScaler, ADFS, Azure AD).
+                The Service Provider is configured as SP-initiated (the browser is redirected to the IdP and back).
               </p>
 
               {/* Enable */}
@@ -399,7 +398,7 @@ export default function Settings() {
                 <input type="checkbox" id="saml-enabled" checked={saml.enabled}
                   onChange={e => setSaml(s => ({ ...s, enabled: e.target.checked, auto_redirect: e.target.checked ? s.auto_redirect : false }))}
                   className="w-4 h-4 accent-brand-600" />
-                <span className="text-sm font-medium">Abilita autenticazione SAML 2.0</span>
+                <span className="text-sm font-medium">Enable SAML 2.0 authentication</span>
               </label>
 
               {/* Auto-redirect */}
@@ -409,10 +408,10 @@ export default function Settings() {
                     onChange={e => setSaml(s => ({ ...s, auto_redirect: e.target.checked }))}
                     className="w-4 h-4 accent-blue-600 mt-0.5 shrink-0" />
                   <div>
-                    <span className="text-sm font-medium">Reindirizzamento automatico SSO (auto-redirect)</span>
+                    <span className="text-sm font-medium">Automatic SSO redirect (auto-redirect)</span>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Quando abilitato, il browser viene reindirizzato direttamente all&apos;Identity Provider (NetScaler)
-                      senza mostrare il form di login locale. Il login locale rimane accessibile su{' '}
+                      When enabled, the browser is redirected directly to the Identity Provider (NetScaler)
+                      without showing the local login form. Local login remains accessible at{' '}
                       <code className="bg-blue-100 dark:bg-blue-900/40 px-1 rounded">/login?local</code>.
                     </p>
                   </div>
@@ -421,13 +420,13 @@ export default function Settings() {
 
               {/* Dati da comunicare all'IdP */}
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4 space-y-3">
-                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">Dati da comunicare all&apos;amministratore IdP</p>
+                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">Data to provide to the IdP administrator</p>
                 <div className="space-y-2">
                   <div>
                     <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">ACS URL (Assertion Consumer Service):</span>
                     <div className="flex items-center gap-2 mt-0.5">
                       <code className="flex-1 text-xs bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded px-2 py-1 break-all">{spBaseUrl}/api/auth/saml/acs</code>
-                      <button type="button" onClick={() => { navigator.clipboard.writeText(`${spBaseUrl}/api/auth/saml/acs`); toast.success('Copiato') }}
+                      <button type="button" onClick={() => { navigator.clipboard.writeText(`${spBaseUrl}/api/auth/saml/acs`); toast.success('Copied') }}
                         className="p-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded" title="Copia"><Copy size={13} /></button>
                     </div>
                   </div>
@@ -457,14 +456,14 @@ export default function Settings() {
 
               {/* SP Config */}
               <div>
-                <label className="block text-xs font-medium mb-1">SP Base URL <span className="text-gray-400 font-normal">(URL pubblico di questa applicazione)</span></label>
-                <input className="input" placeholder="https://maintenance.azienda.it"
+                <label className="block text-xs font-medium mb-1">SP Base URL <span className="text-gray-400 font-normal">(public URL of this application)</span></label>
+                <input className="input" placeholder="https://maintenance.company.com"
                   value={saml.sp_base_url}
                   onChange={e => setSaml(s => ({ ...s, sp_base_url: e.target.value }))} />
-                <p className="text-xs text-gray-400 mt-1">Deve corrispondere all&apos;URL con cui gli utenti accedono all&apos;applicazione.</p>
+                <p className="text-xs text-gray-400 mt-1">Must match the URL users use to access the application.</p>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">SP Entity ID <span className="text-gray-400 font-normal">(lascia vuoto per usare il default)</span></label>
+                <label className="block text-xs font-medium mb-1">SP Entity ID <span className="text-gray-400 font-normal">(leave empty to use default)</span></label>
                 <input className="input" placeholder={`${spBaseUrl}/api/auth/saml/metadata`}
                   value={saml.sp_entity_id}
                   onChange={e => setSaml(s => ({ ...s, sp_entity_id: e.target.value }))} />
@@ -472,37 +471,37 @@ export default function Settings() {
 
               {/* IdP Config */}
               <div>
-                <label className="block text-xs font-medium mb-1">IdP SSO URL <span className="text-gray-400 font-normal">(URL di login dell&apos;Identity Provider)</span></label>
-                <input className="input" placeholder="https://nfactor.azienda.it/saml/login"
+                <label className="block text-xs font-medium mb-1">IdP SSO URL <span className="text-gray-400 font-normal">(Identity Provider login URL)</span></label>
+                <input className="input" placeholder="https://idp.company.com/saml/login"
                   value={saml.idp_sso_url}
                   onChange={e => setSaml(s => ({ ...s, idp_sso_url: e.target.value }))} />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">IdP SLO URL <span className="text-gray-400 font-normal">(Single Logout — opzionale)</span></label>
-                <input className="input" placeholder="https://nfactor.azienda.it/cgi/tmlogout"
+                <label className="block text-xs font-medium mb-1">IdP SLO URL <span className="text-gray-400 font-normal">(Single Logout — optional)</span></label>
+                <input className="input" placeholder="https://idp.company.com/logout"
                   value={saml.idp_slo_url}
                   onChange={e => setSaml(s => ({ ...s, idp_slo_url: e.target.value }))} />
-                <p className="text-xs text-gray-400 mt-1">Se configurato, il logout da questa app terminerà anche la sessione sull&apos;Identity Provider (NetScaler).</p>
+                  <p className="text-xs text-gray-400 mt-1">If configured, logging out of this app will also terminate the session on the Identity Provider.</p>
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">Certificato IdP (X.509 PEM)</label>
+                <label className="block text-xs font-medium mb-1">IdP Certificate (X.509 PEM)</label>
                 <textarea className="input font-mono text-xs" rows={6}
                   placeholder={'-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----'}
                   value={saml.idp_cert}
                   onChange={e => setSaml(s => ({ ...s, idp_cert: e.target.value }))} />
-                <p className="text-xs text-gray-400 mt-1">Incolla il certificato X.509 fornito dall&apos;amministratore NetScaler. Accettato con o senza intestazione PEM.</p>
+                  <p className="text-xs text-gray-400 mt-1">Paste the X.509 certificate provided by the NetScaler administrator. Accepted with or without PEM header.</p>
               </div>
 
               {/* Attribute mapping */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium mb-1">Attributo username <span className="text-gray-400 font-normal">(vuoto = NameID)</span></label>
+                  <label className="block text-xs font-medium mb-1">Username attribute <span className="text-gray-400 font-normal">(empty = NameID)</span></label>
                   <input className="input text-xs" placeholder="NameID (default)"
                     value={saml.username_attribute}
                     onChange={e => setSaml(s => ({ ...s, username_attribute: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium mb-1">Attributo display name</label>
+                  <label className="block text-xs font-medium mb-1">Display name attribute</label>
                   <input className="input text-xs" placeholder="displayName"
                     value={saml.display_name_attribute}
                     onChange={e => setSaml(s => ({ ...s, display_name_attribute: e.target.value }))} />
@@ -511,12 +510,12 @@ export default function Settings() {
 
               {/* Default role */}
               <div>
-                <label className="block text-xs font-medium mb-1">Ruolo predefinito per nuovi utenti SAML</label>
+                <label className="block text-xs font-medium mb-1">Default role for new SAML users</label>
                 <select className="input" value={saml.default_role}
                   onChange={e => setSaml(s => ({ ...s, default_role: e.target.value }))}>
                   {['admin','change_manager','operator','viewer','subscriber'].map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
-                <p className="text-xs text-gray-400 mt-1">Il ruolo può essere modificato individualmente in &quot;Gestione utenti&quot; dopo il primo accesso.</p>
+                  <p className="text-xs text-gray-400 mt-1">The role can be changed individually in "User management" after first login.</p>
               </div>
 
               {/* Require group match */}
@@ -525,17 +524,17 @@ export default function Settings() {
                   onChange={e => setSaml(s => ({ ...s, require_group_match: e.target.checked }))}
                   className="w-4 h-4 accent-red-600 mt-0.5 shrink-0" />
                 <div>
-                  <span className="text-sm font-medium">Nega l&apos;accesso se nessun gruppo LDAP corrisponde</span>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Quando abilitato, gli utenti autenticati dall&apos;IdP ma non appartenenti a nessun gruppo LDAP mappato
-                    vengono <strong>bloccati</strong>. Quando disabilitato (default) ricevono il <em>Ruolo predefinito</em> configurato sopra.
+                    <span className="text-sm font-medium">Deny access if no LDAP group matches</span>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      When enabled, users authenticated by the IdP but not belonging to any mapped LDAP group
+                      are <strong>blocked</strong>. When disabled (default) they receive the <em>Default role</em> configured above.
                   </p>
                 </div>
               </label>
 
               <div className="flex justify-end pt-1">
                 <button type="submit" className="btn-primary flex items-center gap-2" disabled={loading}>
-                  <Save size={14} />{loading ? 'Salvataggio...' : 'Salva configurazione SAML'}
+                  <Save size={14} />{loading ? 'Saving...' : 'Save SAML configuration'}
                 </button>
               </div>
             </form>
@@ -548,10 +547,10 @@ export default function Settings() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-semibold text-gray-700">Template Manutenzioni</h3>
-                  <p className="text-sm text-gray-500 mt-0.5">Modelli predefiniti per la creazione rapida di manutenzioni.</p>
+                  <h3 className="text-base font-semibold text-gray-700">Maintenance Templates</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">Preset templates for quick maintenance creation.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setShowCreateTemplate(true)}><Plus size={15} />Nuovo Template</button>
+                <button className="btn-primary" onClick={() => setShowCreateTemplate(true)}><Plus size={15} />New Template</button>
               </div>
               <div className="space-y-3">
                 {templates.map(t => (
@@ -564,16 +563,16 @@ export default function Settings() {
                     <button className="p-1 text-red-500 hover:bg-red-50 rounded" onClick={() => setDeleteTargetTemplate(t)}><Trash2 size={14} /></button>
                   </div>
                 ))}
-                {templates.length === 0 && <p className="text-center text-gray-500 py-8">Nessun template</p>}
+                {templates.length === 0 && <p className="text-center text-gray-500 py-8">No templates</p>}
               </div>
             </div>
 
             {/* ── Notification email templates ── */}
             <div className="border-t border-gray-200 pt-6 space-y-4">
               <div>
-                <h3 className="text-base font-semibold text-gray-700 flex items-center gap-2"><FileCode size={16} />Template Email Notifiche</h3>
+                <h3 className="text-base font-semibold text-gray-700 flex items-center gap-2"><FileCode size={16} />Email Notification Templates</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Personalizza i template HTML delle email di notifica inviate per ogni evento. Usa le variabili per inserire dati dinamici.
+                  Customize the HTML templates for notification emails sent for each event. Use variables to insert dynamic data.
                 </p>
               </div>
 
@@ -606,13 +605,13 @@ export default function Settings() {
                       </div>
                       <button type="button" onClick={() => setNotifPreview(v => !v)}
                         className="text-xs border border-gray-300 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-100 flex items-center gap-1.5">
-                        <Eye size={13} />{notifPreview ? 'Modifica' : 'Anteprima'}
+                        <Eye size={13} />{notifPreview ? 'Edit' : 'Preview'}
                       </button>
                     </div>
 
                     {/* Subject */}
                     <div className="space-y-1">
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Oggetto email</label>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Email subject</label>
                       <input className="input font-mono text-sm"
                         value={notifForm.subject_template}
                         onChange={e => { setNotifForm(f => ({ ...f, subject_template: e.target.value })); setNotifDirty(true) }}
@@ -632,7 +631,7 @@ export default function Settings() {
 
                     {/* Body HTML */}
                     <div>
-                      <p className="text-sm text-gray-500 mb-2">Corpo HTML — variabili disponibili:</p>
+                      <p className="text-sm text-gray-500 mb-2">HTML body — available variables:</p>
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         {NOTIF_VARIABLES.map(v => (
                           <button key={v.key} type="button" title={v.desc}
@@ -651,7 +650,7 @@ export default function Settings() {
                       {notifPreview ? (
                         <div className="border border-gray-200 rounded-lg p-4 min-h-[280px] overflow-auto bg-white"
                           dangerouslySetInnerHTML={{ __html: notifForm.body_html_template
-                            .replace(/{{title}}/g, 'Manutenzione server produzione')
+                            .replace(/{{title}}/g, 'Production server maintenance')
                             .replace(/{{id}}/g, '42')
                             .replace(/{{type}}/g, 'planned')
                             .replace(/{{impact_level}}/g, 'high')
@@ -660,8 +659,8 @@ export default function Settings() {
                             .replace(/{{scheduled_end}}/g, new Date(Date.now() + 3600000).toISOString())
                             .replace(/{{actual_start}}/g, '')
                             .replace(/{{actual_end}}/g, '')
-                            .replace(/{{description}}/g, 'Aggiornamento sistema operativo e patch di sicurezza.')
-                            .replace(/{{notes}}/g, 'Controllare servizi dopo la finestra.')
+                            .replace(/{{description}}/g, 'Operating system update and security patches.')
+                            .replace(/{{notes}}/g, 'Check services after the window.')
                             .replace(/{{app_url}}/g, window.location.origin)
                           }}
                         />
@@ -677,7 +676,7 @@ export default function Settings() {
                     <div className="flex items-center gap-3">
                       <button type="button" onClick={saveNotifTemplate} disabled={notifSaving || !notifDirty}
                         className="btn-primary flex items-center gap-2 disabled:opacity-50">
-                        <Save size={14} />{notifSaving ? 'Salvataggio...' : 'Salva template'}
+                        <Save size={14} />{notifSaving ? 'Saving...' : 'Save template'}
                       </button>
                       <button type="button"
                         onClick={() => {
@@ -685,7 +684,7 @@ export default function Settings() {
                           if (orig) { setNotifForm({ subject_template: orig.subject_template || '', body_html_template: orig.body_html_template || '' }); setNotifDirty(false) }
                         }}
                         className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50">
-                        <RotateCcw size={13} />Ripristina
+                        <RotateCcw size={13} />Reset
                       </button>
                     </div>
                   </div>
@@ -698,27 +697,27 @@ export default function Settings() {
         {tab === 'apikeys' && (
           <div className="space-y-4">
             <div className="flex justify-end">
-              <button className="btn-primary" onClick={() => setShowCreateKey(true)}><Plus size={15} />Nuova Chiave</button>
+              <button className="btn-primary" onClick={() => setShowCreateKey(true)}><Plus size={15} />New API Key</button>
             </div>
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-[500px] w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
-                    <tr>{['Nome','Prefisso','Scadenza','Ultima uso','Azioni'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                    <tr>{['Name','Prefix','Expires','Last used','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                     {keys.map(k => (
                       <tr key={k.id}>
                         <td className="px-4 py-3">{k.name}</td>
                         <td className="px-4 py-3 font-mono text-xs">{k.key_prefix}...</td>
-                        <td className="px-4 py-3 text-gray-500">{k.expires_at ? format(new Date(k.expires_at), 'dd/MM/yyyy', { locale: it }) : '∞'}</td>
-                        <td className="px-4 py-3 text-gray-500">{k.last_used_at ? format(new Date(k.last_used_at), 'dd/MM HH:mm', { locale: it }) : '—'}</td>
+                        <td className="px-4 py-3 text-gray-500">{k.expires_at ? format(new Date(k.expires_at), 'MM/dd/yyyy') : '∞'}</td>
+                        <td className="px-4 py-3 text-gray-500">{k.last_used_at ? format(new Date(k.last_used_at), 'MM/dd HH:mm') : '—'}</td>
                         <td className="px-4 py-3">
                           <button className="p-1 text-red-500 hover:bg-red-50 rounded" onClick={() => setDeleteTargetKey(k)}><Trash2 size={14} /></button>
                         </td>
                       </tr>
                     ))}
-                    {keys.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-gray-500">Nessuna chiave API</td></tr>}
+                    {keys.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-gray-500">No API keys</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -728,12 +727,12 @@ export default function Settings() {
 
         {tab === 'general' && (
           <div className="space-y-6">
-            <Section title="Impostazioni generali">
+            <Section title="General settings">
               <form onSubmit={saveGeneral} className="space-y-3">
-                <div><label className="block text-xs font-medium mb-1">Nome applicazione</label><input className="input" value={general.app_name || ''} onChange={e => setGeneral(f => ({ ...f, app_name: e.target.value }))} /></div>
-                <div><label className="block text-xs font-medium mb-1">URL applicazione</label><input className="input" placeholder="https://maintenance.example.com" value={general.app_url || ''} onChange={e => setGeneral(f => ({ ...f, app_url: e.target.value }))} /></div>
+                <div><label className="block text-xs font-medium mb-1">Application name</label><input className="input" value={general.app_name || ''} onChange={e => setGeneral(f => ({ ...f, app_name: e.target.value }))} /></div>
+                <div><label className="block text-xs font-medium mb-1">Application URL</label><input className="input" placeholder="https://maintenance.example.com" value={general.app_url || ''} onChange={e => setGeneral(f => ({ ...f, app_url: e.target.value }))} /></div>
                 <div className="flex justify-end pt-2">
-                  <button type="submit" className="btn-primary">Salva</button>
+                  <button type="submit" className="btn-primary">Save</button>
                 </div>
               </form>
             </Section>
@@ -743,19 +742,19 @@ export default function Settings() {
                 <Clock size={16} className="text-gray-500" />Date &amp; Time
               </h2>
               <p className="text-sm text-gray-500">
-                Configura il server NTP per la verifica dell&apos;accuratezza dell&apos;orologio e il fuso orario applicato a tutti i timestamp nell&apos;applicazione.
+                Configure the NTP server to verify clock accuracy and the timezone applied to all timestamps in the application.
               </p>
               <form onSubmit={saveNtp} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium mb-1">Server NTP</label>
+                    <label className="block text-xs font-medium mb-1">NTP Server</label>
                     <input className="input font-mono" placeholder="pool.ntp.org"
                       value={ntp.ntp_server}
                       onChange={e => { setNtp(n => ({ ...n, ntp_server: e.target.value })); setNtpDirty(true) }} />
                     <p className="text-xs text-gray-400 mt-1">es. <code>pool.ntp.org</code>, <code>ntp.inrim.it</code>, <code>time.windows.com</code></p>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium mb-1">Fuso orario (IANA)</label>
+                    <label className="block text-xs font-medium mb-1">Timezone (IANA)</label>
                     <input className="input font-mono" placeholder="Europe/Rome"
                       value={ntp.timezone}
                       onChange={e => { setNtp(n => ({ ...n, timezone: e.target.value })); setNtpDirty(true) }} />
@@ -765,7 +764,7 @@ export default function Settings() {
                 <div className="flex justify-end pt-1">
                   <button type="submit" disabled={ntpSaving || !ntpDirty}
                     className="btn-primary flex items-center gap-2 disabled:opacity-50">
-                    <Save size={14} />{ntpSaving ? 'Salvataggio...' : 'Salva'}
+                    <Save size={14} />{ntpSaving ? 'Saving...' : 'Save'}
                   </button>
                 </div>
               </form>
@@ -776,60 +775,60 @@ export default function Settings() {
 
       {/* Template modals */}
       {showCreateTemplate && (
-        <Modal title="Nuovo Template" onClose={() => setShowCreateTemplate(false)}>
+        <Modal title="New Template" onClose={() => setShowCreateTemplate(false)}>
           <form onSubmit={handleCreateTemplate} className="space-y-4">
-            <div><label className="block text-sm font-medium mb-1">Nome *</label><input className="input" required value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Name *</label><input className="input" required value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Tipo</label>
+              <div><label className="block text-sm font-medium mb-1">Type</label>
                 <select className="input" value={templateForm.type} onChange={e => setTemplateForm(f => ({ ...f, type: e.target.value }))}>
                   {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select></div>
-              <div><label className="block text-sm font-medium mb-1">Impatto</label>
+              <div><label className="block text-sm font-medium mb-1">Impact</label>
                 <select className="input" value={templateForm.impact_level} onChange={e => setTemplateForm(f => ({ ...f, impact_level: e.target.value }))}>
                   {IMPACTS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select></div>
             </div>
-            <div><label className="block text-sm font-medium mb-1">Durata (min)</label><input className="input" type="number" min="1" value={templateForm.duration_minutes} onChange={e => setTemplateForm(f => ({ ...f, duration_minutes: parseInt(e.target.value) }))} /></div>
-            <div><label className="block text-sm font-medium mb-1">Descrizione</label><textarea className="input" rows={2} value={templateForm.description} onChange={e => setTemplateForm(f => ({ ...f, description: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Duration (min)</label><input className="input" type="number" min="1" value={templateForm.duration_minutes} onChange={e => setTemplateForm(f => ({ ...f, duration_minutes: parseInt(e.target.value) }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Description</label><textarea className="input" rows={2} value={templateForm.description} onChange={e => setTemplateForm(f => ({ ...f, description: e.target.value }))} /></div>
             <div className="flex justify-end gap-3">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreateTemplate(false)}>Annulla</button>
-              <button type="submit" className="btn-primary">Crea</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreateTemplate(false)}>Cancel</button>
+              <button type="submit" className="btn-primary">Create</button>
             </div>
           </form>
         </Modal>
       )}
       {deleteTargetTemplate && (
-        <ConfirmDialog title="Elimina Template" message={`Eliminare "${deleteTargetTemplate.name}"?`} danger confirmLabel="Elimina"
+        <ConfirmDialog title="Delete Template" message={`Delete "${deleteTargetTemplate.name}"?`} danger confirmLabel="Delete"
           onConfirm={handleDeleteTemplate} onCancel={() => setDeleteTargetTemplate(null)} />
       )}
 
       {/* API Keys modals */}
       {showCreateKey && (
-        <Modal title="Nuova API Key" onClose={() => setShowCreateKey(false)} size="sm">
+        <Modal title="New API Key" onClose={() => setShowCreateKey(false)} size="sm">
           <form onSubmit={handleCreateKey} className="space-y-4">
-            <div><label className="block text-sm font-medium mb-1">Nome *</label><input className="input" required value={keyForm.name} onChange={e => setKeyForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div><label className="block text-sm font-medium mb-1">Scadenza (opzionale)</label><input type="datetime-local" className="input" value={keyForm.expires_at} onChange={e => setKeyForm(f => ({ ...f, expires_at: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Name *</label><input className="input" required value={keyForm.name} onChange={e => setKeyForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Expires (optional)</label><input type="datetime-local" className="input" value={keyForm.expires_at} onChange={e => setKeyForm(f => ({ ...f, expires_at: e.target.value }))} /></div>
             <div className="flex justify-end gap-3">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreateKey(false)}>Annulla</button>
-              <button type="submit" className="btn-primary">Crea</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreateKey(false)}>Cancel</button>
+              <button type="submit" className="btn-primary">Create</button>
             </div>
           </form>
         </Modal>
       )}
       {newKey && (
-        <Modal title="Chiave creata" onClose={() => setNewKey(null)} size="sm">
-          <p className="text-sm text-gray-600 mb-3">Copia questa chiave — non sarà più visualizzabile.</p>
+        <Modal title="Key created" onClose={() => setNewKey(null)} size="sm">
+          <p className="text-sm text-gray-600 mb-3">Copy this key — it won't be shown again.</p>
           <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border">
             <code className="flex-1 text-xs break-all">{newKey}</code>
-            <button onClick={() => { navigator.clipboard.writeText(newKey); toast.success('Copiata') }}><Copy size={16} /></button>
+            <button onClick={() => { navigator.clipboard.writeText(newKey); toast.success('Copied') }}><Copy size={16} /></button>
           </div>
           <div className="flex justify-end mt-4">
-            <button className="btn-primary" onClick={() => setNewKey(null)}>Ho salvato la chiave</button>
+            <button className="btn-primary" onClick={() => setNewKey(null)}>I've saved the key</button>
           </div>
         </Modal>
       )}
       {deleteTargetKey && (
-        <ConfirmDialog title="Elimina Chiave" message={`Eliminare "${deleteTargetKey.name}"?`} danger confirmLabel="Elimina"
+        <ConfirmDialog title="Delete API Key" message={`Delete "${deleteTargetKey.name}"?`} danger confirmLabel="Delete"
           onConfirm={handleDeleteKey} onCancel={() => setDeleteTargetKey(null)} />
       )}
     </Layout>

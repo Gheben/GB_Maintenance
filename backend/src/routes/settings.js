@@ -163,6 +163,7 @@ router.put('/ntp', requireAuth, requireAdmin, [
   const cfg = {
     ntp_server: req.body.ntp_server || 'pool.ntp.org',
     timezone: req.body.timezone || 'Europe/Rome',
+    note: req.body.note || '',
   };
   await query(
     `INSERT INTO settings (key, value, updated_at) VALUES ('ntp_config', $1, NOW())
@@ -170,7 +171,55 @@ router.put('/ntp', requireAuth, requireAdmin, [
     [JSON.stringify(cfg)]
   );
   await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'ntp_config', null, req.ip);
-  res.json({ message: 'Configurazione NTP/timezone salvata' });
+  res.json({ message: 'NTP/timezone configuration saved' });
+});
+
+// ─── POST /api/settings/ntp/query ─────────────────────────────────────────────
+router.post('/ntp/query', requireAuth, requireAdmin, async (req, res) => {
+  const server = (req.body.server || 'pool.ntp.org').trim();
+  const dgram = require('dgram');
+  const NTP_PORT = 123;
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const client = dgram.createSocket('udp4');
+      const buf = Buffer.alloc(48);
+      buf[0] = 0x1b; // LI=0, VN=3, Mode=3 (client)
+      const t1 = Date.now();
+      client.send(buf, 0, buf.length, NTP_PORT, server, err => {
+        if (err) { client.close(); reject(err); }
+      });
+      client.on('message', msg => {
+        const t4 = Date.now();
+        const secs = msg.readUInt32BE(40);
+        const serverMs = (secs - 2208988800) * 1000;
+        const offset = Math.round(((serverMs - t1) + (serverMs - t4)) / 2);
+        client.close();
+        resolve({ server_time: new Date(serverMs).toISOString(), offset_ms: offset });
+      });
+      client.on('error', err => { try { client.close(); } catch {} reject(err); });
+      setTimeout(() => { try { client.close(); } catch {} reject(new Error('NTP query timeout (5s)')); }, 5000);
+    });
+    res.json({ success: true, server, server_time: result.server_time, offset_ms: result.offset_ms, local_time: new Date().toISOString() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ─── GET/PUT /api/settings/role-presets ───────────────────────────────────────
+router.get('/role-presets', requireAuth, requireAdmin, async (req, res) => {
+  const row = await getOne("SELECT value FROM settings WHERE key='role_presets'");
+  res.json(row ? JSON.parse(row.value) : []);
+});
+
+router.put('/role-presets', requireAuth, requireAdmin, async (req, res) => {
+  if (!Array.isArray(req.body)) return res.status(400).json({ error: 'Expected array' });
+  await query(
+    `INSERT INTO settings (key, value, updated_at) VALUES ('role_presets', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
+    [JSON.stringify(req.body)]
+  );
+  await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'role_presets', null, req.ip);
+  res.json({ message: 'Role presets saved' });
 });
 
 // ─── GET /api/settings/:key — generic fallback, must be LAST ─────────────────

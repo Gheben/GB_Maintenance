@@ -8,7 +8,6 @@ import { useNavigate } from 'react-router-dom'
 import { StatusBadge } from '../components/StatusBadge'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, isSameDay, addMonths, subMonths } from 'date-fns'
-import { it } from 'date-fns/locale'
 
 const TYPES = ['planned','emergency','upgrade','security_patch','infrastructure','other']
 const IMPACTS = ['critical','high','medium','low']
@@ -74,17 +73,17 @@ export default function Calendar() {
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!form.title.trim()) { toast.error('Il titolo è obbligatorio'); return }
-    if (!form.scheduled_start || !form.scheduled_end) { toast.error('Date obbligatorie'); return }
+    if (!form.title.trim()) { toast.error('Title is required'); return }
+    if (!form.scheduled_start || !form.scheduled_end) { toast.error('Dates are required'); return }
     setCreating(true)
     try {
       const res = await maintenanceApi.create(form)
-      toast.success('Manutenzione creata')
+      toast.success('Maintenance created')
       setShowCreate(false)
       loadEvents()
       navigate(`/maintenance/${res.data.id}`)
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Errore creazione')
+      toast.error(err.response?.data?.error || 'Creation error')
     } finally {
       setCreating(false)
     }
@@ -102,15 +101,15 @@ export default function Calendar() {
     return day >= new Date(format(start, 'yyyy-MM-dd')) && day <= new Date(format(end, 'yyyy-MM-dd'))
   })
 
-  const DOW = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
+  const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
   return (
-    <Layout title="Calendario Manutenzioni">
+    <Layout title="Maintenance Calendar">
       <div className="max-w-5xl space-y-4">
         {/* Navigation */}
         <div className="flex items-center justify-between">
           <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setCurrent(subMonths(current, 1))}><ChevronLeft size={20} /></button>
-          <h2 className="text-lg font-bold capitalize">{format(current, 'MMMM yyyy', { locale: it })}</h2>
+          <h2 className="text-lg font-bold capitalize">{format(current, 'MMMM yyyy')}</h2>
           <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setCurrent(addMonths(current, 1))}><ChevronRight size={20} /></button>
         </div>
 
@@ -147,7 +146,7 @@ export default function Calendar() {
                         {e.title}
                       </button>
                     ))}
-                    {dayEvents.length > 3 && <p className="text-xs text-gray-400 pl-1">+{dayEvents.length - 3} altri</p>}
+                    {dayEvents.length > 3 && <p className="text-xs text-gray-400 pl-1">+{dayEvents.length - 3} more</p>}
                   </div>
                 </div>
               )
@@ -165,22 +164,22 @@ export default function Calendar() {
 
       {/* Create modal */}
       {showCreate && (
-        <Modal title="Nuova Manutenzione" onClose={() => setShowCreate(false)} size="lg">
+        <Modal title="New Maintenance" onClose={() => setShowCreate(false)} size="lg">
           <form onSubmit={submit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Titolo *</label>
+              <label className="block text-sm font-medium mb-1">Title *</label>
               <input className="input" value={form.title} onChange={e => setForm(f => ({...f, title: e.target.value}))} autoFocus />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Tipo</label>
+                <label className="block text-sm font-medium mb-1">Type</label>
                 <select className="input" value={form.type} onChange={e => setForm(f => ({...f, type: e.target.value}))}>
                   {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Impatto</label>
+                <label className="block text-sm font-medium mb-1">Impact</label>
                 <select className="input" value={form.impact_level} onChange={e => setForm(f => ({...f, impact_level: e.target.value}))}>
                   {IMPACTS.map(i => <option key={i} value={i}>{i}</option>)}
                 </select>
@@ -189,41 +188,41 @@ export default function Calendar() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Inizio *</label>
+                <label className="block text-sm font-medium mb-1">Start *</label>
                 <input type="datetime-local" className="input" value={form.scheduled_start} onChange={e => setForm(f => ({...f, scheduled_start: e.target.value}))} />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Fine *</label>
+                <label className="block text-sm font-medium mb-1">End *</label>
                 <input type="datetime-local" className="input" value={form.scheduled_end} onChange={e => setForm(f => ({...f, scheduled_end: e.target.value}))} />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Descrizione</label>
+              <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={2} value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} />
             </div>
 
             {templates.length > 0 && (
               <div>
-                <label className="block text-sm font-medium mb-1">Template notifica</label>
+                <label className="block text-sm font-medium mb-1">Notification template</label>
                 <select className="input" value={form.template_id} onChange={e => setForm(f => ({...f, template_id: e.target.value}))}>
-                  <option value="">Nessuno</option>
+                  <option value="">None</option>
                   {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
             )}
 
             <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-4">
-              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Asset e Servizi coinvolti</h4>
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Assets and Services</h4>
               <ItemPicker
-                label={`Asset (${form.asset_ids.length} selezionati)`}
+                label={`Assets (${form.asset_ids.length} selected)`}
                 allItems={allAssets}
                 selectedIds={form.asset_ids}
                 onToggle={toggleAsset}
                 badgeKey="criticality"
               />
               <ItemPicker
-                label={`Servizi (${form.service_ids.length} selezionati)`}
+                label={`Services (${form.service_ids.length} selected)`}
                 allItems={allServices}
                 selectedIds={form.service_ids}
                 onToggle={toggleService}
@@ -232,8 +231,8 @@ export default function Calendar() {
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Annulla</button>
-              <button type="submit" className="btn-primary" disabled={creating}>{creating ? 'Creazione...' : 'Crea Manutenzione'}</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={creating}>{creating ? 'Creating...' : 'Create Maintenance'}</button>
             </div>
           </form>
         </Modal>

@@ -9,19 +9,19 @@ import { useAuth } from '../contexts/AuthContext'
 
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', perm: 'dashboard' },
-  { to: '/assets', icon: Package, label: 'Asset', perm: 'assets' },
-  { to: '/services', icon: Server, label: 'Servizi', perm: 'services' },
-  { to: '/maintenance', icon: CalendarClock, label: 'Manutenzioni', perm: 'maintenance' },
-  { to: '/incidents', icon: AlertTriangle, label: 'Incidenti', perm: 'incidents' },
-  { to: '/calendar', icon: Calendar, label: 'Calendario', perm: 'calendar' },
+  { to: '/assets', icon: Package, label: 'Assets', perm: 'assets' },
+  { to: '/services', icon: Server, label: 'Services', perm: 'services' },
+  { to: '/maintenance', icon: CalendarClock, label: 'Maintenance', perm: 'maintenance' },
+  { to: '/incidents', icon: AlertTriangle, label: 'Incidents', perm: 'incidents' },
+  { to: '/calendar', icon: Calendar, label: 'Calendar', perm: 'calendar' },
   { to: '/status', icon: Globe, label: 'Status Page', perm: 'status_page' },
-  { to: '/notifications', icon: Bell, label: 'Notifiche', perm: 'notifications' },
-  { to: '/reports', icon: BarChart2, label: 'Report', perm: 'reports' },
+  { to: '/notifications', icon: Bell, label: 'Notifications', perm: 'notifications' },
+  { to: '/reports', icon: BarChart2, label: 'Reports', perm: 'reports' },
   { divider: true },
-  { to: '/users', icon: Users, label: 'Utenti & Gruppi', perm: 'users' },
+  { to: '/users', icon: Users, label: 'Users & Groups', perm: 'users' },
   { to: '/blackout', icon: Ban, label: 'Blackout', perm: 'maintenance' },
   { to: '/audit', icon: ScrollText, label: 'Audit Log', perm: 'audit' },
-  { to: '/settings', icon: Settings, label: 'Impostazioni', perm: 'settings' },
+  { to: '/settings', icon: Settings, label: 'Settings', perm: 'settings' },
   { divider: true },
   { href: '/docs', icon: BookOpen, label: 'API Docs', perm: 'apikeys' },
 ]
@@ -80,7 +80,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
           )}
           {/* Mobile: close button */}
           {!cl && (
-            <button onClick={onClose} className="md:hidden text-gray-400 hover:text-white p-1" aria-label="Chiudi menu">
+            <button onClick={onClose} className="md:hidden text-gray-400 hover:text-white p-1" aria-label="Close menu">
               <X size={18} />
             </button>
           )}
@@ -88,7 +88,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
           <button
             onClick={onToggleCollapse}
             className="hidden md:block text-gray-400 hover:text-white p-1"
-            aria-label={cl ? 'Espandi menu' : 'Comprimi menu'}
+            aria-label={cl ? 'Expand menu' : 'Collapse menu'}
           >
             {cl ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>

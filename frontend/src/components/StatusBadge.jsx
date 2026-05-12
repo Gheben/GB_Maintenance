@@ -21,11 +21,11 @@ const STATUS_STYLES = {
 }
 
 const STATUS_LABELS = {
-  operational: 'Operativo', degraded: 'Degradato', partial_outage: 'Parziale',
-  major_outage: 'Fuori servizio', under_maintenance: 'In manutenzione', unknown: 'Sconosciuto',
-  scheduled: 'Pianificato', pending_approval: 'In approvazione', in_progress: 'In corso',
-  completed: 'Completato', cancelled: 'Annullato', rejected: 'Rifiutato',
-  investigating: 'In analisi', identified: 'Identificato', monitoring: 'Monitoraggio', resolved: 'Risolto',
+  operational: 'Operational', degraded: 'Degraded', partial_outage: 'Partial Outage',
+  major_outage: 'Major Outage', under_maintenance: 'Under Maintenance', unknown: 'Unknown',
+  scheduled: 'Scheduled', pending_approval: 'Pending Approval', in_progress: 'In Progress',
+  completed: 'Completed', cancelled: 'Cancelled', rejected: 'Rejected',
+  investigating: 'Investigating', identified: 'Identified', monitoring: 'Monitoring', resolved: 'Resolved',
 }
 
 export function StatusBadge({ status }) {
@@ -40,7 +40,7 @@ const CRIT_STYLES = {
   low:      'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
 }
 
-const CRIT_LABELS = { critical: 'Critico', high: 'Alto', medium: 'Medio', low: 'Basso' }
+const CRIT_LABELS = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' }
 
 export function CriticalityBadge({ criticality }) {
   const cls = CRIT_STYLES[criticality] || 'bg-gray-100 text-gray-600'

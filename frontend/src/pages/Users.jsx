@@ -1,30 +1,31 @@
 ﻿import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Layout } from '../components/Layout'
-import { usersApi, groupsApi } from '../api'
+import { usersApi, groupsApi, settingsApi } from '../api'
 import { Pagination } from '../components/Pagination'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
-import { Plus, Trash2, Users as UsersIcon, ChevronRight, X, User, Shield, CheckCircle, XCircle, Pencil } from 'lucide-react'
+import { Plus, Trash2, Users as UsersIcon, ChevronRight, X, User, Shield, CheckCircle, XCircle, Pencil, Save } from 'lucide-react'
 
 const ROLES = ['admin','change_manager','operator','viewer','subscriber']
 const TABS = [
-  { id: 'users', label: 'Utenti' },
-  { id: 'groups', label: 'Gruppi Locali' },
+  { id: 'users', label: 'Users' },
+  { id: 'groups', label: 'Local Groups' },
+  { id: 'roles', label: 'Roles' },
 ]
 
 const ALL_PERMS = [
   { key: 'dashboard',     label: 'Dashboard' },
-  { key: 'assets',        label: 'Asset' },
-  { key: 'services',      label: 'Servizi' },
-  { key: 'maintenance',   label: 'Manutenzioni' },
-  { key: 'incidents',     label: 'Incidenti' },
-  { key: 'calendar',      label: 'Calendario' },
+  { key: 'assets',        label: 'Assets' },
+  { key: 'services',      label: 'Services' },
+  { key: 'maintenance',   label: 'Maintenance' },
+  { key: 'incidents',     label: 'Incidents' },
+  { key: 'calendar',      label: 'Calendar' },
   { key: 'status_page',   label: 'Status Page' },
-  { key: 'notifications', label: 'Notifiche' },
-  { key: 'reports',       label: 'Report' },
-  { key: 'users',         label: 'Utenti & Gruppi' },
-  { key: 'settings',      label: 'Impostazioni' },
+  { key: 'notifications', label: 'Notifications' },
+  { key: 'reports',       label: 'Reports' },
+  { key: 'users',         label: 'Users & Groups' },
+  { key: 'settings',      label: 'Settings' },
   { key: 'apikeys',       label: 'API Keys' },
   { key: 'audit',         label: 'Audit Log' },
 ]
@@ -82,17 +83,17 @@ function UserDetailModal({ user: u, onClose, onEdit }) {
             <RoleBadge role={u.role} />
             <AuthBadge authType={u.auth_type} />
             {u.is_active
-              ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium">Attivo</span>
-              : <span className="text-xs px-2 py-0.5 rounded-full bg-gray-50 text-gray-400 border border-gray-200 font-medium">Disattivato</span>
+              ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium">Active</span>
+              : <span className="text-xs px-2 py-0.5 rounded-full bg-gray-50 text-gray-400 border border-gray-200 font-medium">Disabled</span>
             }
           </div>
           {u.email && <p className="text-sm text-gray-500">{u.email}</p>}
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Permessi</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Permissions</p>
             {hasFullAccess ? (
               <div className="flex items-center gap-2 text-sm text-green-700 font-medium">
                 <CheckCircle size={15} className="text-green-500" />
-                Accesso completo a tutte le sezioni
+                Full access to all sections
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-y-1.5 gap-x-4">
@@ -112,11 +113,11 @@ function UserDetailModal({ user: u, onClose, onEdit }) {
           </div>
         </div>
         <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50 dark:bg-gray-700/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Chiudi</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Close</button>
           {u.role !== 'superadmin' && u.auth_type !== 'ldap' && onEdit && (
             <button onClick={() => { onClose(); onEdit(u) }}
               className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors">
-              Modifica permessi
+              Edit permissions
             </button>
           )}
         </div>
@@ -135,31 +136,31 @@ function EditPermissionsModal({ user: u, onClose, onSaved }) {
     setSaving(true)
     try {
       await usersApi.update(u.id, { role, permissions: (role === 'admin' || role === 'superadmin') ? {} : permissions })
-      toast.success('Permessi aggiornati')
+      toast.success('Permissions updated')
       onSaved()
       onClose()
-    } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setSaving(false) }
   }
 
   return (
-    <Modal title={`Permessi: ${u.username}`} onClose={onClose}>
+    <Modal title={`Permissions: ${u.username}`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Ruolo</label>
+          <label className="block text-sm font-medium mb-1">Role</label>
           <select className="input" value={role} onChange={e => setRole(e.target.value)}>
             {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">
-            Permessi {(role === 'admin' || role === 'superadmin') && <span className="text-gray-400 font-normal ml-1">(accesso completo)</span>}
+            Permissions {(role === 'admin' || role === 'superadmin') && <span className="text-gray-400 font-normal ml-1">(full access)</span>}
           </label>
           <PermissionsEditor value={permissions} onChange={setPermissions} disabled={role === 'admin' || role === 'superadmin'} />
         </div>
         <div className="flex justify-end gap-3">
-          <button type="button" className="btn-secondary" onClick={onClose}>Annulla</button>
-          <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Salvataggio...' : 'Salva'}</button>
+          <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
         </div>
       </form>
     </Modal>
@@ -190,15 +191,15 @@ function UsersTab() {
     try {
       const payload = { ...form }
       if (form.role === 'admin') payload.permissions = {}
-      await usersApi.create(payload); toast.success('Utente creato'); setShowCreate(false)
+      await usersApi.create(payload); toast.success('User created'); setShowCreate(false)
       setForm({ username: '', display_name: '', email: '', password: '', role: 'operator', permissions: {} }); load()
     }
-    catch (err) { toast.error(err.response?.data?.errors?.[0]?.msg || err.response?.data?.error || 'Errore') }
+    catch (err) { toast.error(err.response?.data?.errors?.[0]?.msg || err.response?.data?.error || 'Error') }
   }
 
   const handleDelete = async () => {
-    try { await usersApi.delete(deleteTarget.id); toast.success('Utente eliminato'); setDeleteTarget(null); load() }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await usersApi.delete(deleteTarget.id); toast.success('User deleted'); setDeleteTarget(null); load() }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const filtered = authFilter === 'all' ? users : users.filter(u => u.auth_type === authFilter)
@@ -208,30 +209,30 @@ function UsersTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Tipo:</span>
+          <span className="text-sm text-gray-500">Type:</span>
           {['all','local','ldap'].map(f => (
             <button key={f} onClick={() => setAuthFilter(f)}
               className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${authFilter === f ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-              {f === 'all' ? 'Tutti' : f.toUpperCase()}
+              {f === 'all' ? 'All' : f.toUpperCase()}
             </button>
           ))}
-          {authFilter !== 'all' && <span className="text-xs text-gray-400">({filtered.length} mostrati)</span>}
+          {authFilter !== 'all' && <span className="text-xs text-gray-400">({filtered.length} shown)</span>}
         </div>
-        <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />Nuovo Utente</button>
+        <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />New User</button>
       </div>
 
       <div className="card overflow-hidden">
           <div className="overflow-x-auto">
           <table className="min-w-[640px] w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
-            <tr>{['Username','Nome','Email','Auth','Ruolo','Permessi','Azioni'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+            <tr>{['Username','Display name','Email','Auth','Role','Permissions','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
             {filtered.map(u => (
               <tr key={u.id}
                 className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer select-none"
                 onDoubleClick={() => setDetail(u)}
-                title="Doppio click per i dettagli">
+                title="Double click for details">
                 <td className="px-4 py-3 font-mono text-xs">
                   <div className="flex items-center gap-1.5">
                     {u.role === 'superadmin' ? <Shield size={13} className="text-purple-500" /> : <User size={13} className="text-gray-400" />}
@@ -244,22 +245,22 @@ function UsersTab() {
                 <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
                 <td className="px-4 py-3 text-gray-500 text-xs max-w-[200px]">
                   {hasFullAccess(u)
-                    ? <span className="italic text-green-600">Accesso completo</span>
+                    ? <span className="italic text-green-600">Full access</span>
                     : ALL_PERMS.filter(p => u.permissions?.[p.key]).map(p => p.label).join(', ') ||
-                      <span className="italic text-gray-400">Nessun permesso</span>
+                      <span className="italic text-gray-400">No permissions</span>
                   }
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1 justify-end">
                     {u.role !== 'superadmin' && u.auth_type !== 'ldap' && (
-                      <button className="p-1 text-gray-400 hover:text-blue-600 rounded" onClick={e => { e.stopPropagation(); setEditTarget(u) }} title="Modifica permessi"><Pencil size={14} /></button>
+                      <button className="p-1 text-gray-400 hover:text-blue-600 rounded" onClick={e => { e.stopPropagation(); setEditTarget(u) }} title="Edit permissions"><Pencil size={14} /></button>
                     )}
                     <button className="p-1 text-red-500 hover:bg-red-50 rounded" onClick={e => { e.stopPropagation(); setDeleteTarget(u) }}><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-gray-500">Nessun utente</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-gray-500">No users</td></tr>}
           </tbody>
         </table>
         </div>
@@ -275,38 +276,38 @@ function UsersTab() {
       )}
 
       {showCreate && (
-        <Modal title="Nuovo Utente" onClose={() => setShowCreate(false)}>
+        <Modal title="New User" onClose={() => setShowCreate(false)}>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div><label className="block text-sm font-medium mb-1">Username *</label>
                 <input className="input" required value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} /></div>
-              <div><label className="block text-sm font-medium mb-1">Nome visualizzato *</label>
+              <div><label className="block text-sm font-medium mb-1">Display name *</label>
                 <input className="input" required value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} /></div>
             </div>
             <div><label className="block text-sm font-medium mb-1">Email *</label>
               <input className="input" type="email" required value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
             <div><label className="block text-sm font-medium mb-1">Password *</label>
               <input className="input" type="password" required value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></div>
-            <div><label className="block text-sm font-medium mb-1">Ruolo</label>
+            <div><label className="block text-sm font-medium mb-1">Role</label>
               <select className="input" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
                 {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
               </select></div>
             <div>
               <label className="block text-sm font-medium mb-1">
-                Permessi {form.role === 'admin' && <span className="text-gray-400 font-normal ml-1">(accesso completo per admin)</span>}
+                Permissions {form.role === 'admin' && <span className="text-gray-400 font-normal ml-1">(full access for admin)</span>}
               </label>
               <PermissionsEditor value={form.permissions} onChange={p => setForm(f => ({ ...f, permissions: p }))} disabled={form.role === 'admin'} />
             </div>
             <div className="flex justify-end gap-3">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Annulla</button>
-              <button type="submit" className="btn-primary">Crea</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="submit" className="btn-primary">Create</button>
             </div>
           </form>
         </Modal>
       )}
 
       {deleteTarget && (
-        <ConfirmDialog title="Elimina Utente" message={`Eliminare "${deleteTarget.display_name}"?`} danger confirmLabel="Elimina"
+        <ConfirmDialog title="Delete User" message={`Delete "${deleteTarget.display_name}"?`} danger confirmLabel="Delete"
           onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />
       )}
     </div>
@@ -330,29 +331,29 @@ function GroupsTab() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    try { await groupsApi.create(form); toast.success('Gruppo creato'); setShowCreate(false); setForm({ name: '', description: '', permissions: {} }); load() }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await groupsApi.create(form); toast.success('Group created'); setShowCreate(false); setForm({ name: '', description: '', permissions: {} }); load() }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const handleDelete = async () => {
-    try { await groupsApi.delete(deleteTarget.id); toast.success('Eliminato'); setDeleteTarget(null); if (selected?.id === deleteTarget.id) setSelected(null); load() }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await groupsApi.delete(deleteTarget.id); toast.success('Deleted'); setDeleteTarget(null); if (selected?.id === deleteTarget.id) setSelected(null); load() }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const handleAddMember = async (e) => {
     e.preventDefault()
-    try { await groupsApi.addMember(selected.id, memberInput); toast.success('Membro aggiunto'); setMemberInput(''); loadDetail(selected.id) }
-    catch (err) { toast.error(err.response?.data?.error || 'ID utente non valido') }
+    try { await groupsApi.addMember(selected.id, memberInput); toast.success('Member added'); setMemberInput(''); loadDetail(selected.id) }
+    catch (err) { toast.error(err.response?.data?.error || 'Invalid user ID') }
   }
 
   const handleRemoveMember = async (userId) => {
     try { await groupsApi.removeMember(selected.id, userId); loadDetail(selected.id) }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const handleSaveGroupPerms = async () => {
-    try { await groupsApi.update(selected.id, { permissions: editPermsData }); toast.success('Permessi gruppo aggiornati'); setEditPerms(false); loadDetail(selected.id) }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await groupsApi.update(selected.id, { permissions: editPermsData }); toast.success('Group permissions updated'); setEditPerms(false); loadDetail(selected.id) }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   return (
@@ -360,8 +361,8 @@ function GroupsTab() {
       {/* Groups list */}
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <span className="font-semibold text-sm text-gray-600">Gruppi</span>
-          <button className="btn-primary text-xs" onClick={() => setShowCreate(true)}><Plus size={13} />Nuovo</button>
+          <span className="font-semibold text-sm text-gray-600">Groups</span>
+          <button className="btn-primary text-xs" onClick={() => setShowCreate(true)}><Plus size={13} />New</button>
         </div>
         {groups.map(g => (
           <button key={g.id} onClick={() => loadDetail(g.id)}
@@ -374,7 +375,7 @@ function GroupsTab() {
             <ChevronRight size={14} className="text-gray-300" />
           </button>
         ))}
-        {groups.length === 0 && <p className="text-sm text-gray-500 text-center py-4">Nessun gruppo</p>}
+        {groups.length === 0 && <p className="text-sm text-gray-500 text-center py-4">No groups</p>}
       </div>
 
       {/* Detail */}
@@ -392,16 +393,16 @@ function GroupsTab() {
             {/* Permissions */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-semibold">Permessi</p>
+                <p className="text-sm font-semibold">Permissions</p>
                 {!editPerms ? (
                   <button className="text-xs text-blue-600 hover:underline flex items-center gap-1"
                     onClick={() => { setEditPermsData(selected.permissions || {}); setEditPerms(true) }}>
-                    <Pencil size={12} />Modifica
+                    <Pencil size={12} />Edit
                   </button>
                 ) : (
                   <div className="flex gap-2">
-                    <button className="text-xs text-green-600 hover:underline" onClick={handleSaveGroupPerms}>Salva</button>
-                    <button className="text-xs text-gray-400 hover:underline" onClick={() => setEditPerms(false)}>Annulla</button>
+                    <button className="text-xs text-green-600 hover:underline" onClick={handleSaveGroupPerms}>Save</button>
+                    <button className="text-xs text-gray-400 hover:underline" onClick={() => setEditPerms(false)}>Cancel</button>
                   </div>
                 )}
               </div>
@@ -425,26 +426,26 @@ function GroupsTab() {
             </div>
 
             <form onSubmit={handleAddMember} className="flex gap-2">
-              <input className="input flex-1 text-sm" placeholder="ID utente da aggiungere" value={memberInput} onChange={e => setMemberInput(e.target.value)} />
-              <button type="submit" className="btn-primary text-xs"><Plus size={13} />Aggiungi</button>
+              <input className="input flex-1 text-sm" placeholder="User ID to add" value={memberInput} onChange={e => setMemberInput(e.target.value)} />
+              <button type="submit" className="btn-primary text-xs"><Plus size={13} />Add</button>
             </form>
 
             <div>
-              <p className="text-sm font-semibold mb-2">Membri ({selected.members?.length || 0})</p>
+              <p className="text-sm font-semibold mb-2">Members ({selected.members?.length || 0})</p>
               <div className="space-y-1">
                 {(selected.members || []).map(m => (
                   <div key={m.user_id} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-sm">
                     <span>{m.username || m.user_id}</span>
-                    <button className="text-red-500 hover:text-red-700 text-xs" onClick={() => handleRemoveMember(m.user_id)}>Rimuovi</button>
+                    <button className="text-red-500 hover:text-red-700 text-xs" onClick={() => handleRemoveMember(m.user_id)}>Remove</button>
                   </div>
                 ))}
-                {(!selected.members || selected.members.length === 0) && <p className="text-sm text-gray-400">Nessun membro</p>}
+                {(!selected.members || selected.members.length === 0) && <p className="text-sm text-gray-400">No members</p>}
               </div>
             </div>
 
             {selected.ldapMappings && selected.ldapMappings.length > 0 && (
               <div>
-                <p className="text-sm font-semibold mb-2">Mappature LDAP</p>
+                <p className="text-sm font-semibold mb-2">LDAP Mappings</p>
                 {selected.ldapMappings.map((m, i) => (
                   <div key={i} className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-xs font-mono">{m.ldap_group_dn}</div>
                 ))}
@@ -453,28 +454,129 @@ function GroupsTab() {
           </div>
         ) : (
           <div className="card p-8 flex items-center justify-center text-gray-400">
-            <p className="text-sm">Seleziona un gruppo</p>
+            <p className="text-sm">Select a group</p>
           </div>
         )}
       </div>
 
       {showCreate && (
-        <Modal title="Nuovo Gruppo" onClose={() => setShowCreate(false)} size="sm">
+        <Modal title="New Group" onClose={() => setShowCreate(false)} size="sm">
           <form onSubmit={handleCreate} className="space-y-4">
-            <div><label className="block text-sm font-medium mb-1">Nome *</label><input className="input" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div><label className="block text-sm font-medium mb-1">Descrizione</label><input className="input" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Name *</label><input className="input" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Description</label><input className="input" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
             <div>
-              <label className="block text-sm font-medium mb-1">Permessi</label>
+              <label className="block text-sm font-medium mb-1">Permissions</label>
               <PermissionsEditor value={form.permissions} onChange={p => setForm(f => ({ ...f, permissions: p }))} disabled={false} />
             </div>
             <div className="flex justify-end gap-3">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Annulla</button>
-              <button type="submit" className="btn-primary">Crea</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="submit" className="btn-primary">Create</button>
             </div>
           </form>
         </Modal>
       )}
-      {deleteTarget && <ConfirmDialog title="Elimina Gruppo" message={`Eliminare "${deleteTarget.name}"?`} danger confirmLabel="Elimina" onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />}
+      {deleteTarget && <ConfirmDialog title="Delete Group" message={`Delete "${deleteTarget.name}"?`} danger confirmLabel="Delete" onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />}
+    </div>
+  )
+}
+
+// --- Tab Roles ---
+function RolesTab() {
+  const [presets, setPresets] = useState([])
+  const [saving, setSaving] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
+  const [newForm, setNewForm] = useState({ name: '', description: '', permissions: {} })
+  const [deleteTarget, setDeleteTarget] = useState(null)
+
+  const load = () => settingsApi.getRolePresets().then(r => setPresets(r.data || []))
+  useEffect(() => { load() }, [])
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    const id = crypto.randomUUID()
+    const updated = [...presets, { id, ...newForm }]
+    setSaving(true)
+    try {
+      await settingsApi.saveRolePresets(updated)
+      toast.success('Role preset created')
+      setPresets(updated)
+      setShowCreate(false)
+      setNewForm({ name: '', description: '', permissions: {} })
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async () => {
+    const updated = presets.filter(p => p.id !== deleteTarget.id)
+    try {
+      await settingsApi.saveRolePresets(updated)
+      toast.success('Deleted')
+      setPresets(updated)
+      setDeleteTarget(null)
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
+
+  const handleUpdatePerms = async (preset, permissions) => {
+    const updated = presets.map(p => p.id === preset.id ? { ...p, permissions } : p)
+    try {
+      await settingsApi.saveRolePresets(updated)
+      setPresets(updated)
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-gray-800 dark:text-gray-100">Role Presets</h3>
+          <p className="text-sm text-gray-500">Permission presets that can be applied to users</p>
+        </div>
+        <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />New Preset</button>
+      </div>
+
+      {presets.length === 0 && (
+        <div className="card p-8 text-center text-gray-400 text-sm">No role presets defined</div>
+      )}
+
+      <div className="space-y-4">
+        {presets.map(preset => (
+          <div key={preset.id} className="card p-5 space-y-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="font-semibold text-gray-800 dark:text-gray-100">{preset.name}</p>
+                {preset.description && <p className="text-sm text-gray-500">{preset.description}</p>}
+              </div>
+              <button className="p-1.5 text-red-500 hover:bg-red-50 rounded" onClick={() => setDeleteTarget(preset)}><Trash2 size={15} /></button>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Permissions</p>
+              <PermissionsEditor value={preset.permissions || {}} onChange={perms => handleUpdatePerms(preset, perms)} disabled={false} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showCreate && (
+        <Modal title="New Role Preset" onClose={() => setShowCreate(false)}>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div><label className="block text-sm font-medium mb-1">Name *</label>
+              <input className="input" required value={newForm.name} onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Description</label>
+              <input className="input" value={newForm.description} onChange={e => setNewForm(f => ({ ...f, description: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Permissions</label>
+              <PermissionsEditor value={newForm.permissions} onChange={p => setNewForm(f => ({ ...f, permissions: p }))} disabled={false} /></div>
+            <div className="flex justify-end gap-3">
+              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving...' : 'Create'}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog title="Delete Preset" message={`Delete "${deleteTarget.name}"?`} danger confirmLabel="Delete"
+          onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />
+      )}
     </div>
   )
 }
@@ -485,7 +587,7 @@ export default function Users() {
   const tab = searchParams.get('tab') || 'users'
 
   return (
-    <Layout title="Utenti & Gruppi">
+    <Layout title="Users & Groups">
       <div className="max-w-5xl space-y-6">
         {/* Tabs */}
         <div className="border-b border-gray-200 dark:border-gray-700">
@@ -501,6 +603,7 @@ export default function Users() {
 
         {tab === 'users' && <UsersTab />}
         {tab === 'groups' && <GroupsTab />}
+        {tab === 'roles' && <RolesTab />}
       </div>
     </Layout>
   )

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { statusApi } from '../api'
 import { format } from 'date-fns'
-import { it } from 'date-fns/locale'
 import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp } from 'lucide-react'
 
 const OVERALL_ICONS = {
@@ -12,10 +11,10 @@ const OVERALL_ICONS = {
 }
 
 const OVERALL_LABELS = {
-  operational: 'Tutti i sistemi operativi',
-  degraded: 'Degradato — Alcuni sistemi con problemi',
-  major_outage: 'Interruzione maggiore',
-  under_maintenance: 'Manutenzione in corso',
+  operational: 'All systems operational',
+  degraded: 'Degraded — Some systems have issues',
+  major_outage: 'Major outage',
+  under_maintenance: 'Maintenance in progress',
 }
 
 const STATUS_DOT = {
@@ -24,9 +23,9 @@ const STATUS_DOT = {
   under_maintenance: 'bg-blue-500', unknown: 'bg-gray-400',
 }
 
-function fmt(dt, f = 'dd MMM yyyy HH:mm') {
+function fmt(dt, f = 'MM/dd/yyyy HH:mm') {
   if (!dt) return '—'
-  try { return format(new Date(dt), f, { locale: it }) } catch { return '—' }
+  try { return format(new Date(dt), f) } catch { return '—' }
 }
 
 function MaintenanceCard({ m, colorClass }) {
@@ -37,20 +36,20 @@ function MaintenanceCard({ m, colorClass }) {
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <p className="font-medium text-sm">{m.title}</p>
         <span className={`text-xs badge ${colorClass} shrink-0`}>
-          {m.status === 'in_progress' ? 'In corso' : m.status === 'completed' ? 'Completata' : 'Programmata'}
+        {m.status === 'in_progress' ? 'In Progress' : m.status === 'completed' ? 'Completed' : 'Scheduled'}
         </span>
       </div>
       <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
         {m.status === 'in_progress' && m.actual_start && (
-          <span>Avviata: {fmt(m.actual_start)}</span>
+          <span>Started: {fmt(m.actual_start)}</span>
         )}
         {m.status === 'completed' && m.actual_end && (
-          <span>Terminata: {fmt(m.actual_end)}</span>
+          <span>Finished: {fmt(m.actual_end)}</span>
         )}
         {m.status === 'scheduled' && m.scheduled_start && (
-          <span>{fmt(m.scheduled_start)} → {fmt(m.scheduled_end, 'HH:mm dd MMM')}</span>
+          <span>{fmt(m.scheduled_start)} → {fmt(m.scheduled_end, 'HH:mm MM/dd')}</span>
         )}
-        {m.impact_level && <span className="capitalize">Impatto: {m.impact_level.replace(/_/g, ' ')}</span>}
+        {m.impact_level && <span className="capitalize">Impact: {m.impact_level.replace(/_/g, ' ')}</span>}
       </div>
       {m.description && <p className="text-xs text-gray-400 mt-1">{m.description}</p>}
       {m.notes && <p className="text-xs text-gray-400 mt-1 italic">{m.notes}</p>}
@@ -61,7 +60,7 @@ function MaintenanceCard({ m, colorClass }) {
             className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 transition-colors"
           >
             <Users size={13} />
-            Utenti coinvolti ({users.length})
+            Involved users ({users.length})
             {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </button>
           {expanded && (
@@ -104,7 +103,7 @@ export default function StatusPage() {
         {/* Header */}
         <div className="text-center">
           <h1 className="text-2xl sm:text-3xl font-bold mb-2">{data.app_name}</h1>
-          <p className="text-sm text-gray-500">Aggiornato: {fmt(data.last_updated)}</p>
+          <p className="text-sm text-gray-500">Last updated: {fmt(data.last_updated)}</p>
         </div>
 
         {/* Overall status */}
@@ -115,7 +114,7 @@ export default function StatusPage() {
 
         {/* Services */}
         <div className="card overflow-hidden">
-          <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold">Servizi</div>
+          <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold">Services</div>
           <div className="divide-y divide-gray-100 dark:divide-gray-700">
             {data.services.map(s => (
               <div key={s.id} className="flex items-center justify-between px-4 sm:px-5 py-3">
@@ -126,14 +125,14 @@ export default function StatusPage() {
                 <span className="text-xs text-gray-500 capitalize">{s.status?.replace(/_/g, ' ')}</span>
               </div>
             ))}
-            {data.services.length === 0 && <p className="text-center text-gray-500 py-6 text-sm">Nessun servizio pubblico</p>}
+            {data.services.length === 0 && <p className="text-center text-gray-500 py-6 text-sm">No public services</p>}
           </div>
         </div>
 
         {/* Active Incidents */}
         {data.active_incidents?.length > 0 && (
           <div className="card overflow-hidden">
-            <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-red-600">Incidenti attivi</div>
+            <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-red-600">Active Incidents</div>
             <div className="divide-y divide-gray-100 dark:divide-gray-700">
               {data.active_incidents.map(i => (
                 <div key={i.id} className="px-4 sm:px-5 py-4">
@@ -142,7 +141,7 @@ export default function StatusPage() {
                     <span className="text-xs badge bg-red-100 text-red-800 shrink-0">{i.severity}</span>
                   </div>
                   <p className="text-xs text-gray-500">{i.description}</p>
-                  <p className="text-xs text-gray-400 mt-1">{fmt(i.started_at, 'dd MMM HH:mm')}</p>
+                  <p className="text-xs text-gray-400 mt-1">{fmt(i.started_at, 'MM/dd HH:mm')}</p>
                 </div>
               ))}
             </div>
@@ -153,7 +152,7 @@ export default function StatusPage() {
         {inProgress.length > 0 && (
           <div className="card overflow-hidden">
             <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-orange-600 flex items-center gap-2">
-              <Wrench size={16} /> Manutenzione in corso
+              <Wrench size={16} /> Maintenance in Progress
             </div>
             <div className="divide-y divide-gray-100 dark:divide-gray-700">
               {inProgress.map(m => (
@@ -167,7 +166,7 @@ export default function StatusPage() {
         {upcoming.length > 0 && (
           <div className="card overflow-hidden">
             <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-blue-600 flex items-center gap-2">
-              <Clock size={16} /> Manutenzioni programmate
+              <Clock size={16} /> Scheduled Maintenances
             </div>
             <div className="divide-y divide-gray-100 dark:divide-gray-700">
               {upcoming.map(m => (
@@ -181,7 +180,7 @@ export default function StatusPage() {
         {recent.length > 0 && (
           <div className="card overflow-hidden">
             <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-600 flex items-center gap-2">
-              <CheckCircle size={16} className="text-green-500" /> Manutenzioni recenti
+              <CheckCircle size={16} className="text-green-500" /> Recently Completed
             </div>
             <div className="divide-y divide-gray-100 dark:divide-gray-700">
               {recent.map(m => (

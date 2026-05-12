@@ -153,6 +153,9 @@ export const settingsApi = {
   saveGeneral: (data) => api.put('/settings/general', data),
   getNtp: () => api.get('/settings/ntp'),
   saveNtp: (data) => api.put('/settings/ntp', data),
+  queryNtp: (server) => api.post('/settings/ntp/query', { server }),
+  getRolePresets: () => api.get('/settings/role-presets'),
+  saveRolePresets: (data) => api.put('/settings/role-presets', data),
 }
 
 // ─── Status ───────────────────────────────────────────────────────────────────
@@ -180,6 +183,7 @@ export const apikeysApi = {
 // ─── Audit ────────────────────────────────────────────────────────────────────
 export const auditApi = {
   list: (params) => api.get('/audit', { params }),
+  purge: (days) => api.delete('/audit/purge', { params: { days } }),
 }
 
 // ─── Templates ────────────────────────────────────────────────────────────────

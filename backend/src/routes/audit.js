@@ -28,4 +28,14 @@ router.get('/', async (req, res) => {
   res.json({ data: rows, total, page: parseInt(page), limit: parseInt(limit) });
 });
 
+// ─── DELETE /api/audit/purge ──────────────────────────────────────────────────
+router.delete('/purge', async (req, res) => {
+  const days = Math.max(1, parseInt(req.query.days) || 90);
+  const result = await query(
+    `DELETE FROM audit_log WHERE created_at < NOW() - ($1 || ' days')::INTERVAL`,
+    [String(days)]
+  );
+  res.json({ removed: result.rowCount });
+});
+
 module.exports = router;

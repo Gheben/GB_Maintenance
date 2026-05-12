@@ -9,7 +9,6 @@ import { ItemPicker } from '../components/ItemPicker'
 import { maintenanceApi, templatesApi, assetsApi, servicesApi } from '../api'
 import { Plus, Search, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
-import { it } from 'date-fns/locale'
 
 const TYPES = ['planned','emergency','upgrade','security_patch','infrastructure','other']
 const IMPACTS = ['critical','high','medium','low']
@@ -69,11 +68,11 @@ export default function Maintenance() {
       if (!payload.asset_ids.length) delete payload.asset_ids
       if (!payload.service_ids.length) delete payload.service_ids
       await maintenanceApi.create(payload)
-      toast.success('Manutenzione creata')
+      toast.success('Maintenance created')
       setShowCreate(false)
       setForm({ title: '', type: 'planned', impact_level: 'medium', description: '', scheduled_start: '', scheduled_end: '', template_id: '', asset_ids: [], service_ids: [] })
       load()
-    } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const applyTemplate = (tid) => {
@@ -82,22 +81,22 @@ export default function Maintenance() {
   }
 
   return (
-    <Layout title="Manutenzioni">
+    <Layout title="Maintenance">
       <div className="space-y-4">
         <div className="flex flex-wrap gap-3 items-center justify-between">
           <div className="flex gap-2 flex-wrap items-center">
             <select className="input w-48" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
-              <option value="">Tutti gli stati</option>
+              <option value="">All statuses</option>
               {['scheduled','pending_approval','in_progress','completed','cancelled','rejected'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={filterUpcoming} onChange={e => { setFilterUpcoming(e.target.checked); setPage(1) }} />
-              Solo future
+              Upcoming only
             </label>
           </div>
           <div className="flex gap-2">
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
-            <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />Nuova</button>
+            <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />New</button>
           </div>
         </div>
 
@@ -105,10 +104,10 @@ export default function Maintenance() {
           <div className="overflow-x-auto">
           <table className="min-w-[700px] w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>{['Titolo','Tipo','Impatto','Stato','Asset','Inizio','Fine'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+              <tr>{['Title','Type','Impact','Status','Assets','Start','End'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {loading ? <tr><td colSpan={7} className="text-center py-8 text-gray-500">Caricamento...</td></tr>
+              {loading ? <tr><td colSpan={7} className="text-center py-8 text-gray-500">Loading...</td></tr>
                 : items.map(m => (
                   <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-4 py-3 font-medium">
@@ -122,8 +121,8 @@ export default function Maintenance() {
                         ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">{m.asset_count}</span>
                         : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{format(new Date(m.scheduled_start), 'dd/MM HH:mm', { locale: it })}</td>
-                    <td className="px-4 py-3 text-gray-500">{format(new Date(m.scheduled_end), 'dd/MM HH:mm', { locale: it })}</td>
+                    <td className="px-4 py-3 text-gray-500">{format(new Date(m.scheduled_start), 'MM/dd HH:mm')}</td>
+                    <td className="px-4 py-3 text-gray-500">{format(new Date(m.scheduled_end), 'MM/dd HH:mm')}</td>
                   </tr>
                 ))}
             </tbody>
@@ -134,30 +133,30 @@ export default function Maintenance() {
       </div>
 
       {showCreate && (
-        <Modal title="Nuova Manutenzione" onClose={() => setShowCreate(false)} size="lg">
+        <Modal title="New Maintenance" onClose={() => setShowCreate(false)} size="lg">
           <form onSubmit={handleCreate} className="space-y-4">
             {templates.length > 0 && (
               <div>
-                <label className="block text-sm font-medium mb-1">Template (opzionale)</label>
+                <label className="block text-sm font-medium mb-1">Template (optional)</label>
                 <select className="input" value={form.template_id} onChange={e => applyTemplate(e.target.value)}>
-                  <option value="">— Nessun template —</option>
+                  <option value="">— No template —</option>
                   {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium mb-1">Titolo *</label>
+              <label className="block text-sm font-medium mb-1">Title *</label>
               <input className="input" required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Tipo</label>
+                <label className="block text-sm font-medium mb-1">Type</label>
                 <select className="input" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
                   {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Impatto</label>
+                <label className="block text-sm font-medium mb-1">Impact</label>
                 <select className="input" value={form.impact_level} onChange={e => setForm(f => ({ ...f, impact_level: e.target.value }))}>
                   {IMPACTS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
@@ -165,27 +164,26 @@ export default function Maintenance() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Inizio *</label>
+                <label className="block text-sm font-medium mb-1">Start *</label>
                 <input className="input" type="datetime-local" required value={form.scheduled_start} onChange={e => setForm(f => ({ ...f, scheduled_start: e.target.value }))} />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Fine *</label>
+                <label className="block text-sm font-medium mb-1">End *</label>
                 <input className="input" type="datetime-local" required value={form.scheduled_end} onChange={e => setForm(f => ({ ...f, scheduled_end: e.target.value }))} />
               </div>
             </div>
 
-            {/* Asset & Service picker */}
             <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-4 bg-gray-50 dark:bg-gray-800/50">
-              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Asset e Servizi coinvolti</p>
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Assets and Services</p>
               <ItemPicker
-                label="Asset"
+                label="Assets"
                 allItems={allAssets}
                 selectedIds={form.asset_ids}
                 onToggle={toggleAsset}
                 badgeKey="category"
               />
               <ItemPicker
-                label="Servizi"
+                label="Services"
                 allItems={allServices}
                 selectedIds={form.service_ids}
                 onToggle={toggleService}
@@ -194,12 +192,12 @@ export default function Maintenance() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Descrizione</label>
+              <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             <div className="flex justify-end gap-3">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Annulla</button>
-              <button type="submit" className="btn-primary">Crea</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="submit" className="btn-primary">Create</button>
             </div>
           </form>
         </Modal>

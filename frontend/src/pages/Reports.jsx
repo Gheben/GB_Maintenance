@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { Layout } from '../components/Layout'
 import { reportsApi } from '../api'
 import { format } from 'date-fns'
-import { it } from 'date-fns/locale'
 import { Download } from 'lucide-react'
 import { StatusBadge } from '../components/StatusBadge'
 
@@ -33,10 +32,10 @@ export default function Reports() {
   }
 
   return (
-    <Layout title="Report">
+    <Layout title="Reports">
       <div className="max-w-5xl space-y-4">
         <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
-          {[['maintenance','Manutenzioni'],['uptime','Uptime servizi'],['assets','Asset']].map(([k,l]) => (
+          {[['maintenance','Maintenance'],['uptime','Service Uptime'],['assets','Assets']].map(([k,l]) => (
             <button key={k} onClick={() => setTab(k)}
               className={`px-4 py-2 text-sm font-medium ${tab === k ? 'border-b-2 border-brand-600 text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}>{l}</button>
           ))}
@@ -45,9 +44,9 @@ export default function Reports() {
         {tab === 'maintenance' && (
           <div className="space-y-4">
             <div className="flex flex-wrap gap-3 items-end">
-              <div><label className="block text-xs font-medium mb-1">Da</label><input type="datetime-local" className="input" value={from} onChange={e => setFrom(e.target.value)} /></div>
-              <div><label className="block text-xs font-medium mb-1">A</label><input type="datetime-local" className="input" value={to} onChange={e => setTo(e.target.value)} /></div>
-              <button className="btn-primary" onClick={load}>Aggiorna</button>
+              <div><label className="block text-xs font-medium mb-1">From</label><input type="datetime-local" className="input" value={from} onChange={e => setFrom(e.target.value)} /></div>
+              <div><label className="block text-xs font-medium mb-1">To</label><input type="datetime-local" className="input" value={to} onChange={e => setTo(e.target.value)} /></div>
+              <button className="btn-primary" onClick={load}>Refresh</button>
               <button className="btn-secondary" onClick={downloadCsv}><Download size={14} />CSV</button>
               <button className="btn-secondary" onClick={downloadPdf}><Download size={14} />PDF</button>
             </div>
@@ -55,7 +54,7 @@ export default function Reports() {
             <div className="card overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>{['Titolo','Tipo','Impatto','Stato','Inizio','Durata (min)'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                  <tr>{['Title','Type','Impact','Status','Start','Duration (min)'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {data.map(m => (
@@ -64,7 +63,7 @@ export default function Reports() {
                       <td className="px-4 py-2 text-gray-500">{m.type}</td>
                       <td className="px-4 py-2">{m.impact_level}</td>
                       <td className="px-4 py-2"><StatusBadge status={m.status} /></td>
-                      <td className="px-4 py-2 text-gray-500">{format(new Date(m.scheduled_start), 'dd/MM HH:mm', { locale: it })}</td>
+                      <td className="px-4 py-2 text-gray-500">{format(new Date(m.scheduled_start), 'MM/dd HH:mm')}</td>
                       <td className="px-4 py-2 text-gray-500">{Math.round(m.duration_minutes || 0)}</td>
                     </tr>
                   ))}
@@ -78,7 +77,7 @@ export default function Reports() {
           <div className="card overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
-                <tr>{['Servizio','Stato','SLA %','Outage events (30gg)'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                <tr>{['Service','Status','SLA %','Outage events (30d)'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {uptimeData.map(s => (
@@ -107,7 +106,7 @@ function AssetReport() {
     <div className="card overflow-hidden">
       <table className="w-full text-sm">
         <thead className="bg-gray-50 dark:bg-gray-700/50">
-          <tr>{['Nome','Categoria','Criticità','Stato','Manutenzioni','Incidenti','Probe fail 30gg'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+          <tr>{['Name','Category','Criticality','Status','Maintenances','Incidents','Probe fails (30d)'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
           {data.map(a => (
