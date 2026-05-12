@@ -148,6 +148,31 @@ router.put('/general', requireAuth, requireAdmin, async (req, res) => {
   res.json({ message: 'Impostazioni generali salvate' });
 });
 
+// ─── GET/PUT /api/settings/ntp ────────────────────────────────────────────────
+router.get('/ntp', requireAuth, requireAdmin, async (req, res) => {
+  const row = await getOne("SELECT value FROM settings WHERE key='ntp_config'");
+  res.json(row ? JSON.parse(row.value) : { ntp_server: 'pool.ntp.org', timezone: 'Europe/Rome' });
+});
+
+router.put('/ntp', requireAuth, requireAdmin, [
+  body('ntp_server').optional().isString().trim(),
+  body('timezone').optional().isString().trim(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  const cfg = {
+    ntp_server: req.body.ntp_server || 'pool.ntp.org',
+    timezone: req.body.timezone || 'Europe/Rome',
+  };
+  await query(
+    `INSERT INTO settings (key, value, updated_at) VALUES ('ntp_config', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
+    [JSON.stringify(cfg)]
+  );
+  await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'ntp_config', null, req.ip);
+  res.json({ message: 'Configurazione NTP/timezone salvata' });
+});
+
 // ─── GET /api/settings/:key — generic fallback, must be LAST ─────────────────
 router.get('/:key', requireAuth, requireAdmin, async (req, res) => {
   const row = await getOne('SELECT value FROM settings WHERE key=$1', [req.params.key]);

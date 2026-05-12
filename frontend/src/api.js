@@ -151,6 +151,8 @@ export const settingsApi = {
   saveWebhooks: (data) => api.put('/settings/webhooks', data),
   getGeneral: () => api.get('/settings/general'),
   saveGeneral: (data) => api.put('/settings/general', data),
+  getNtp: () => api.get('/settings/ntp'),
+  saveNtp: (data) => api.put('/settings/ntp', data),
 }
 
 // ─── Status ───────────────────────────────────────────────────────────────────

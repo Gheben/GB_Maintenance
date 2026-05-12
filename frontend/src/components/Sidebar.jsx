@@ -152,6 +152,13 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
             <LogOut size={17} className="flex-shrink-0" />
             {!cl && 'Logout'}
           </button>
+          {!cl && (
+            <div className="px-3 py-1">
+              <p className="text-[10px] text-gray-600 leading-snug truncate">
+                v1.0 &mdash; Powered by <span className="text-gray-500 font-medium">Guido Ballarini</span> &copy; 2026
+              </p>
+            </div>
+          )}
         </div>
       </aside>
     </>

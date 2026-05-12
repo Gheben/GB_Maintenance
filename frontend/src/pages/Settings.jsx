@@ -1,14 +1,29 @@
 import { useState, useEffect } from 'react'
 import { Layout } from '../components/Layout'
 import { Modal, ConfirmDialog } from '../components/Modal'
-import { settingsApi, templatesApi, apikeysApi } from '../api'
+import { settingsApi, templatesApi, apikeysApi, notificationsApi } from '../api'
 import { toast } from '../components/Toast'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
-import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, RotateCcw, Clock, FileCode, RefreshCw } from 'lucide-react'
 
 const TYPES = ['planned','emergency','upgrade','security_patch','infrastructure','other']
 const IMPACTS = ['critical','high','medium','low']
+
+const NOTIF_VARIABLES = [
+  { key: '{{title}}',           desc: 'Titolo manutenzione' },
+  { key: '{{id}}',              desc: 'ID manutenzione' },
+  { key: '{{type}}',            desc: 'Tipo (planned, emergency, ...)' },
+  { key: '{{impact_level}}',    desc: 'Livello impatto (critical, high, ...)' },
+  { key: '{{status}}',          desc: 'Stato corrente' },
+  { key: '{{scheduled_start}}', desc: 'Inizio pianificato' },
+  { key: '{{scheduled_end}}',   desc: 'Fine pianificata' },
+  { key: '{{actual_start}}',    desc: 'Inizio effettivo' },
+  { key: '{{actual_end}}',      desc: 'Fine effettiva' },
+  { key: '{{description}}',     desc: 'Descrizione' },
+  { key: '{{notes}}',           desc: 'Note' },
+  { key: '{{app_url}}',         desc: 'URL applicazione' },
+]
 
 function Section({ title, children }) {
   return (
@@ -47,6 +62,19 @@ export default function Settings() {
   const [general, setGeneral] = useState({ app_name: 'GB Maintenance', app_url: '' })
   const [loading, setLoading] = useState(false)
 
+  // NTP / Timezone
+  const [ntp, setNtp] = useState({ ntp_server: 'pool.ntp.org', timezone: 'Europe/Rome' })
+  const [ntpDirty, setNtpDirty] = useState(false)
+  const [ntpSaving, setNtpSaving] = useState(false)
+
+  // Notification templates
+  const [notifTemplates, setNotifTemplates] = useState([])
+  const [selectedNotifId, setSelectedNotifId] = useState(null)
+  const [notifForm, setNotifForm] = useState({ subject_template: '', body_html_template: '' })
+  const [notifDirty, setNotifDirty] = useState(false)
+  const [notifSaving, setNotifSaving] = useState(false)
+  const [notifPreview, setNotifPreview] = useState(false)
+
   // Templates state
   const [templates, setTemplates] = useState([])
   const [showCreateTemplate, setShowCreateTemplate] = useState(false)
@@ -79,10 +107,21 @@ export default function Settings() {
     }).catch(() => {})
     settingsApi.getSaml().then(r => setSaml(prev => ({ ...prev, ...r.data }))).catch(() => {})
     settingsApi.getGeneral().then(r => setGeneral(r.data)).catch(() => {})
+    settingsApi.getNtp().then(r => setNtp(r.data)).catch(() => {})
   }, [])
 
   useEffect(() => {
-    if (tab === 'templates') templatesApi.list().then(r => setTemplates(r.data)).catch(() => {})
+    if (tab === 'templates') {
+      templatesApi.list().then(r => setTemplates(r.data)).catch(() => {})
+      notificationsApi.templates().then(r => {
+        setNotifTemplates(r.data)
+        if (r.data.length > 0 && !selectedNotifId) {
+          const first = r.data[0]
+          setSelectedNotifId(first.id)
+          setNotifForm({ subject_template: first.subject_template || '', body_html_template: first.body_html_template || '' })
+        }
+      }).catch(() => {})
+    }
     if (tab === 'apikeys') apikeysApi.list().then(r => setKeys(r.data)).catch(() => {})
   }, [tab])
 
@@ -132,6 +171,34 @@ export default function Settings() {
     e.preventDefault()
     try { await settingsApi.saveGeneral(general); toast.success('Impostazioni salvate') }
     catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+  }
+
+  const saveNtp = async (e) => {
+    e.preventDefault()
+    setNtpSaving(true)
+    try { await settingsApi.saveNtp(ntp); setNtpDirty(false); toast.success('Configurazione NTP salvata') }
+    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    finally { setNtpSaving(false) }
+  }
+
+  const selectNotifTemplate = (tpl) => {
+    setSelectedNotifId(tpl.id)
+    setNotifForm({ subject_template: tpl.subject_template || '', body_html_template: tpl.body_html_template || '' })
+    setNotifDirty(false)
+    setNotifPreview(false)
+  }
+
+  const saveNotifTemplate = async (e) => {
+    e.preventDefault()
+    if (!selectedNotifId) return
+    setNotifSaving(true)
+    try {
+      await notificationsApi.updateTemplate(selectedNotifId, notifForm)
+      setNotifDirty(false)
+      toast.success('Template notifica salvato')
+      notificationsApi.templates().then(r => setNotifTemplates(r.data)).catch(() => {})
+    } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    finally { setNotifSaving(false) }
   }
 
   const saveSaml = async (e) => {
@@ -476,22 +543,154 @@ export default function Settings() {
         )}
 
         {tab === 'templates' && (
-          <div className="space-y-4">
-            <div className="flex justify-end">
-              <button className="btn-primary" onClick={() => setShowCreateTemplate(true)}><Plus size={15} />Nuovo Template</button>
-            </div>
+          <div className="space-y-6">
+            {/* ── Maintenance window templates ── */}
             <div className="space-y-3">
-              {templates.map(t => (
-                <div key={t.id} className="card p-4 flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{t.name}</p>
-                    <p className="text-xs text-gray-500">{t.type} · {t.impact_level} · {t.duration_minutes} min</p>
-                    {t.description && <p className="text-xs text-gray-400 mt-1">{t.description}</p>}
-                  </div>
-                  <button className="p-1 text-red-500 hover:bg-red-50 rounded" onClick={() => setDeleteTargetTemplate(t)}><Trash2 size={14} /></button>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-gray-700">Template Manutenzioni</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">Modelli predefiniti per la creazione rapida di manutenzioni.</p>
                 </div>
-              ))}
-              {templates.length === 0 && <p className="text-center text-gray-500 py-8">Nessun template</p>}
+                <button className="btn-primary" onClick={() => setShowCreateTemplate(true)}><Plus size={15} />Nuovo Template</button>
+              </div>
+              <div className="space-y-3">
+                {templates.map(t => (
+                  <div key={t.id} className="card p-4 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{t.name}</p>
+                      <p className="text-xs text-gray-500">{t.type} · {t.impact_level} · {t.duration_minutes} min</p>
+                      {t.description && <p className="text-xs text-gray-400 mt-1">{t.description}</p>}
+                    </div>
+                    <button className="p-1 text-red-500 hover:bg-red-50 rounded" onClick={() => setDeleteTargetTemplate(t)}><Trash2 size={14} /></button>
+                  </div>
+                ))}
+                {templates.length === 0 && <p className="text-center text-gray-500 py-8">Nessun template</p>}
+              </div>
+            </div>
+
+            {/* ── Notification email templates ── */}
+            <div className="border-t border-gray-200 pt-6 space-y-4">
+              <div>
+                <h3 className="text-base font-semibold text-gray-700 flex items-center gap-2"><FileCode size={16} />Template Email Notifiche</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Personalizza i template HTML delle email di notifica inviate per ogni evento. Usa le variabili per inserire dati dinamici.
+                </p>
+              </div>
+
+              {notifTemplates.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {notifTemplates.map(t => (
+                    <button key={t.id} onClick={() => selectNotifTemplate(t)}
+                      className={`text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
+                        selectedNotifId === t.id
+                          ? 'border-brand-500 bg-brand-50 text-brand-700 font-medium'
+                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}>
+                      {t.name || t.event_type}
+                      <span className={`ml-1 text-xs font-normal ${t.is_active ? 'text-green-500' : 'text-gray-400'}`}>
+                        {t.is_active ? '●' : '○'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {selectedNotifId && (() => {
+                const tpl = notifTemplates.find(t => t.id === selectedNotifId)
+                return (
+                  <div className="card p-5 space-y-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-gray-700">{tpl?.name || tpl?.event_type}</p>
+                        <p className="text-xs text-gray-400 font-mono mt-0.5">{tpl?.event_type}</p>
+                      </div>
+                      <button type="button" onClick={() => setNotifPreview(v => !v)}
+                        className="text-xs border border-gray-300 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-100 flex items-center gap-1.5">
+                        <Eye size={13} />{notifPreview ? 'Modifica' : 'Anteprima'}
+                      </button>
+                    </div>
+
+                    {/* Subject */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Oggetto email</label>
+                      <input className="input font-mono text-sm"
+                        value={notifForm.subject_template}
+                        onChange={e => { setNotifForm(f => ({ ...f, subject_template: e.target.value })); setNotifDirty(true) }}
+                        placeholder="[GB Maintenance] {{title}}" />
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {NOTIF_VARIABLES.slice(0, 5).map(v => (
+                          <button key={v.key} type="button" title={v.desc}
+                            onClick={() => { setNotifForm(f => ({ ...f, subject_template: f.subject_template + v.key })); setNotifDirty(true) }}
+                            className="font-mono text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-0.5 hover:bg-blue-100 transition-colors">
+                            {v.key}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <hr className="border-gray-100" />
+
+                    {/* Body HTML */}
+                    <div>
+                      <p className="text-sm text-gray-500 mb-2">Corpo HTML — variabili disponibili:</p>
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {NOTIF_VARIABLES.map(v => (
+                          <button key={v.key} type="button" title={v.desc}
+                            onClick={() => {
+                              if (!notifPreview) {
+                                setNotifForm(f => ({ ...f, body_html_template: f.body_html_template + v.key }))
+                                setNotifDirty(true)
+                              }
+                            }}
+                            className="font-mono text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-0.5 hover:bg-blue-100 transition-colors">
+                            {v.key}
+                          </button>
+                        ))}
+                      </div>
+
+                      {notifPreview ? (
+                        <div className="border border-gray-200 rounded-lg p-4 min-h-[280px] overflow-auto bg-white"
+                          dangerouslySetInnerHTML={{ __html: notifForm.body_html_template
+                            .replace(/{{title}}/g, 'Manutenzione server produzione')
+                            .replace(/{{id}}/g, '42')
+                            .replace(/{{type}}/g, 'planned')
+                            .replace(/{{impact_level}}/g, 'high')
+                            .replace(/{{status}}/g, 'scheduled')
+                            .replace(/{{scheduled_start}}/g, new Date().toISOString())
+                            .replace(/{{scheduled_end}}/g, new Date(Date.now() + 3600000).toISOString())
+                            .replace(/{{actual_start}}/g, '')
+                            .replace(/{{actual_end}}/g, '')
+                            .replace(/{{description}}/g, 'Aggiornamento sistema operativo e patch di sicurezza.')
+                            .replace(/{{notes}}/g, 'Controllare servizi dopo la finestra.')
+                            .replace(/{{app_url}}/g, window.location.origin)
+                          }}
+                        />
+                      ) : (
+                        <textarea
+                          className="w-full font-mono text-xs border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"
+                          rows={16} value={notifForm.body_html_template} spellCheck={false}
+                          onChange={e => { setNotifForm(f => ({ ...f, body_html_template: e.target.value })); setNotifDirty(true) }}
+                        />
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={saveNotifTemplate} disabled={notifSaving || !notifDirty}
+                        className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                        <Save size={14} />{notifSaving ? 'Salvataggio...' : 'Salva template'}
+                      </button>
+                      <button type="button"
+                        onClick={() => {
+                          const orig = notifTemplates.find(t => t.id === selectedNotifId)
+                          if (orig) { setNotifForm({ subject_template: orig.subject_template || '', body_html_template: orig.body_html_template || '' }); setNotifDirty(false) }
+                        }}
+                        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50">
+                        <RotateCcw size={13} />Ripristina
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           </div>
         )}
@@ -528,15 +727,50 @@ export default function Settings() {
         )}
 
         {tab === 'general' && (
-          <Section title="Impostazioni generali">
-            <form onSubmit={saveGeneral} className="space-y-3">
-              <div><label className="block text-xs font-medium mb-1">Nome applicazione</label><input className="input" value={general.app_name || ''} onChange={e => setGeneral(f => ({ ...f, app_name: e.target.value }))} /></div>
-              <div><label className="block text-xs font-medium mb-1">URL applicazione</label><input className="input" placeholder="https://maintenance.example.com" value={general.app_url || ''} onChange={e => setGeneral(f => ({ ...f, app_url: e.target.value }))} /></div>
-              <div className="flex justify-end pt-2">
-                <button type="submit" className="btn-primary">Salva</button>
-              </div>
-            </form>
-          </Section>
+          <div className="space-y-6">
+            <Section title="Impostazioni generali">
+              <form onSubmit={saveGeneral} className="space-y-3">
+                <div><label className="block text-xs font-medium mb-1">Nome applicazione</label><input className="input" value={general.app_name || ''} onChange={e => setGeneral(f => ({ ...f, app_name: e.target.value }))} /></div>
+                <div><label className="block text-xs font-medium mb-1">URL applicazione</label><input className="input" placeholder="https://maintenance.example.com" value={general.app_url || ''} onChange={e => setGeneral(f => ({ ...f, app_url: e.target.value }))} /></div>
+                <div className="flex justify-end pt-2">
+                  <button type="submit" className="btn-primary">Salva</button>
+                </div>
+              </form>
+            </Section>
+
+            <div className="card p-5 sm:p-6 space-y-4">
+              <h2 className="font-semibold text-base border-b border-gray-100 dark:border-gray-700 pb-2 flex items-center gap-2">
+                <Clock size={16} className="text-gray-500" />Date &amp; Time
+              </h2>
+              <p className="text-sm text-gray-500">
+                Configura il server NTP per la verifica dell&apos;accuratezza dell&apos;orologio e il fuso orario applicato a tutti i timestamp nell&apos;applicazione.
+              </p>
+              <form onSubmit={saveNtp} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Server NTP</label>
+                    <input className="input font-mono" placeholder="pool.ntp.org"
+                      value={ntp.ntp_server}
+                      onChange={e => { setNtp(n => ({ ...n, ntp_server: e.target.value })); setNtpDirty(true) }} />
+                    <p className="text-xs text-gray-400 mt-1">es. <code>pool.ntp.org</code>, <code>ntp.inrim.it</code>, <code>time.windows.com</code></p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Fuso orario (IANA)</label>
+                    <input className="input font-mono" placeholder="Europe/Rome"
+                      value={ntp.timezone}
+                      onChange={e => { setNtp(n => ({ ...n, timezone: e.target.value })); setNtpDirty(true) }} />
+                    <p className="text-xs text-gray-400 mt-1">es. <code>Europe/Rome</code>, <code>UTC</code>, <code>America/New_York</code></p>
+                  </div>
+                </div>
+                <div className="flex justify-end pt-1">
+                  <button type="submit" disabled={ntpSaving || !ntpDirty}
+                    className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                    <Save size={14} />{ntpSaving ? 'Salvataggio...' : 'Salva'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
       </div>
 
