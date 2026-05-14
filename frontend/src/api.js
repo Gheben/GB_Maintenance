@@ -163,6 +163,7 @@ export const notificationsApi = {
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 export const settingsApi = {
+  publicBranding: () => api.get('/settings/public-branding'),
   getSmtp: () => api.get('/settings/smtp'),
   saveSmtp: (data) => api.put('/settings/smtp', data),
   testSmtp: (data) => api.post('/settings/smtp/test', data),
@@ -246,6 +247,10 @@ export const licensesApi = {
   approvalInfo: (token) => api.get(`/licenses/approval/${encodeURIComponent(token)}`),
   approvalApprove: (token) => api.post(`/licenses/approval/${encodeURIComponent(token)}/approve`),
   approvalReject: (token, reason) => api.post(`/licenses/approval/${encodeURIComponent(token)}/reject`, { reason }),
+  approvalRequests: (token) => api.get(`/licenses/approval/${encodeURIComponent(token)}/requests`),
+  approvalInfoForRequest: (token, requestId) => api.get(`/licenses/approval/${encodeURIComponent(token)}/request/${requestId}`),
+  approvalApproveRequest: (token, requestId) => api.post(`/licenses/approval/${encodeURIComponent(token)}/request/${requestId}/approve`),
+  approvalRejectRequest: (token, requestId, reason) => api.post(`/licenses/approval/${encodeURIComponent(token)}/request/${requestId}/reject`, { reason }),
 }
 
 export const suppliersApi = {
@@ -263,5 +268,19 @@ export const uploadsApi = {
     return api.post('/uploads/license-document', data, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-  }
+  },
+  uploadLicenseTemplateLogo: (file) => {
+    const data = new FormData()
+    data.append('file', file)
+    return api.post('/uploads/license-template-logo', data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+  uploadAppBrandImage: (file) => {
+    const data = new FormData()
+    data.append('file', file)
+    return api.post('/uploads/app-brand-image', data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
 }

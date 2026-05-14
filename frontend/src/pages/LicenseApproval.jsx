@@ -1,7 +1,32 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { CheckCircle2, CircleAlert, RefreshCw, ShieldCheck, XCircle } from 'lucide-react'
+import {
+  BadgeCheck,
+  CheckCircle2,
+  CircleAlert,
+  CircleDot,
+  Image as ImageIcon,
+  LayoutList,
+  Palette,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  XCircle,
+} from 'lucide-react'
 import { licensesApi, settingsApi } from '../api'
+
+const SIDE_ICON_COMPONENTS = {
+  'check-circle': CheckCircle2,
+  'badge-check': BadgeCheck,
+  'shield-check': ShieldCheck,
+  'layout-list': LayoutList,
+  image: ImageIcon,
+  palette: Palette,
+  sparkles: Sparkles,
+  star: Star,
+  'circle-dot': CircleDot,
+}
 
 const DEFAULT_BRANDING = {
   app_name: 'GB Maintenance',
@@ -12,10 +37,23 @@ const DEFAULT_BRANDING = {
   approval_page_side_kicker: 'Approval Flow',
   approval_page_side_title: 'Simple, but brandable',
   approval_page_side_description: "This page can now be branded from Licenses > Template with company name, custom title, subtitle, logo, and primary color, so the approval request feels like part of the customer's own portal.",
+  approval_page_side_rows_count: 4,
   approval_page_side_point_1: 'Company/app name shown in the public header',
   approval_page_side_point_2: 'Custom title and subtitle for approval requests',
   approval_page_side_point_3: 'Company logo uploaded from Licenses > Template',
   approval_page_side_point_4: 'Primary accent color used for CTA and highlights',
+  approval_page_side_point_5: '',
+  approval_page_side_point_6: '',
+  approval_page_side_point_7: '',
+  approval_page_side_point_8: '',
+  approval_page_side_icon_1: 'shield-check',
+  approval_page_side_icon_2: 'layout-list',
+  approval_page_side_icon_3: 'image',
+  approval_page_side_icon_4: 'palette',
+  approval_page_side_icon_5: 'sparkles',
+  approval_page_side_icon_6: 'star',
+  approval_page_side_icon_7: 'check-circle',
+  approval_page_side_icon_8: 'circle-dot',
   approval_page_back_to_login_label: 'Back to login',
   approval_page_footer_text: 'Powered by {app_name}',
   approval_page_load_button_label: 'Load request',
@@ -32,10 +70,13 @@ const DEFAULT_BRANDING = {
 export default function LicenseApproval() {
   const [searchParams] = useSearchParams()
   const token = useMemo(() => (searchParams.get('token') || '').trim(), [searchParams])
+  const requestedIdFromQuery = useMemo(() => (searchParams.get('request') || '').trim(), [searchParams])
 
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [info, setInfo] = useState(null)
+  const [requests, setRequests] = useState([])
+  const [selectedRequestId, setSelectedRequestId] = useState('')
   const [error, setError] = useState('')
   const [result, setResult] = useState('')
   const [reason, setReason] = useState('')
@@ -47,6 +88,15 @@ export default function LicenseApproval() {
       .catch(() => setBranding(DEFAULT_BRANDING))
   }, [])
 
+  const loadInfoById = async (requestId) => {
+    if (!requestId) {
+      setInfo(null)
+      return
+    }
+    const r = await licensesApi.approvalInfoForRequest(token, requestId)
+    setInfo(r.data)
+  }
+
   const load = async () => {
     if (!token) {
       setError(branding.approval_page_missing_token_text || DEFAULT_BRANDING.approval_page_missing_token_text)
@@ -56,9 +106,37 @@ export default function LicenseApproval() {
     setError('')
     setResult('')
     try {
-      const r = await licensesApi.approvalInfo(token)
-      setInfo(r.data)
+      const requestsRes = await licensesApi.approvalRequests(token)
+      const list = Array.isArray(requestsRes.data?.requests) ? requestsRes.data.requests : []
+      setRequests(list)
+
+      if (!list.length) {
+        setSelectedRequestId('')
+        setInfo(null)
+        return
+      }
+
+      const fallbackId = String(requestsRes.data?.current_request_id || '')
+      const preferredId = selectedRequestId || requestedIdFromQuery || fallbackId || String(list[0].id)
+      const exists = list.some(item => String(item.id) === String(preferredId))
+      const targetId = exists ? String(preferredId) : String(list[0].id)
+
+      setSelectedRequestId(targetId)
+      await loadInfoById(targetId)
     } catch (err) {
+      try {
+        // Backward compatibility for legacy single-request tokens.
+        const fallback = await licensesApi.approvalInfo(token)
+        setRequests(fallback.data?.id ? [fallback.data] : [])
+        setSelectedRequestId(String(fallback.data?.id || ''))
+        setInfo(fallback.data)
+        setLoading(false)
+        return
+      } catch {
+        // Ignore fallback errors and show canonical error below.
+      }
+      setRequests([])
+      setSelectedRequestId('')
       setInfo(null)
       setError(err.response?.data?.error || branding.approval_page_load_error_text || DEFAULT_BRANDING.approval_page_load_error_text)
     } finally {
@@ -67,10 +145,11 @@ export default function LicenseApproval() {
   }
 
   const approve = async () => {
+    if (!selectedRequestId) return
     setBusy(true)
     setError('')
     try {
-      const r = await licensesApi.approvalApprove(token)
+      const r = await licensesApi.approvalApproveRequest(token, selectedRequestId)
       setResult(r.data?.message || 'License approved')
       await load()
     } catch (err) {
@@ -81,10 +160,11 @@ export default function LicenseApproval() {
   }
 
   const reject = async () => {
+    if (!selectedRequestId) return
     setBusy(true)
     setError('')
     try {
-      const r = await licensesApi.approvalReject(token, reason)
+      const r = await licensesApi.approvalRejectRequest(token, selectedRequestId, reason)
       setResult(r.data?.message || 'License rejected')
       await load()
     } catch (err) {
@@ -99,9 +179,15 @@ export default function LicenseApproval() {
   const title = branding.approval_page_title || DEFAULT_BRANDING.approval_page_title
   const subtitle = branding.approval_page_subtitle || DEFAULT_BRANDING.approval_page_subtitle
   const appName = branding.app_name || DEFAULT_BRANDING.app_name
-  const sidePoints = [1, 2, 3, 4]
-    .map(idx => branding[`approval_page_side_point_${idx}`] || DEFAULT_BRANDING[`approval_page_side_point_${idx}`])
-    .filter(Boolean)
+  const rowsRaw = Number(branding.approval_page_side_rows_count || DEFAULT_BRANDING.approval_page_side_rows_count || 4)
+  const rowsCount = Number.isFinite(rowsRaw) ? Math.min(8, Math.max(1, Math.trunc(rowsRaw))) : 4
+  const sideItems = Array.from({ length: rowsCount }, (_, i) => {
+    const idx = i + 1
+    const text = branding[`approval_page_side_point_${idx}`] || DEFAULT_BRANDING[`approval_page_side_point_${idx}`] || ''
+    const iconName = String(branding[`approval_page_side_icon_${idx}`] || DEFAULT_BRANDING[`approval_page_side_icon_${idx}`] || 'check-circle')
+    const Icon = SIDE_ICON_COMPONENTS[iconName] || CheckCircle2
+    return { idx, text, Icon }
+  }).filter(item => String(item.text || '').trim().length > 0)
   const footerTextTemplate = branding.approval_page_footer_text || DEFAULT_BRANDING.approval_page_footer_text
   const footerText = String(footerTextTemplate).replaceAll('{app_name}', appName)
   const initials = appName
@@ -151,6 +237,37 @@ export default function LicenseApproval() {
 
             {info && (
               <div className="space-y-5">
+                {requests.length > 1 && (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                    <label className="block text-sm font-semibold mb-2 text-gray-800">Select request</label>
+                    <select
+                      className="input"
+                      value={selectedRequestId}
+                      onChange={async (e) => {
+                        const id = e.target.value
+                        setSelectedRequestId(id)
+                        setResult('')
+                        setError('')
+                        setLoading(true)
+                        try {
+                          await loadInfoById(id)
+                        } catch (err) {
+                          setInfo(null)
+                          setError(err.response?.data?.error || 'Cannot load selected request')
+                        } finally {
+                          setLoading(false)
+                        }
+                      }}
+                    >
+                      {requests.map(item => (
+                        <option key={item.id} value={item.id}>
+                          {`${item.name || 'License'}${item.supplier_company ? ` - ${item.supplier_company}` : ''}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className="grid gap-3 sm:grid-cols-2">
                   {[
                     ['License', info.name || '—'],
@@ -189,12 +306,12 @@ export default function LicenseApproval() {
           </div>
 
           <div className="space-y-3">
-            {sidePoints.map(item => (
-              <div key={item} className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+            {sideItems.map(item => (
+              <div key={item.idx} className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
                 <div className="w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0 mt-0.5" style={{ backgroundColor: accent }}>
-                  <CheckCircle2 size={14} />
+                  <item.Icon size={14} />
                 </div>
-                <p className="text-sm text-gray-700">{item}</p>
+                <p className="text-sm text-gray-700">{item.text}</p>
               </div>
             ))}
           </div>

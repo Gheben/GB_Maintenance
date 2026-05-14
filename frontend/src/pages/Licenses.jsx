@@ -4,7 +4,51 @@ import { licensesApi, suppliersApi, assetsApi, servicesApi, settingsApi, uploads
 import { Pagination } from '../components/Pagination'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
-import { Plus, Pencil, Trash2, CheckCircle2, XCircle, Upload, Search, Building2, UserRound, Save, Palette, Eye } from 'lucide-react'
+import {
+  BadgeCheck,
+  Building2,
+  CheckCircle2,
+  CircleDot,
+  Eye,
+  Image as ImageIcon,
+  LayoutList,
+  Palette,
+  Pencil,
+  Plus,
+  Save,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  Trash2,
+  Upload,
+  UserRound,
+  XCircle,
+} from 'lucide-react'
+
+const SIDE_ICON_COMPONENTS = {
+  'check-circle': CheckCircle2,
+  'badge-check': BadgeCheck,
+  'shield-check': ShieldCheck,
+  'layout-list': LayoutList,
+  image: ImageIcon,
+  palette: Palette,
+  sparkles: Sparkles,
+  star: Star,
+  'circle-dot': CircleDot,
+}
+
+const SIDE_ICON_OPTIONS = [
+  { value: 'check-circle', label: 'Check Circle' },
+  { value: 'badge-check', label: 'Badge Check' },
+  { value: 'shield-check', label: 'Shield Check' },
+  { value: 'layout-list', label: 'List' },
+  { value: 'image', label: 'Image' },
+  { value: 'palette', label: 'Palette' },
+  { value: 'sparkles', label: 'Sparkles' },
+  { value: 'star', label: 'Star' },
+  { value: 'circle-dot', label: 'Circle Dot' },
+]
 
 const emptyLicenseForm = {
   name: '',
@@ -47,10 +91,23 @@ const templateDefaults = {
   approval_page_side_kicker: 'Approval Flow',
   approval_page_side_title: 'Simple, but brandable',
   approval_page_side_description: "This page can now be branded from Licenses > Template with company name, custom title, subtitle, logo, and primary color, so the approval request feels like part of the customer's own portal.",
+  approval_page_side_rows_count: 4,
   approval_page_side_point_1: 'Company/app name shown in the public header',
   approval_page_side_point_2: 'Custom title and subtitle for approval requests',
   approval_page_side_point_3: 'Company logo uploaded from Licenses > Template',
   approval_page_side_point_4: 'Primary accent color used for CTA and highlights',
+  approval_page_side_point_5: '',
+  approval_page_side_point_6: '',
+  approval_page_side_point_7: '',
+  approval_page_side_point_8: '',
+  approval_page_side_icon_1: 'shield-check',
+  approval_page_side_icon_2: 'layout-list',
+  approval_page_side_icon_3: 'image',
+  approval_page_side_icon_4: 'palette',
+  approval_page_side_icon_5: 'sparkles',
+  approval_page_side_icon_6: 'star',
+  approval_page_side_icon_7: 'check-circle',
+  approval_page_side_icon_8: 'circle-dot',
   approval_page_back_to_login_label: 'Back to login',
   approval_page_footer_text: 'Powered by {app_name}',
   approval_page_load_button_label: 'Load request',
@@ -218,7 +275,16 @@ function TemplateVisualEditor({ templateConfig, setTemplateConfig, templateUploa
     .slice(0, 2)
     .map(p => p[0]?.toUpperCase())
     .join('') || 'GB'
-  const sidePoints = [1, 2, 3, 4].map(i => `approval_page_side_point_${i}`)
+  const rowsRaw = Number(templateConfig.approval_page_side_rows_count || 4)
+  const rowsCount = Number.isFinite(rowsRaw) ? Math.min(8, Math.max(1, Math.trunc(rowsRaw))) : 4
+  const sideRows = Array.from({ length: rowsCount }, (_, i) => {
+    const idx = i + 1
+    const textKey = `approval_page_side_point_${idx}`
+    const iconKey = `approval_page_side_icon_${idx}`
+    const iconName = String(templateConfig[iconKey] || 'check-circle')
+    const Icon = SIDE_ICON_COMPONENTS[iconName] || CheckCircle2
+    return { idx, textKey, iconKey, iconName, Icon }
+  })
   const footerPreview = String(templateConfig.approval_page_footer_text || 'Powered by {app_name}').replaceAll('{app_name}', appName)
 
   const setField = (key, value) => {
@@ -350,12 +416,31 @@ function TemplateVisualEditor({ templateConfig, setTemplateConfig, templateUploa
           )}
 
           <div className="space-y-2">
-            {sidePoints.map((key, idx) => (
-              <div key={key} className="rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2 text-sm">
+            {!readOnly && (
+              <div className="grid grid-cols-1 sm:grid-cols-[130px_1fr] gap-2">
+                <label className="text-xs text-gray-500 uppercase tracking-wide self-center">Sidebar rows</label>
+                <select className="input h-9" value={rowsCount} onChange={e => setField('approval_page_side_rows_count', Number(e.target.value))}>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            )}
+
+            {sideRows.map((row) => (
+              <div key={row.textKey} className="rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2 text-sm">
                 {readOnly ? (
-                  <div>{templateConfig[key] || ''}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-white" style={{ backgroundColor: accent }}>
+                      <row.Icon size={14} />
+                    </span>
+                    <span>{templateConfig[row.textKey] || ''}</span>
+                  </div>
                 ) : (
-                  <input className="input h-8" value={templateConfig[key] || ''} onChange={e => setField(key, e.target.value)} placeholder={`Sidebar bullet ${idx + 1}`} />
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_170px] gap-2">
+                    <input className="input h-8" value={templateConfig[row.textKey] || ''} onChange={e => setField(row.textKey, e.target.value)} placeholder={`Sidebar bullet ${row.idx}`} />
+                    <select className="input h-8" value={row.iconName} onChange={e => setField(row.iconKey, e.target.value)}>
+                      {SIDE_ICON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
                 )}
               </div>
             ))}

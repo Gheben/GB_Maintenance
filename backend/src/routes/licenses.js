@@ -3,12 +3,118 @@ const { body, param, query: qv, validationResult } = require('express-validator'
 const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const crypto = require('crypto');
-const { sendMail } = require('../utils/mailer');
+const { sendEmailNotification } = require('../services/notificationService');
 
 const router = Router();
 
 function hashApprovalToken(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function extractApproverIdentity(row) {
+  if (!row || typeof row !== 'object') return { approverUserId: null, approverEmail: '' };
+  const contact = row.approver_contact && typeof row.approver_contact === 'object' ? row.approver_contact : null;
+  const approverEmail = String(contact?.email || '').trim().toLowerCase();
+  return {
+    approverUserId: row.approver_user_id || null,
+    approverEmail,
+  };
+}
+
+async function findApprovalScopeByTokenHash(tokenHash) {
+  const row = await getOne(
+    `SELECT id, approver_user_id, approver_contact, approval_status, approval_required, approval_token_expires_at
+     FROM licenses
+     WHERE approval_token_hash=$1`,
+    [tokenHash]
+  );
+  if (!row) return null;
+
+  if (!row.approval_required) return { error: 'Approval is not required for this license', status: 400 };
+  if (!row.approval_token_expires_at || new Date(row.approval_token_expires_at).getTime() < Date.now()) {
+    return { error: 'Approval link expired', status: 410 };
+  }
+
+  const identity = extractApproverIdentity(row);
+  if (!identity.approverUserId && !identity.approverEmail) {
+    return { error: 'Approver is not configured for this license', status: 400 };
+  }
+
+  return {
+    sourceLicenseId: row.id,
+    approverUserId: identity.approverUserId,
+    approverEmail: identity.approverEmail,
+  };
+}
+
+async function listPendingApprovalsByScope(scope) {
+  const where = [
+    `l.approval_required=TRUE`,
+    `l.approval_status='pending'`,
+    `l.approval_token_hash IS NOT NULL`,
+    `l.approval_token_expires_at IS NOT NULL`,
+    `l.approval_token_expires_at >= NOW()`,
+  ];
+  const params = [];
+  let idx = 1;
+
+  const identityClauses = [];
+  if (scope.approverUserId) {
+    identityClauses.push(`l.approver_user_id=$${idx++}`);
+    params.push(scope.approverUserId);
+  }
+  if (scope.approverEmail) {
+    identityClauses.push(`LOWER(l.approver_contact->>'email')=$${idx++}`);
+    params.push(scope.approverEmail);
+  }
+  if (!identityClauses.length) return [];
+  where.push(`(${identityClauses.join(' OR ')})`);
+
+  return getMany(
+    `SELECT l.id, l.name, l.description, l.approval_status, l.expiry_date, l.renewal_date,
+            l.approval_token_expires_at AS expires_at,
+            s.company AS supplier_company
+     FROM licenses l
+     LEFT JOIN suppliers s ON s.id=l.supplier_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY l.expiry_date NULLS LAST, l.updated_at DESC, l.name`,
+    params
+  );
+}
+
+async function getApprovalInfoByScope(scope, requestId) {
+  const where = [
+    `l.id=$1`,
+    `l.approval_required=TRUE`,
+    `l.approval_status='pending'`,
+    `l.approval_token_hash IS NOT NULL`,
+    `l.approval_token_expires_at IS NOT NULL`,
+    `l.approval_token_expires_at >= NOW()`,
+  ];
+  const params = [requestId];
+  let idx = 2;
+
+  const identityClauses = [];
+  if (scope.approverUserId) {
+    identityClauses.push(`l.approver_user_id=$${idx++}`);
+    params.push(scope.approverUserId);
+  }
+  if (scope.approverEmail) {
+    identityClauses.push(`LOWER(l.approver_contact->>'email')=$${idx++}`);
+    params.push(scope.approverEmail);
+  }
+  if (!identityClauses.length) return null;
+  where.push(`(${identityClauses.join(' OR ')})`);
+
+  return getOne(
+    `SELECT l.id, l.name, l.description, l.approval_status, l.expiry_date, l.renewal_date,
+            l.approval_token_expires_at AS expires_at,
+            s.company AS supplier_company
+     FROM licenses l
+     LEFT JOIN suppliers s ON s.id=l.supplier_id
+     WHERE ${where.join(' AND ')}`,
+    params
+  );
 }
 
 async function getAppBaseUrl() {
@@ -18,6 +124,177 @@ async function getAppBaseUrl() {
   if (configured) return configured.replace(/\/$/, '');
   return (process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
 }
+
+function getContactEmail(contact) {
+  if (!contact || typeof contact !== 'object') return null;
+  const email = String(contact.email || '').trim();
+  return email || null;
+}
+
+function buildLicenseTemplateVars(license, extraVars = {}) {
+  return {
+    license_id: license.id,
+    license_name: license.name,
+    license_description: license.description || '-',
+    supplier_company: license.supplier_company || '-',
+    approval_status: license.approval_status || '-',
+    expiry_date: license.expiry_date ? String(license.expiry_date).slice(0, 10) : '-',
+    renewal_date: license.renewal_date ? String(license.renewal_date).slice(0, 10) : '-',
+    ...extraVars,
+  };
+}
+
+async function getLicenseNotificationContext(licenseId) {
+  return getOne(
+    `SELECT l.id, l.name, l.description, l.approval_status, l.expiry_date, l.renewal_date,
+            l.owner_contact, l.maintainer_contact, l.approver_contact,
+            s.company AS supplier_company,
+            uo.email AS owner_user_email,
+            um.email AS maintainer_user_email,
+            ua.email AS approver_user_email,
+            uc.email AS created_by_email
+     FROM licenses l
+     LEFT JOIN suppliers s ON s.id=l.supplier_id
+     LEFT JOIN users uo ON uo.id=l.owner_user_id
+     LEFT JOIN users um ON um.id=l.maintainer_user_id
+     LEFT JOIN users ua ON ua.id=l.approver_user_id
+     LEFT JOIN users uc ON uc.id=l.created_by
+     WHERE l.id=$1`,
+    [licenseId]
+  );
+}
+
+function collectLicenseRecipientEmails(license, includeApprover = false) {
+  const recipients = new Set();
+  const add = (value) => {
+    const email = String(value || '').trim();
+    if (email) recipients.add(email);
+  };
+
+  add(license.owner_user_email);
+  add(license.maintainer_user_email);
+  add(license.created_by_email);
+  add(getContactEmail(license.owner_contact));
+  add(getContactEmail(license.maintainer_contact));
+  if (includeApprover) {
+    add(license.approver_user_email);
+    add(getContactEmail(license.approver_contact));
+  }
+  return [...recipients];
+}
+
+async function notifyLicenseEvent(eventType, licenseId, extraVars = {}, includeApprover = false) {
+  const license = await getLicenseNotificationContext(licenseId);
+  if (!license) return;
+  const toEmails = collectLicenseRecipientEmails(license, includeApprover);
+  if (toEmails.length === 0) return;
+
+  await sendEmailNotification(
+    eventType,
+    toEmails,
+    buildLicenseTemplateVars(license, extraVars),
+    'license',
+    licenseId
+  );
+}
+
+router.get('/approval/:token/requests', [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const tokenHash = hashApprovalToken(req.params.token);
+  const scope = await findApprovalScopeByTokenHash(tokenHash);
+  if (!scope) return res.status(404).json({ error: 'Approval link not found' });
+  if (scope.error) return res.status(scope.status).json({ error: scope.error });
+
+  const requests = await listPendingApprovalsByScope(scope);
+  res.json({
+    current_request_id: scope.sourceLicenseId,
+    requests,
+  });
+});
+
+router.get('/approval/:token/request/:id', [
+  param('token').isString().isLength({ min: 20, max: 300 }),
+  param('id').isUUID(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const tokenHash = hashApprovalToken(req.params.token);
+  const scope = await findApprovalScopeByTokenHash(tokenHash);
+  if (!scope) return res.status(404).json({ error: 'Approval link not found' });
+  if (scope.error) return res.status(scope.status).json({ error: scope.error });
+
+  const row = await getApprovalInfoByScope(scope, req.params.id);
+  if (!row) return res.status(404).json({ error: 'Approval request not found' });
+
+  res.json(row);
+});
+
+router.post('/approval/:token/request/:id/approve', [
+  param('token').isString().isLength({ min: 20, max: 300 }),
+  param('id').isUUID(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const tokenHash = hashApprovalToken(req.params.token);
+  const scope = await findApprovalScopeByTokenHash(tokenHash);
+  if (!scope) return res.status(404).json({ error: 'Approval link not found' });
+  if (scope.error) return res.status(scope.status).json({ error: scope.error });
+
+  const row = await getApprovalInfoByScope(scope, req.params.id);
+  if (!row) return res.status(404).json({ error: 'Approval request not found' });
+
+  await query(
+    `UPDATE licenses
+     SET approval_status='approved', approved_at=NOW(), rejected_at=NULL, rejected_by=NULL,
+         rejection_reason=NULL, approval_token_hash=NULL, approval_token_expires_at=NULL, updated_at=NOW()
+     WHERE id=$1`,
+    [req.params.id]
+  );
+
+  await notifyLicenseEvent('license_approved', req.params.id, {
+    acted_by: 'Approval Link',
+    approved_at: new Date().toISOString(),
+  }, true).catch(() => {});
+
+  res.json({ message: 'License approved' });
+});
+
+router.post('/approval/:token/request/:id/reject', [
+  param('token').isString().isLength({ min: 20, max: 300 }),
+  param('id').isUUID(),
+  body('reason').optional().isString().isLength({ max: 2000 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const tokenHash = hashApprovalToken(req.params.token);
+  const scope = await findApprovalScopeByTokenHash(tokenHash);
+  if (!scope) return res.status(404).json({ error: 'Approval link not found' });
+  if (scope.error) return res.status(scope.status).json({ error: scope.error });
+
+  const row = await getApprovalInfoByScope(scope, req.params.id);
+  if (!row) return res.status(404).json({ error: 'Approval request not found' });
+
+  await query(
+    `UPDATE licenses
+     SET approval_status='rejected', rejected_at=NOW(), rejection_reason=$1,
+         approval_token_hash=NULL, approval_token_expires_at=NULL, updated_at=NOW()
+     WHERE id=$2`,
+    [req.body.reason || null, req.params.id]
+  );
+
+  await notifyLicenseEvent('license_rejected', req.params.id, {
+    acted_by: 'Approval Link',
+    rejected_at: new Date().toISOString(),
+    rejection_reason: req.body.reason || '-',
+  }, true).catch(() => {});
+
+  res.json({ message: 'License rejected' });
+});
 
 router.get('/approval/:token', [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
   const errors = validationResult(req);
@@ -72,6 +349,12 @@ router.post('/approval/:token/approve', [param('token').isString().isLength({ mi
      WHERE id=$1`,
     [row.id]
   );
+
+  await notifyLicenseEvent('license_approved', row.id, {
+    acted_by: 'Approval Link',
+    approved_at: new Date().toISOString(),
+  }, true).catch(() => {});
+
   res.json({ message: 'License approved' });
 });
 
@@ -100,6 +383,13 @@ router.post('/approval/:token/reject', [
      WHERE id=$2`,
     [req.body.reason || null, row.id]
   );
+
+  await notifyLicenseEvent('license_rejected', row.id, {
+    acted_by: 'Approval Link',
+    rejected_at: new Date().toISOString(),
+    rejection_reason: req.body.reason || '-',
+  }, true).catch(() => {});
+
   res.json({ message: 'License rejected' });
 });
 
@@ -370,6 +660,12 @@ router.post('/:id/approve', requireAdmin, [param('id').isUUID()], async (req, re
      WHERE id=$2`,
     [req.user.id, req.params.id]
   );
+
+  await notifyLicenseEvent('license_approved', req.params.id, {
+    acted_by: req.user?.display_name || req.user?.username || 'Admin',
+    approved_at: new Date().toISOString(),
+  }, true).catch(() => {});
+
   res.json({ message: 'License approved' });
 });
 
@@ -386,6 +682,13 @@ router.post('/:id/reject', requireAdmin, [
      WHERE id=$3`,
     [req.user.id, req.body.reason || null, req.params.id]
   );
+
+  await notifyLicenseEvent('license_rejected', req.params.id, {
+    acted_by: req.user?.display_name || req.user?.username || 'Admin',
+    rejected_at: new Date().toISOString(),
+    rejection_reason: req.body.reason || '-',
+  }, true).catch(() => {});
+
   res.json({ message: 'License rejected' });
 });
 
@@ -427,23 +730,14 @@ router.post('/:id/request-approval', requireAdmin, [
   const appBaseUrl = await getAppBaseUrl();
   const approvalUrl = `${appBaseUrl}/licenses/approval?token=${token}`;
 
-  await sendMail({
-    to,
-    subject: `License Approval Request: ${lic.name}`,
-    text:
-`A license approval request is waiting for your action.
-
-License: ${lic.name}
-Approve/Reject: ${approvalUrl}
-Link expires at: ${expiresAt.toISOString()}`,
-    html:
-`<h2>License Approval Request</h2>
-<p>A license approval request is waiting for your action.</p>
-<p><strong>License:</strong> ${lic.name}</p>
-<p><strong>Link expires:</strong> ${expiresAt.toISOString()}</p>
-<p><a href="${approvalUrl}" style="background:#1d4ed8;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>
-<p style="font-size:12px;color:#64748b">If the button does not work, open: ${approvalUrl}</p>`,
+  const context = await getLicenseNotificationContext(lic.id);
+  const vars = buildLicenseTemplateVars(context || { id: lic.id, name: lic.name }, {
+    approval_url: approvalUrl,
+    expires_at: expiresAt.toISOString(),
+    approver_email: to,
   });
+
+  await sendEmailNotification('license_approval_requested', [to], vars, 'license', lic.id);
 
   res.json({ message: `Approval request sent to ${to}`, expires_at: expiresAt.toISOString() });
 });
