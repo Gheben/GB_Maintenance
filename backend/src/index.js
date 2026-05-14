@@ -33,6 +33,11 @@ const apikeyRoutes = require('./routes/apikeys');
 const auditRoutes = require('./routes/audit');
 const templateRoutes = require('./routes/templates');
 const blackoutRoutes = require('./routes/blackout');
+const maintenanceTypesRoutes = require('./routes/maintenanceTypes');
+const assetCategoriesRoutes = require('./routes/assetCategories');
+const licenseRoutes = require('./routes/licenses');
+const supplierRoutes = require('./routes/suppliers');
+const uploadRoutes = require('./routes/uploads');
 
 const app = express();
 const server = http.createServer(app);
@@ -230,7 +235,7 @@ app.get(['/docs', '/docs/'], (req, res) => {
           '    <div style="font-size:64px;margin-bottom:16px;">&#x1F512;</div>',
           '    <h1 style="margin:0 0 12px;font-size:28px;font-weight:700;color:#f87171;">Accesso negato</h1>',
           '    <p style="color:#94a3b8;margin:0 0 28px;line-height:1.6;">Non hai i permessi per accedere alla documentazione API. Contatta un amministratore.</p>',
-          '    <a href="/" style="display:inline-block;padding:10px 28px;background:#1e40af;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Torna all\'App</a>',
+          '    <a href="/" style="display:inline-block;padding:10px 28px;background:#1e40af;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Torna all&rsquo;App</a>',
           '  </div>',
           '</div>'
         ].join('');
@@ -306,9 +311,16 @@ app.get(['/docs', '/docs/'], (req, res) => {
         presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
         layout: 'BaseLayout',
         persistAuthorization: true,
-        docExpansion: 'none',
+        deepLinking: true,
+        docExpansion: 'full',
+        defaultModelsExpandDepth: 2,
+        defaultModelExpandDepth: 2,
+        displayRequestDuration: true,
+        requestSnippetsEnabled: true,
+        showMutatedRequest: true,
         filter: true,
-        tryItOutEnabled: false,
+        tryItOutEnabled: true,
+        supportedSubmitMethods: ['get', 'post', 'put', 'patch', 'delete'],
         requestInterceptor: function(req) {
           var t = getStoredToken();
           if (t && !req.headers['Authorization']) { req.headers['Authorization'] = 'Bearer ' + t; }
@@ -343,6 +355,12 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/apikeys', apikeyRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/templates', templateRoutes);
+app.use('/api/maintenance-types', maintenanceTypesRoutes);
+app.use('/api/asset-categories', assetCategoriesRoutes);
+app.use('/api/licenses', licenseRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/uploads', uploadRoutes);
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/blackout', blackoutRoutes);
 
 // ─── 404 & Error handlers ─────────────────────────────────────────────────────
