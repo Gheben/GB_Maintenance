@@ -312,7 +312,7 @@ app.get(['/docs', '/docs/'], (req, res) => {
         layout: 'BaseLayout',
         persistAuthorization: true,
         deepLinking: true,
-        docExpansion: 'full',
+        docExpansion: 'none',
         defaultModelsExpandDepth: 2,
         defaultModelExpandDepth: 2,
         displayRequestDuration: true,
