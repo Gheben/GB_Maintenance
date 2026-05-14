@@ -70,8 +70,6 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const cl = collapsed && isDesktop
   const appName = branding.app_name || 'GB Maintenance'
   const brandImage = String(branding.app_brand_image_url || '').trim()
-  const [nameTop, ...restName] = appName.split(/\s+/).filter(Boolean)
-  const nameBottom = restName.join(' ')
 
   const handleLogout = async () => { await logout(); navigate('/login') }
 
@@ -83,7 +81,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
 
   const itemBase = cl
     ? 'flex justify-center items-center p-2 rounded-lg text-sm transition-colors'
-    : 'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors'
+    : 'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors'
 
   return (
     <>
@@ -92,7 +90,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
       )}
 
       <aside className={`
-        fixed inset-y-0 left-0 z-30 bg-gray-900 text-gray-100 flex flex-col
+        fixed inset-y-0 left-0 z-30 bg-gray-900 text-white flex flex-col
         transform transition-all duration-200 ease-in-out
         md:static md:translate-x-0 md:flex-shrink-0
         ${cl ? 'w-16' : 'w-64'}
@@ -100,16 +98,16 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
       `}>
         {/* Header / Logo */}
         <div style={{ paddingTop: 'env(safe-area-inset-top)' }}
-          className={`border-b border-gray-700 flex items-center ${cl ? 'px-1 py-4 justify-between' : 'px-4 py-4 gap-3'}`}>
+          className={`border-b border-gray-700 flex items-center ${cl ? 'px-1 py-4 justify-between' : 'px-5 py-4 gap-3'}`}>
           {brandImage ? (
-            <img src={brandImage} alt={appName} className="w-9 h-9 rounded-lg flex-shrink-0 object-contain bg-gray-800" />
+            <img src={brandImage} alt={appName} className="w-8 h-8 rounded-lg flex-shrink-0 object-contain bg-gray-800" />
           ) : (
-            <img src="/logo.svg" alt={appName} className="w-9 h-9 rounded-lg flex-shrink-0" />
+            <img src="/logo.svg" alt={appName} className="w-8 h-8 rounded-lg flex-shrink-0" />
           )}
           {!cl && (
             <div className="min-w-0 flex-1">
-              <span className="font-bold text-base leading-tight block truncate">{nameTop || 'GB'}</span>
-              <span className="text-xs font-normal text-gray-400 tracking-wide truncate">{nameBottom || 'Maintenance'}</span>
+              <span className="font-bold text-sm tracking-wide leading-tight block truncate">{appName}</span>
+              <span className="text-xs text-gray-400 truncate">by GB Maintenance</span>
             </div>
           )}
           {/* Mobile: close button */}
@@ -129,7 +127,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
         </div>
 
         {/* Nav */}
-        <nav className={`flex-1 ${cl ? 'px-1' : 'px-2'} py-3 space-y-0.5 overflow-y-auto scrollbar-thin`}>
+        <nav className={`flex-1 ${cl ? 'px-1' : 'px-3'} py-3 space-y-0.5 overflow-y-auto scrollbar-thin`}>
           {NAV.map((item, i) => {
             if (item.divider) {
               const prevDivIdx = NAV.slice(0, i).reduce((acc, x, j) => x.divider ? j : acc, -1)
@@ -146,9 +144,9 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
                 <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer"
                   onClick={onClose}
                   title={cl ? item.label : undefined}
-                  className={`${itemBase} text-gray-300 hover:bg-gray-700 hover:text-white`}>
+                  className={`${itemBase} text-gray-300 hover:bg-gray-800 hover:text-white`}>
                   <Icon size={17} className="flex-shrink-0" />
-                  {!cl && item.label}
+                  {!cl && <span className="leading-tight">{item.label}</span>}
                 </a>
               )
             }
@@ -157,9 +155,9 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
                 onClick={onClose}
                 title={cl ? item.label : undefined}
                 className={({ isActive }) =>
-                  `${itemBase} ${isActive ? 'bg-brand-700 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}>
+                  `${itemBase} ${isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}`}>
                 <Icon size={17} className="flex-shrink-0" />
-                {!cl && item.label}
+                {!cl && <span className="leading-tight">{item.label}</span>}
               </NavLink>
             )
           })}
@@ -180,11 +178,11 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
           )}
           <button
             onClick={handleLogout}
-            title={cl ? 'Logout' : undefined}
-            className={`w-full flex items-center py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-700 hover:text-white transition-colors ${cl ? 'justify-center p-2' : 'gap-3 px-3'}`}
+            title={cl ? 'Sign out' : undefined}
+            className={`w-full flex items-center py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-800 hover:text-white transition-colors ${cl ? 'justify-center p-2' : 'gap-3 px-3'}`}
           >
             <LogOut size={17} className="flex-shrink-0" />
-            {!cl && 'Logout'}
+            {!cl && 'Sign out'}
           </button>
           {!cl && (
             <div className="px-3 py-1">
