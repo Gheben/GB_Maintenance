@@ -105,9 +105,9 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
             <img src="/logo.svg" alt={appName} className="w-8 h-8 rounded-lg flex-shrink-0" />
           )}
           {!cl && (
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 flex flex-col">
               <span className="font-bold text-sm tracking-wide leading-tight block truncate">{appName}</span>
-              <span className="text-xs text-gray-400 truncate">by GB Maintenance</span>
+              <span className="text-xs text-gray-400 leading-tight -mt-0.5 truncate">by GB Maintenance</span>
             </div>
           )}
           {/* Mobile: close button */}
