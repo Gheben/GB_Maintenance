@@ -1,28 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Layout } from '../components/Layout'
 import { Modal, ConfirmDialog } from '../components/Modal'
-import { settingsApi, templatesApi, apikeysApi, notificationsApi } from '../api'
+import { settingsApi, apikeysApi, maintenanceTypesApi, assetCategoriesApi, notificationsApi, uploadsApi } from '../api'
 import { toast } from '../components/Toast'
 import { format } from 'date-fns'
-import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, RotateCcw, Clock, FileCode, RefreshCw } from 'lucide-react'
+import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, Clock, RefreshCw, Pencil, GripVertical, Mail, Network, KeyRound, Tag, Cog, Bell, ChevronDown, ChevronRight, Upload } from 'lucide-react'
 
-const TYPES = ['planned','emergency','upgrade','security_patch','infrastructure','other']
-const IMPACTS = ['critical','high','medium','low']
-
-const NOTIF_VARIABLES = [
-  { key: '{{title}}',           desc: 'Maintenance title' },
-  { key: '{{id}}',              desc: 'Maintenance ID' },
-  { key: '{{type}}',            desc: 'Type (planned, emergency, ...)' },
-  { key: '{{impact_level}}',    desc: 'Impact level (critical, high, ...)' },
-  { key: '{{status}}',          desc: 'Current status' },
-  { key: '{{scheduled_start}}', desc: 'Scheduled start' },
-  { key: '{{scheduled_end}}',   desc: 'Scheduled end' },
-  { key: '{{actual_start}}',    desc: 'Actual start' },
-  { key: '{{actual_end}}',      desc: 'Actual end' },
-  { key: '{{description}}',     desc: 'Description' },
-  { key: '{{notes}}',           desc: 'Notes' },
-  { key: '{{app_url}}',         desc: 'Application URL' },
-]
 
 function Section({ title, children }) {
   return (
@@ -58,7 +41,12 @@ export default function Settings() {
     username_attribute: '', display_name_attribute: 'displayName',
     email_attribute: 'email', default_role: 'viewer',
   })
-  const [general, setGeneral] = useState({ app_name: 'GB Maintenance', app_url: '' })
+  const [general, setGeneral] = useState({
+    app_name: 'GB Maintenance',
+    app_url: '',
+    app_brand_image_url: '',
+  })
+  const [appBrandUploading, setAppBrandUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showSmtpPass, setShowSmtpPass] = useState(false)
   const [smtpResult, setSmtpResult] = useState(null)
@@ -75,20 +63,6 @@ export default function Settings() {
   const [ntpSyncing, setNtpSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
 
-  // Notification templates
-  const [notifTemplates, setNotifTemplates] = useState([])
-  const [selectedNotifId, setSelectedNotifId] = useState(null)
-  const [notifForm, setNotifForm] = useState({ subject_template: '', body_html_template: '' })
-  const [notifDirty, setNotifDirty] = useState(false)
-  const [notifSaving, setNotifSaving] = useState(false)
-  const [notifPreview, setNotifPreview] = useState(false)
-
-  // Templates state
-  const [templates, setTemplates] = useState([])
-  const [showCreateTemplate, setShowCreateTemplate] = useState(false)
-  const [deleteTargetTemplate, setDeleteTargetTemplate] = useState(null)
-  const [templateForm, setTemplateForm] = useState({ name: '', type: 'planned', impact_level: 'medium', duration_minutes: 60, description: '' })
-
   // API Keys state
   const [keys, setKeys] = useState([])
   const [showCreateKey, setShowCreateKey] = useState(false)
@@ -96,8 +70,33 @@ export default function Settings() {
   const [deleteTargetKey, setDeleteTargetKey] = useState(null)
   const [keyForm, setKeyForm] = useState({ name: '', expires_at: '' })
 
+  // Maintenance Types state
+  const [mTypes, setMTypes] = useState([])
+
+  // Email templates state
+  const [emailTemplates, setEmailTemplates] = useState([])
+  const [editingTpl, setEditingTpl] = useState(null) // { id, subject_template, body_html_template, is_active }
+  const [expandedTplGroups, setExpandedTplGroups] = useState({})
+
+  // Asset Categories state
+  const [aCats, setACats] = useState([])
+  const [showCreateCat, setShowCreateCat] = useState(false)
+  const [deleteTargetCat, setDeleteTargetCat] = useState(null)
+  const [editingCatId, setEditingCatId] = useState(null)
+  const [editingCatLabel, setEditingCatLabel] = useState('')
+  const [editingCatColor, setEditingCatColor] = useState('#6366f1')
+  const [catForm, setCatForm] = useState({ label: '', color: '#6366f1' })
+  const [catError, setCatError] = useState('')
+  const [showCreateType, setShowCreateType] = useState(false)
+  const [deleteTargetType, setDeleteTargetType] = useState(null)
+  const [editingTypeId, setEditingTypeId] = useState(null)
+  const [editingTypeLabel, setEditingTypeLabel] = useState('')
+  const [editingTypeColor, setEditingTypeColor] = useState('#6366f1')
+  const [typeForm, setTypeForm] = useState({ label: '', slug: '', color: '#6366f1' })
+  const [typeError, setTypeError] = useState('')
+
   useEffect(() => {
-    settingsApi.getSmtp().then(r => setSmtp(r.data)).catch(() => {})
+    settingsApi.getSmtp().then(r => setSmtp(prev => ({ ...prev, ...r.data }))).catch(() => {})
     settingsApi.getLdap().then(r => {
       const d = r.data || {}
       setLdapSavedHasPassword(!!(d.bind_password || d.ldap_service_password))
@@ -119,32 +118,38 @@ export default function Settings() {
   }, [])
 
   useEffect(() => {
-    if (tab === 'templates') {
-      templatesApi.list().then(r => setTemplates(r.data)).catch(() => {})
-      notificationsApi.templates().then(r => {
-        setNotifTemplates(r.data)
-        if (r.data.length > 0 && !selectedNotifId) {
-          const first = r.data[0]
-          setSelectedNotifId(first.id)
-          setNotifForm({ subject_template: first.subject_template || '', body_html_template: first.body_html_template || '' })
-        }
-      }).catch(() => {})
-    }
     if (tab === 'apikeys') apikeysApi.list().then(r => setKeys(r.data)).catch(() => {})
+    if (tab === 'emailtpl') notificationsApi.templates().then(r => setEmailTemplates(r.data)).catch(() => {})
   }, [tab])
 
   const saveSmtp = async (e) => {
     e.preventDefault(); setLoading(true); setSmtpResult(null)
-    try { await settingsApi.saveSmtp(smtp); setSmtpResult({ success: true, message: 'SMTP settings saved.' }) }
-    catch (err) { setSmtpResult({ success: false, message: err.response?.data?.error || 'Save error.' }) }
+    try {
+      const payload = { ...smtp, pass: smtp.pass === '********' ? '' : smtp.pass }
+      await settingsApi.saveSmtp(payload)
+      setSmtpResult({ success: true, message: 'SMTP settings saved.' })
+    } catch (err) {
+      const errs = err.response?.data?.errors
+      const msg = errs ? errs.map(e => `${e.path}: ${e.msg}`).join(' • ') : (err.response?.data?.error || 'Save error.')
+      setSmtpResult({ success: false, message: msg })
+    }
     finally { setLoading(false) }
   }
 
   const handleTestSmtp = async () => {
     if (!testEmail) return
     setTesting(true); setSmtpResult(null)
-    try { await settingsApi.testSmtp(testEmail); setSmtpResult({ success: true, message: `Test email sent to ${testEmail}.` }) }
-    catch (err) { setSmtpResult({ success: false, message: err.response?.data?.error || 'Error sending test email.' }) }
+    try {
+      const res = await settingsApi.testSmtp({ to: testEmail })
+      setSmtpResult({ success: true, message: res.data?.message || `SMTP test successful for ${testEmail}.` })
+    }
+    catch (err) {
+      const errs = err.response?.data?.errors
+      const msg = errs
+        ? errs.map(e => `${e.path}: ${e.msg}`).join(' • ')
+        : (err.response?.data?.error || 'Error sending test email.')
+      setSmtpResult({ success: false, message: msg })
+    }
     finally { setTesting(false) }
   }
 
@@ -178,8 +183,26 @@ export default function Settings() {
 
   const saveGeneral = async (e) => {
     e.preventDefault()
-    try { await settingsApi.saveGeneral(general); toast.success('Settings saved') }
+    try {
+      await settingsApi.saveGeneral(general)
+      window.dispatchEvent(new CustomEvent('app-branding-updated', { detail: general }))
+      toast.success('Settings saved')
+    }
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
+
+  const uploadAppBrandImage = async (file) => {
+    if (!file) return
+    try {
+      setAppBrandUploading(true)
+      const r = await uploadsApi.uploadAppBrandImage(file)
+      setGeneral(f => ({ ...f, app_brand_image_url: r.data?.url || '' }))
+      toast.success('Brand image uploaded')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Upload error')
+    } finally {
+      setAppBrandUploading(false)
+    }
   }
 
   const saveNtp = async (e) => {
@@ -203,42 +226,11 @@ export default function Settings() {
     } finally { setNtpSyncing(false) }
   }
 
-  const selectNotifTemplate = (tpl) => {
-    setSelectedNotifId(tpl.id)
-    setNotifForm({ subject_template: tpl.subject_template || '', body_html_template: tpl.body_html_template || '' })
-    setNotifDirty(false)
-    setNotifPreview(false)
-  }
-
-  const saveNotifTemplate = async (e) => {
-    e.preventDefault()
-    if (!selectedNotifId) return
-    setNotifSaving(true)
-    try {
-      await notificationsApi.updateTemplate(selectedNotifId, notifForm)
-      setNotifDirty(false)
-      toast.success('Notification template saved')
-      notificationsApi.templates().then(r => setNotifTemplates(r.data)).catch(() => {})
-    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
-    finally { setNotifSaving(false) }
-  }
-
   const saveSaml = async (e) => {
     e.preventDefault(); setSamlSaving(true); setSamlResult(null)
     try { await settingsApi.saveSaml(saml); setSamlDirty(false); setSamlResult({ success: true, message: 'SAML configuration saved.' }) }
     catch (err) { setSamlResult({ success: false, message: err.response?.data?.error || 'Save error.' }) }
     finally { setSamlSaving(false) }
-  }
-
-  const handleCreateTemplate = async (e) => {
-    e.preventDefault()
-    try { await templatesApi.create(templateForm); toast.success('Template created'); setShowCreateTemplate(false); setTemplateForm({ name: '', type: 'planned', impact_level: 'medium', duration_minutes: 60, description: '' }); templatesApi.list().then(r => setTemplates(r.data)) }
-    catch (err) { toast.error(err.response?.data?.error || 'Error') }
-  }
-
-  const handleDeleteTemplate = async () => {
-    try { await templatesApi.delete(deleteTargetTemplate.id); toast.success('Template deleted'); setDeleteTargetTemplate(null); templatesApi.list().then(r => setTemplates(r.data)) }
-    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const handleCreateKey = async (e) => {
@@ -258,18 +250,98 @@ export default function Settings() {
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
+  const handleCreateType = async (e) => {
+    e.preventDefault()
+    setTypeError('')
+    if (!typeForm.label.trim()) { setTypeError('Label is required'); return }
+    try {
+      await maintenanceTypesApi.create(typeForm)
+      setShowCreateType(false)
+      setTypeForm({ label: '', slug: '', color: '#6366f1' })
+      maintenanceTypesApi.list().then(r => setMTypes(r.data))
+    } catch (err) { setTypeError(err.response?.data?.error || 'Error') }
+  }
+
+  const handleSaveTypeLabel = async (id) => {
+    if (!editingTypeLabel.trim()) return
+    try {
+      await maintenanceTypesApi.update(id, { label: editingTypeLabel, color: editingTypeColor })
+      setEditingTypeId(null)
+      maintenanceTypesApi.list().then(r => setMTypes(r.data))
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
+
+  const handleDeleteType = async () => {
+    try {
+      await maintenanceTypesApi.delete(deleteTargetType.id)
+      toast.success('Type deleted')
+      setDeleteTargetType(null)
+      maintenanceTypesApi.list().then(r => setMTypes(r.data))
+    } catch (err) { toast.error(err.response?.data?.error || 'Error'); setDeleteTargetType(null) }
+  }
+
+  const handleCreateCat = async (e) => {
+    e.preventDefault(); setCatError('')
+    if (!catForm.label.trim()) return setCatError('Label is required')
+    try {
+      await assetCategoriesApi.create(catForm)
+      toast.success('Category created')
+      setShowCreateCat(false); setCatForm({ label: '', color: '#6366f1' })
+      assetCategoriesApi.list().then(r => setACats(r.data))
+    } catch (err) { setCatError(err.response?.data?.error || 'Error') }
+  }
+
+  const handleSaveCat = async (id) => {
+    try {
+      await assetCategoriesApi.update(id, { label: editingCatLabel, color: editingCatColor })
+      setEditingCatId(null)
+      assetCategoriesApi.list().then(r => setACats(r.data))
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
+
+  const handleDeleteCat = async () => {
+    try {
+      await assetCategoriesApi.delete(deleteTargetCat.id)
+      toast.success('Category deleted')
+      setDeleteTargetCat(null)
+      assetCategoriesApi.list().then(r => setACats(r.data))
+    } catch (err) { toast.error(err.response?.data?.error || 'Error'); setDeleteTargetCat(null) }
+  }
+
   const spBaseUrl = saml.sp_base_url || window.location.origin
 
-  const TABS = [['smtp','SMTP & Email'],['ldap','LDAP / AD'],['saml','SAML / SSO'],['templates','Templates'],['apikeys','API Keys'],['general','System']]
+  const TYPE_COLORS = [
+    '#3b82f6','#6366f1','#8b5cf6','#ec4899',
+    '#ef4444','#f97316','#f59e0b','#eab308',
+    '#10b981','#14b8a6','#06b6d4','#6b7280',
+  ]
+
+  const TABS = [
+    { id: 'smtp',     label: 'SMTP & Email',      icon: Mail },
+    { id: 'emailtpl', label: 'Email Templates',   icon: Bell },
+    { id: 'ldap',     label: 'LDAP / AD',          icon: Network },
+    { id: 'saml',     label: 'SAML / SSO',         icon: Shield },
+    { id: 'apikeys',  label: 'API Keys',           icon: KeyRound },
+    { id: 'general',  label: 'System',             icon: Cog },
+  ]
 
   return (
     <Layout title="Settings">
-      <div className="max-w-2xl space-y-4">
-        <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 flex-wrap">
-          {TABS.map(([k,l]) => (
-            <button key={k} onClick={() => setTab(k)}
-              className={`px-4 py-2 text-sm font-medium ${tab === k ? 'border-b-2 border-brand-600 text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}>{l}</button>
-          ))}
+      <div className="space-y-4">
+        <div className="py-2 -mx-4 sm:mx-0 px-4 sm:px-0 border-b border-gray-200 dark:border-gray-700">
+          <nav className="flex flex-wrap gap-1.5">
+            {TABS.map(t => {
+              const Icon = t.icon
+              return (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                    tab === t.id ? 'bg-brand-600 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700/50 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}>
+                  <Icon size={14} />{t.label}
+                </button>
+              )
+            })}
+          </nav>
         </div>
 
         {tab === 'smtp' && (
@@ -286,8 +358,8 @@ export default function Settings() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium mb-1">Port</label>
-                    <input className="input" type="number" placeholder="587" value={smtp.port}
-                      onChange={e => { setSmtp(f => ({ ...f, port: parseInt(e.target.value) })); setSmtpResult(null) }} />
+                    <input className="input" type="number" placeholder="587" value={smtp.port ?? ''}
+                      onChange={e => { const v = parseInt(e.target.value); setSmtp(f => ({ ...f, port: isNaN(v) ? '' : v })); setSmtpResult(null) }} />
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
@@ -652,155 +724,62 @@ export default function Settings() {
           </Section>
         )}
 
-        {tab === 'templates' && (
-          <div className="space-y-6">
-            {/* ── Maintenance window templates ── */}
-            <div className="space-y-3">
+        {tab === 'types' && (
+          <div className="space-y-4">
+            <div className="card p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-semibold text-gray-700">Maintenance Templates</h3>
-                  <p className="text-sm text-gray-500 mt-0.5">Preset templates for quick maintenance creation.</p>
+                  <h3 className="font-semibold text-base text-gray-700">Maintenance Types</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">Configure the types available when creating a maintenance window. The slug is permanent; only the label can be renamed.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setShowCreateTemplate(true)}><Plus size={15} />New Template</button>
+                <button className="btn-primary" onClick={() => { setTypeForm({ label: '', slug: '', color: '#6366f1' }); setTypeError(''); setShowCreateType(true) }}><Plus size={15} />New Type</button>
               </div>
-              <div className="space-y-3">
-                {templates.map(t => (
-                  <div key={t.id} className="card p-4 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{t.name}</p>
-                      <p className="text-xs text-gray-500">{t.type} · {t.impact_level} · {t.duration_minutes} min</p>
-                      {t.description && <p className="text-xs text-gray-400 mt-1">{t.description}</p>}
-                    </div>
-                    <button className="p-1 text-red-500 hover:bg-red-50 rounded" onClick={() => setDeleteTargetTemplate(t)}><Trash2 size={14} /></button>
+
+              <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                {mTypes.map(t => (
+                  <div key={t.id} className="flex items-center gap-3 py-3">
+                    <GripVertical size={14} className="text-gray-300 shrink-0" />
+                    <div className="w-4 h-4 rounded-full shrink-0 border border-white shadow-sm" style={{ backgroundColor: t.color || '#6366f1' }} />
+                    <span className="font-mono text-xs text-gray-400 w-32 shrink-0">{t.slug}</span>
+                    {editingTypeId === t.id ? (
+                      <div className="flex items-center gap-2 flex-1 flex-wrap">
+                        <input
+                          className="input flex-1 py-1 text-sm min-w-[120px]"
+                          value={editingTypeLabel}
+                          onChange={e => setEditingTypeLabel(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleSaveTypeLabel(t.id); if (e.key === 'Escape') setEditingTypeId(null) }}
+                          autoFocus
+                        />
+                        <div className="flex gap-1 flex-wrap items-center">
+                          {['#3b82f6','#6366f1','#8b5cf6','#ec4899','#ef4444','#f97316','#f59e0b','#eab308','#10b981','#14b8a6','#06b6d4','#6b7280'].map(c => (
+                            <button key={c} type="button"
+                              onClick={() => setEditingTypeColor(c)}
+                              className={`w-5 h-5 rounded-full border-2 transition-transform hover:scale-110 ${editingTypeColor === c ? 'border-gray-800 scale-110' : 'border-transparent'}`}
+                              style={{ backgroundColor: c }}
+                              title={c}
+                            />
+                          ))}
+                          <input type="color" value={editingTypeColor}
+                            onChange={e => setEditingTypeColor(e.target.value)}
+                            className="w-6 h-6 rounded cursor-pointer border border-gray-300 p-0"
+                            title="Custom color" />
+                        </div>
+                        <button className="btn-primary py-1 px-3 text-sm" onClick={() => handleSaveTypeLabel(t.id)}><Save size={13} />Save</button>
+                        <button className="btn-secondary py-1 px-3 text-sm" onClick={() => setEditingTypeId(null)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <span className="flex-1 text-sm font-medium">{t.label}</span>
+                    )}
+                    {editingTypeId !== t.id && (
+                      <div className="flex gap-1 shrink-0">
+                        <button className="action-icon-btn" onClick={() => { setEditingTypeId(t.id); setEditingTypeLabel(t.label); setEditingTypeColor(t.color || '#6366f1') }}><Pencil size={13} /></button>
+                        <button className="action-icon-btn action-icon-btn-danger" onClick={() => setDeleteTargetType(t)}><Trash2 size={13} /></button>
+                      </div>
+                    )}
                   </div>
                 ))}
-                {templates.length === 0 && <p className="text-center text-gray-500 py-8">No templates</p>}
+                {mTypes.length === 0 && <p className="text-center text-gray-400 py-8 text-sm">No types configured</p>}
               </div>
-            </div>
-
-            {/* ── Notification email templates ── */}
-            <div className="border-t border-gray-200 pt-6 space-y-4">
-              <div>
-                <h3 className="text-base font-semibold text-gray-700 flex items-center gap-2"><FileCode size={16} />Email Notification Templates</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Customize the HTML templates for notification emails sent for each event. Use variables to insert dynamic data.
-                </p>
-              </div>
-
-              {notifTemplates.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {notifTemplates.map(t => (
-                    <button key={t.id} onClick={() => selectNotifTemplate(t)}
-                      className={`text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
-                        selectedNotifId === t.id
-                          ? 'border-brand-500 bg-brand-50 text-brand-700 font-medium'
-                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                      }`}>
-                      {t.name || t.event_type}
-                      <span className={`ml-1 text-xs font-normal ${t.is_active ? 'text-green-500' : 'text-gray-400'}`}>
-                        {t.is_active ? '●' : '○'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {selectedNotifId && (() => {
-                const tpl = notifTemplates.find(t => t.id === selectedNotifId)
-                return (
-                  <div className="card p-5 space-y-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="font-semibold text-gray-700">{tpl?.name || tpl?.event_type}</p>
-                        <p className="text-xs text-gray-400 font-mono mt-0.5">{tpl?.event_type}</p>
-                      </div>
-                      <button type="button" onClick={() => setNotifPreview(v => !v)}
-                        className="text-xs border border-gray-300 rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-100 flex items-center gap-1.5">
-                        <Eye size={13} />{notifPreview ? 'Edit' : 'Preview'}
-                      </button>
-                    </div>
-
-                    {/* Subject */}
-                    <div className="space-y-1">
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Email subject</label>
-                      <input className="input font-mono text-sm"
-                        value={notifForm.subject_template}
-                        onChange={e => { setNotifForm(f => ({ ...f, subject_template: e.target.value })); setNotifDirty(true) }}
-                        placeholder="[GB Maintenance] {{title}}" />
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {NOTIF_VARIABLES.slice(0, 5).map(v => (
-                          <button key={v.key} type="button" title={v.desc}
-                            onClick={() => { setNotifForm(f => ({ ...f, subject_template: f.subject_template + v.key })); setNotifDirty(true) }}
-                            className="font-mono text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-0.5 hover:bg-blue-100 transition-colors">
-                            {v.key}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <hr className="border-gray-100" />
-
-                    {/* Body HTML */}
-                    <div>
-                      <p className="text-sm text-gray-500 mb-2">HTML body — available variables:</p>
-                      <div className="flex flex-wrap gap-1.5 mb-3">
-                        {NOTIF_VARIABLES.map(v => (
-                          <button key={v.key} type="button" title={v.desc}
-                            onClick={() => {
-                              if (!notifPreview) {
-                                setNotifForm(f => ({ ...f, body_html_template: f.body_html_template + v.key }))
-                                setNotifDirty(true)
-                              }
-                            }}
-                            className="font-mono text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-0.5 hover:bg-blue-100 transition-colors">
-                            {v.key}
-                          </button>
-                        ))}
-                      </div>
-
-                      {notifPreview ? (
-                        <div className="border border-gray-200 rounded-lg p-4 min-h-[280px] overflow-auto bg-white"
-                          dangerouslySetInnerHTML={{ __html: notifForm.body_html_template
-                            .replace(/{{title}}/g, 'Production server maintenance')
-                            .replace(/{{id}}/g, '42')
-                            .replace(/{{type}}/g, 'planned')
-                            .replace(/{{impact_level}}/g, 'high')
-                            .replace(/{{status}}/g, 'scheduled')
-                            .replace(/{{scheduled_start}}/g, new Date().toISOString())
-                            .replace(/{{scheduled_end}}/g, new Date(Date.now() + 3600000).toISOString())
-                            .replace(/{{actual_start}}/g, '')
-                            .replace(/{{actual_end}}/g, '')
-                            .replace(/{{description}}/g, 'Operating system update and security patches.')
-                            .replace(/{{notes}}/g, 'Check services after the window.')
-                            .replace(/{{app_url}}/g, window.location.origin)
-                          }}
-                        />
-                      ) : (
-                        <textarea
-                          className="w-full font-mono text-xs border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"
-                          rows={16} value={notifForm.body_html_template} spellCheck={false}
-                          onChange={e => { setNotifForm(f => ({ ...f, body_html_template: e.target.value })); setNotifDirty(true) }}
-                        />
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <button type="button" onClick={saveNotifTemplate} disabled={notifSaving || !notifDirty}
-                        className="btn-primary flex items-center gap-2 disabled:opacity-50">
-                        <Save size={14} />{notifSaving ? 'Saving...' : 'Save template'}
-                      </button>
-                      <button type="button"
-                        onClick={() => {
-                          const orig = notifTemplates.find(t => t.id === selectedNotifId)
-                          if (orig) { setNotifForm({ subject_template: orig.subject_template || '', body_html_template: orig.body_html_template || '' }); setNotifDirty(false) }
-                        }}
-                        className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50">
-                        <RotateCcw size={13} />Reset
-                      </button>
-                    </div>
-                  </div>
-                )
-              })()}
             </div>
           </div>
         )}
@@ -836,12 +815,416 @@ export default function Settings() {
           </div>
         )}
 
+        {tab === 'emailtpl' && (() => {
+          const TPL_VARS = {
+            maintenance_scheduled: [
+              { key: 'title', desc: 'Maintenance title' },
+              { key: 'type', desc: 'Type (planned, emergency…)' },
+              { key: 'impact_level', desc: 'Impact level (critical, high…)' },
+              { key: 'scheduled_start', desc: 'Scheduled start date/time' },
+              { key: 'scheduled_end', desc: 'Scheduled end date/time' },
+              { key: 'description', desc: 'Description' },
+              { key: 'id', desc: 'Maintenance ID (UUID)' },
+              { key: 'app_url', desc: 'Application base URL' },
+            ],
+            maintenance_reminder: [
+              { key: 'title', desc: 'Maintenance title' },
+              { key: 'time_before', desc: 'Time remaining (e.g. "2 hours")' },
+              { key: 'scheduled_start', desc: 'Scheduled start date/time' },
+              { key: 'scheduled_end', desc: 'Scheduled end date/time' },
+              { key: 'id', desc: 'Maintenance ID (UUID)' },
+              { key: 'app_url', desc: 'Application base URL' },
+            ],
+            maintenance_started: [
+              { key: 'title', desc: 'Maintenance title' },
+              { key: 'actual_start', desc: 'Actual start date/time' },
+              { key: 'scheduled_end', desc: 'Scheduled end date/time' },
+              { key: 'id', desc: 'Maintenance ID (UUID)' },
+              { key: 'app_url', desc: 'Application base URL' },
+            ],
+            maintenance_completed: [
+              { key: 'title', desc: 'Maintenance title' },
+              { key: 'actual_end', desc: 'Actual end date/time' },
+              { key: 'notes', desc: 'Closure notes' },
+              { key: 'id', desc: 'Maintenance ID (UUID)' },
+              { key: 'app_url', desc: 'Application base URL' },
+            ],
+            incident_created: [
+              { key: 'title', desc: 'Incident title' },
+              { key: 'severity', desc: 'Severity (critical, high…)' },
+              { key: 'status', desc: 'Current status' },
+              { key: 'description', desc: 'Description' },
+              { key: 'started_at', desc: 'Start date/time' },
+              { key: 'id', desc: 'Incident ID (UUID)' },
+              { key: 'app_url', desc: 'Application base URL' },
+            ],
+            incident_resolved: [
+              { key: 'title', desc: 'Incident title' },
+              { key: 'resolved_at', desc: 'Resolution date/time' },
+              { key: 'id', desc: 'Incident ID (UUID)' },
+              { key: 'app_url', desc: 'Application base URL' },
+            ],
+            license_approval_requested: [
+              { key: 'license_name', desc: 'License name' },
+              { key: 'supplier_company', desc: 'Supplier company' },
+              { key: 'expiry_date', desc: 'License expiry date' },
+              { key: 'renewal_date', desc: 'License renewal date' },
+              { key: 'approval_url', desc: 'Public approval page URL' },
+              { key: 'expires_at', desc: 'Approval link expiration date/time' },
+              { key: 'approver_email', desc: 'Recipient approver email' },
+              { key: 'license_id', desc: 'License ID (UUID)' },
+              { key: 'app_url', desc: 'Application base URL' },
+            ],
+            license_approved: [
+              { key: 'license_name', desc: 'License name' },
+              { key: 'supplier_company', desc: 'Supplier company' },
+              { key: 'approval_status', desc: 'Current approval status' },
+              { key: 'acted_by', desc: 'Who approved the license' },
+              { key: 'approved_at', desc: 'Approval date/time' },
+              { key: 'license_id', desc: 'License ID (UUID)' },
+              { key: 'app_url', desc: 'Application base URL' },
+            ],
+            license_rejected: [
+              { key: 'license_name', desc: 'License name' },
+              { key: 'supplier_company', desc: 'Supplier company' },
+              { key: 'approval_status', desc: 'Current approval status' },
+              { key: 'acted_by', desc: 'Who rejected the license' },
+              { key: 'rejected_at', desc: 'Rejection date/time' },
+              { key: 'rejection_reason', desc: 'Rejection reason' },
+              { key: 'license_id', desc: 'License ID (UUID)' },
+              { key: 'app_url', desc: 'Application base URL' },
+            ],
+          }
+
+          const SAMPLE_VARS = {
+            title: 'Database Server Upgrade',
+            type: 'planned',
+            impact_level: 'high',
+            scheduled_start: '12/05/2026 22:00',
+            scheduled_end: '13/05/2026 02:00',
+            actual_start: '12/05/2026 22:05',
+            actual_end: '13/05/2026 01:47',
+            description: 'Upgrade del motore PostgreSQL dalla versione 15 alla 16.',
+            notes: 'Completato senza anomalie.',
+            time_before: '2 ore',
+            severity: 'critical',
+            status: 'investigating',
+            started_at: '12/05/2026 21:00',
+            resolved_at: '13/05/2026 00:30',
+            license_name: 'Microsoft SQL Server Enterprise',
+            supplier_company: 'Contoso Licensing',
+            approval_url: `${window.location.origin}/licenses/approval?token=demo-token`,
+            expires_at: '16/05/2026 18:00',
+            approver_email: 'approver@company.com',
+            approval_status: 'pending',
+            acted_by: 'system.approver',
+            approved_at: '14/05/2026 09:12',
+            rejected_at: '14/05/2026 10:21',
+            rejection_reason: 'Missing legal addendum',
+            license_id: 'yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy',
+            id: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+            app_url: window.location.origin,
+          }
+
+          function renderPreview(html) {
+            if (!html) return ''
+            return html.replace(/\{\{(\w+)\}\}/g, (_, k) => SAMPLE_VARS[k] ?? `{{${k}}}`)
+          }
+
+          const GROUP_ORDER = ['maintenance', 'license', 'incident', 'other']
+          const GROUP_LABELS = {
+            maintenance: 'Maintenance Templates',
+            license: 'License Templates',
+            incident: 'Incident Templates',
+            other: 'Other Templates',
+          }
+
+          const groupedTemplates = emailTemplates.reduce((acc, tpl) => {
+            const eventType = String(tpl.event_type || '')
+            const prefix = eventType.includes('_') ? eventType.split('_')[0] : eventType
+            const group = GROUP_ORDER.includes(prefix) ? prefix : 'other'
+            if (!acc[group]) acc[group] = []
+            acc[group].push(tpl)
+            return acc
+          }, {})
+
+          const orderedGroups = GROUP_ORDER
+            .map(group => ({ group, templates: groupedTemplates[group] || [] }))
+            .filter(g => g.templates.length > 0)
+
+          return (
+            <div className="space-y-4">
+              <Section title="Email Templates">
+                <p className="text-sm text-gray-500">Customize the subject and body of automated emails for each event. Use <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs">{'{{variable}}'}</code> placeholders — preview uses sample data.</p>
+                <div className="space-y-4">
+                  {orderedGroups.map(({ group, templates }) => (
+                    <div key={group} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                      <button
+                        type="button"
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700/50 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        onClick={() => setExpandedTplGroups(prev => ({ ...prev, [group]: !prev[group] }))}
+                      >
+                        <div className="flex items-center gap-2">
+                          {expandedTplGroups[group] ? <ChevronDown size={15} className="text-gray-500" /> : <ChevronRight size={15} className="text-gray-500" />}
+                          <h3 className="font-semibold text-sm">{GROUP_LABELS[group] || GROUP_LABELS.other}</h3>
+                        </div>
+                        <span className="text-xs text-gray-500">{templates.length} template{templates.length > 1 ? 's' : ''}</span>
+                      </button>
+                      {expandedTplGroups[group] && (
+                        <div className="p-3 space-y-3">
+                          {templates.map(tpl => (
+                            <div key={tpl.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                            {/* Header row */}
+                            <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
+                              <div className="flex items-center gap-3">
+                                <span className="font-medium text-sm capitalize">{tpl.event_type?.replace(/_/g, ' ')}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tpl.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {tpl.is_active ? 'Active' : 'Disabled'}
+                                </span>
+                              </div>
+                              <button
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+                                onClick={() => setEditingTpl(editingTpl?.id === tpl.id ? null : { ...tpl, _tab: 'edit' })}>
+                                <Pencil size={13} />{editingTpl?.id === tpl.id ? 'Close' : 'Edit'}
+                              </button>
+                            </div>
+
+                            {/* Collapsed: show subject preview */}
+                            {editingTpl?.id !== tpl.id && (
+                              <div className="px-4 py-2">
+                                <p className="text-xs text-gray-500 font-mono truncate">{tpl.subject_template || <span className="italic text-gray-300">No subject</span>}</p>
+                              </div>
+                            )}
+
+                            {/* Expanded editor */}
+                            {editingTpl?.id === tpl.id && (
+                              <div className="p-4 space-y-4">
+                                {/* Active toggle */}
+                                <div className="flex items-center gap-3">
+                                  <label className="text-sm font-medium w-16">Active</label>
+                                  <button type="button"
+                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${editingTpl.is_active ? 'bg-brand-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                    onClick={() => setEditingTpl(t => ({ ...t, is_active: !t.is_active }))}>
+                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${editingTpl.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                                  </button>
+                                </div>
+
+                                {/* Subject */}
+                                <div>
+                                  <label className="block text-sm font-medium mb-1">Subject</label>
+                                  <input className="input font-mono text-sm" value={editingTpl.subject_template || ''}
+                                    onChange={e => setEditingTpl(t => ({ ...t, subject_template: e.target.value }))} />
+                                  {editingTpl.subject_template && (
+                                    <p className="text-xs text-gray-400 mt-1 font-mono truncate">Preview: {renderPreview(editingTpl.subject_template)}</p>
+                                  )}
+                                </div>
+
+                                {/* Body editor + preview side by side */}
+                                <div>
+                                  <div className="flex gap-2 mb-1">
+                                    <button className={`text-xs px-2.5 py-1 rounded font-medium border transition-colors ${(editingTpl._tab ?? 'edit') === 'edit' ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-300 text-gray-500 hover:border-gray-400'}`}
+                                      onClick={() => setEditingTpl(t => ({ ...t, _tab: 'edit' }))}>HTML Source</button>
+                                    <button className={`text-xs px-2.5 py-1 rounded font-medium border transition-colors ${editingTpl._tab === 'preview' ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-300 text-gray-500 hover:border-gray-400'}`}
+                                      onClick={() => setEditingTpl(t => ({ ...t, _tab: 'preview' }))}>Preview</button>
+                                    <button className={`text-xs px-2.5 py-1 rounded font-medium border transition-colors ${editingTpl._tab === 'vars' ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-300 text-gray-500 hover:border-gray-400'}`}
+                                      onClick={() => setEditingTpl(t => ({ ...t, _tab: 'vars' }))}>Variables</button>
+                                  </div>
+
+                                  {(editingTpl._tab ?? 'edit') === 'edit' && (
+                                    <textarea className="input font-mono text-xs w-full" rows={10} value={editingTpl.body_html_template || ''}
+                                      onChange={e => setEditingTpl(t => ({ ...t, body_html_template: e.target.value }))} />
+                                  )}
+
+                                  {editingTpl._tab === 'preview' && (
+                                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white" style={{ height: 380 }}>
+                                      <iframe
+                                        key={editingTpl.body_html_template}
+                                        srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:14px;padding:16px;margin:0;color:#111;background:#fff}</style></head><body>${renderPreview(editingTpl.body_html_template || '')}</body></html>`}
+                                        sandbox="allow-same-origin"
+                                        className="w-full h-full border-0"
+                                        title="Email preview"
+                                      />
+                                    </div>
+                                  )}
+
+                                  {editingTpl._tab === 'vars' && (
+                                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-gray-50 dark:bg-gray-700/50">
+                                          <tr>
+                                            <th className="text-left px-3 py-2 font-semibold text-gray-600 dark:text-gray-300 w-44">Variable</th>
+                                            <th className="text-left px-3 py-2 font-semibold text-gray-600 dark:text-gray-300">Description</th>
+                                            <th className="text-left px-3 py-2 font-semibold text-gray-600 dark:text-gray-300">Sample value</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                          {(TPL_VARS[editingTpl.event_type] || []).map(v => (
+                                            <tr key={v.key}>
+                                              <td className="px-3 py-2">
+                                                <button
+                                                  className="font-mono bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded hover:bg-indigo-100 transition-colors"
+                                                  title="Click to copy"
+                                                  onClick={() => navigator.clipboard?.writeText(`{{${v.key}}}`)}>
+                                                  {`{{${v.key}}}`}
+                                                </button>
+                                              </td>
+                                              <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{v.desc}</td>
+                                              <td className="px-3 py-2 text-gray-400 font-mono">{SAMPLE_VARS[v.key] ?? '—'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Actions */}
+                                <div className="flex justify-end gap-2">
+                                  <button className="btn-secondary text-sm" onClick={() => setEditingTpl(null)}>Cancel</button>
+                                  <button className="btn-primary text-sm" onClick={async () => {
+                                    try {
+                                      await notificationsApi.updateTemplate(editingTpl.id, {
+                                        subject_template: editingTpl.subject_template,
+                                        body_html_template: editingTpl.body_html_template,
+                                        is_active: editingTpl.is_active,
+                                      })
+                                      toast.success('Template saved')
+                                      setEditingTpl(null)
+                                      notificationsApi.templates().then(r => setEmailTemplates(r.data))
+                                    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
+                                  }}><Save size={14} />Save</button>
+                                </div>
+                              </div>
+                            )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {emailTemplates.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">No email templates found</p>}
+                </div>
+              </Section>
+            </div>
+          )
+        })()}
+
+        {tab === 'assetcat' && (
+          <div className="space-y-4">
+            <div className="card p-4 sm:p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold text-base">Asset Categories</h2>
+                <button className="btn-primary flex items-center gap-1.5 text-sm" onClick={() => { setShowCreateCat(true); setCatError(''); setCatForm({ label: '', color: '#6366f1' }) }}>
+                  <Plus size={14} /> New Category
+                </button>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                {aCats.map(cat => (
+                  <div key={cat.id} className="py-3">
+                    {editingCatId === cat.id ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: editingCatColor }} />
+                        <input className="input flex-1 min-w-0" value={editingCatLabel} onChange={e => setEditingCatLabel(e.target.value)} autoFocus />
+                        <div className="flex gap-1 flex-wrap items-center">
+                          {TYPE_COLORS.map(c => (
+                            <button key={c} type="button" onClick={() => setEditingCatColor(c)}
+                              className={`w-5 h-5 rounded-full border-2 transition-transform hover:scale-110 ${editingCatColor === c ? 'border-gray-800 scale-110' : 'border-transparent'}`}
+                              style={{ backgroundColor: c }} title={c} />
+                          ))}
+                          <input type="color" value={editingCatColor} onChange={e => setEditingCatColor(e.target.value)}
+                            className="w-6 h-6 rounded cursor-pointer border border-gray-300 p-0" title="Custom color" />
+                        </div>
+                        <button className="btn-primary text-xs px-2 py-1" onClick={() => handleSaveCat(cat.id)}>Save</button>
+                        <button className="btn-secondary text-xs px-2 py-1" onClick={() => setEditingCatId(null)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                        <span className="font-medium text-sm flex-1">{cat.label}</span>
+                        <span className="text-xs text-gray-400 font-mono">{cat.slug}</span>
+                        <button className="action-icon-btn"
+                          onClick={() => { setEditingCatId(cat.id); setEditingCatLabel(cat.label); setEditingCatColor(cat.color) }}>
+                          <Pencil size={13} />
+                        </button>
+                        <button className="action-icon-btn action-icon-btn-danger"
+                          onClick={() => setDeleteTargetCat(cat)}>
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {aCats.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">No categories yet.</p>}
+              </div>
+            </div>
+
+            {showCreateCat && (
+              <Modal title="New Asset Category" onClose={() => setShowCreateCat(false)}>
+                <form onSubmit={handleCreateCat} className="space-y-4 p-4">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Label</label>
+                    <input className="input" value={catForm.label} onChange={e => setCatForm(f => ({ ...f, label: e.target.value }))} autoFocus required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-2">Color</label>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="w-6 h-6 rounded-full border border-gray-300 shadow-sm flex-shrink-0" style={{ backgroundColor: catForm.color }} />
+                      {TYPE_COLORS.map(c => (
+                        <button key={c} type="button" onClick={() => setCatForm(f => ({ ...f, color: c }))}
+                          className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${catForm.color === c ? 'border-gray-800 scale-110' : 'border-transparent'}`}
+                          style={{ backgroundColor: c }} title={c} />
+                      ))}
+                      <input type="color" value={catForm.color} onChange={e => setCatForm(f => ({ ...f, color: e.target.value }))}
+                        className="w-7 h-7 rounded cursor-pointer border border-gray-300 p-0" title="Custom color" />
+                    </div>
+                  </div>
+                  {catError && <p className="text-sm text-red-500">{catError}</p>}
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button type="button" className="btn-secondary" onClick={() => setShowCreateCat(false)}>Cancel</button>
+                    <button type="submit" className="btn-primary">Create</button>
+                  </div>
+                </form>
+              </Modal>
+            )}
+
+            {deleteTargetCat && (
+              <ConfirmDialog
+                title="Delete Category"
+                message={`Delete "${deleteTargetCat.label}"? This cannot be undone.`}
+                onConfirm={handleDeleteCat}
+                onCancel={() => setDeleteTargetCat(null)}
+              />
+            )}
+          </div>
+        )}
+
         {tab === 'general' && (
           <div className="space-y-6">
             <Section title="General settings">
               <form onSubmit={saveGeneral} className="space-y-3">
                 <div><label className="block text-xs font-medium mb-1">Application name</label><input className="input" value={general.app_name || ''} onChange={e => setGeneral(f => ({ ...f, app_name: e.target.value }))} /></div>
                 <div><label className="block text-xs font-medium mb-1">Application URL</label><input className="input" placeholder="https://maintenance.example.com" value={general.app_url || ''} onChange={e => setGeneral(f => ({ ...f, app_url: e.target.value }))} /></div>
+                <div>
+                  <label className="block text-xs font-medium mb-1">App image (logo, tab icon, app icon)</label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-sm">
+                      <Upload size={14} />{appBrandUploading ? 'Uploading...' : 'Upload image'}
+                      <input type="file" accept="image/*" className="hidden" disabled={appBrandUploading} onChange={e => uploadAppBrandImage(e.target.files?.[0])} />
+                    </label>
+                    {general.app_brand_image_url && (
+                      <button type="button" className="px-3 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 text-sm" onClick={() => setGeneral(f => ({ ...f, app_brand_image_url: '' }))}>
+                        Remove image
+                      </button>
+                    )}
+                  </div>
+                  {general.app_brand_image_url && (
+                    <div className="mt-2 inline-flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 p-2.5">
+                      <img src={general.app_brand_image_url} alt="App brand" className="w-10 h-10 object-contain rounded bg-white" />
+                      <span className="text-xs text-gray-500 break-all max-w-[340px]">{general.app_brand_image_url}</span>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-400 mt-1">Used for sidebar logo, browser tab favicon and app icon.</p>
+                </div>
                 <div className="flex justify-end pt-2">
                   <button type="submit" className="btn-primary">Save</button>
                 </div>
@@ -886,11 +1269,9 @@ export default function Settings() {
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-xs font-medium mb-1">Notes</label>
-                  <textarea className="input" rows={3} placeholder="Optional notes about this configuration..."
-                    value={ntp.note || ''}
-                    onChange={e => { setNtp(n => ({ ...n, note: e.target.value })); setNtpDirty(true) }} />
+                <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 text-sm text-amber-800 dark:text-amber-200">
+                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                  <span>The timezone is applied immediately to the running process and persisted in the database (survives restarts). The <strong>Query NTP</strong> button checks reachability and reports the offset between the NTP server clock and the server's system clock — it does not modify the system clock (use your OS/Docker host NTP daemon for that).</span>
                 </div>
 
                 <div className="flex justify-end pt-1">
@@ -905,33 +1286,55 @@ export default function Settings() {
         )}
       </div>
 
-      {/* Template modals */}
-      {showCreateTemplate && (
-        <Modal title="New Template" onClose={() => setShowCreateTemplate(false)}>
-          <form onSubmit={handleCreateTemplate} className="space-y-4">
-            <div><label className="block text-sm font-medium mb-1">Name *</label><input className="input" required value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Type</label>
-                <select className="input" value={templateForm.type} onChange={e => setTemplateForm(f => ({ ...f, type: e.target.value }))}>
-                  {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select></div>
-              <div><label className="block text-sm font-medium mb-1">Impact</label>
-                <select className="input" value={templateForm.impact_level} onChange={e => setTemplateForm(f => ({ ...f, impact_level: e.target.value }))}>
-                  {IMPACTS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select></div>
+      {/* Maintenance Types modals */}
+      {showCreateType && (
+        <Modal title="New Maintenance Type" onClose={() => setShowCreateType(false)}>
+          <form onSubmit={handleCreateType} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Label *</label>
+              <input className="input" placeholder="e.g. Security Patch" value={typeForm.label}
+                onChange={e => {
+                  const label = e.target.value
+                  const slug = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+                  setTypeForm(f => ({ ...f, label, slug }))
+                }} />
             </div>
-            <div><label className="block text-sm font-medium mb-1">Duration (min)</label><input className="input" type="number" min="1" value={templateForm.duration_minutes} onChange={e => setTemplateForm(f => ({ ...f, duration_minutes: parseInt(e.target.value) }))} /></div>
-            <div><label className="block text-sm font-medium mb-1">Description</label><textarea className="input" rows={2} value={templateForm.description} onChange={e => setTemplateForm(f => ({ ...f, description: e.target.value }))} /></div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Slug (permanent key)</label>
+              <input className="input font-mono text-sm" placeholder="security_patch" value={typeForm.slug}
+                onChange={e => setTypeForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') }))} />
+              <p className="text-xs text-gray-400 mt-1">Auto-generated from label. Cannot be changed after creation.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Color</label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="w-6 h-6 rounded-full border border-gray-300 shadow-sm flex-shrink-0" style={{ backgroundColor: typeForm.color }} />
+                {TYPE_COLORS.map(c => (
+                  <button key={c} type="button"
+                    onClick={() => setTypeForm(f => ({ ...f, color: c }))}
+                    className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 ${typeForm.color === c ? 'border-gray-800 scale-110' : 'border-transparent'}`}
+                    style={{ backgroundColor: c }}
+                    title={c}
+                  />
+                ))}
+                <input type="color" value={typeForm.color}
+                  onChange={e => setTypeForm(f => ({ ...f, color: e.target.value }))}
+                  className="w-7 h-7 rounded cursor-pointer border border-gray-300 p-0"
+                  title="Custom color" />
+              </div>
+            </div>
+            {typeError && <p className="text-sm text-red-600">{typeError}</p>}
             <div className="flex justify-end gap-3">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreateTemplate(false)}>Cancel</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreateType(false)}>Cancel</button>
               <button type="submit" className="btn-primary">Create</button>
             </div>
           </form>
         </Modal>
       )}
-      {deleteTargetTemplate && (
-        <ConfirmDialog title="Delete Template" message={`Delete "${deleteTargetTemplate.name}"?`} danger confirmLabel="Delete"
-          onConfirm={handleDeleteTemplate} onCancel={() => setDeleteTargetTemplate(null)} />
+      {deleteTargetType && (
+        <ConfirmDialog title="Delete Type" danger confirmLabel="Delete"
+          message={`Delete type "${deleteTargetType.label}" (${deleteTargetType.slug})? This will fail if any maintenance windows use it.`}
+          onConfirm={handleDeleteType} onCancel={() => setDeleteTargetType(null)} />
       )}
 
       {/* API Keys modals */}

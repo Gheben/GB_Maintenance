@@ -6,7 +6,7 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
   const [open, setOpen] = useState(false)
 
   const filtered = allItems.filter(item =>
-    item[nameKey].toLowerCase().includes(search.toLowerCase())
+    String(item?.[nameKey] || '').toLowerCase().includes(search.toLowerCase())
   )
   const selected = allItems.filter(i => selectedIds.includes(i.id))
 
@@ -14,8 +14,8 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <label className="block text-sm font-medium">{label}</label>
-        <button type="button" onClick={() => setOpen(o => !o)} className="text-xs text-brand-600 hover:underline flex items-center gap-1">
-          {open ? <><ChevronUp size={13}/> Chiudi</> : <><ChevronDown size={13}/> Seleziona</>}
+        <button type="button" onClick={() => setOpen(o => !o)} className="action-text-btn">
+          {open ? <><ChevronUp size={13}/> Close</> : <><ChevronDown size={13}/> Select</>}
         </button>
       </div>
 
@@ -38,7 +38,7 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
               <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 className="input pl-7 py-1 text-sm"
-                placeholder="Cerca..."
+                placeholder="Search..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -46,7 +46,7 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
           </div>
           <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
             {filtered.length === 0 ? (
-              <div className="text-center py-4 text-sm text-gray-500">Nessun risultato</div>
+              <div className="text-center py-4 text-sm text-gray-500">No results</div>
             ) : filtered.map(item => (
               <label key={item.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-sm">
                 <input

@@ -28,6 +28,12 @@
   }
 }
 
+/* Recharts: remove selection outline */
+.recharts-wrapper,
+.recharts-surface {
+  outline: none !important;
+}
+
 @layer components {
   .btn {
     @apply inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
@@ -49,5 +55,23 @@
   }
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .action-icon-btn {
+    @apply inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-500 shadow-sm transition-all hover:-translate-y-px hover:border-gray-300 hover:bg-gray-50 hover:text-gray-800 hover:shadow dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-100;
+  }
+  .action-icon-btn-danger {
+    @apply hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:hover:border-red-700 dark:hover:bg-red-900/30 dark:hover:text-red-300;
+  }
+  .action-icon-btn-success {
+    @apply hover:border-green-200 hover:bg-green-50 hover:text-green-600 dark:hover:border-green-700 dark:hover:bg-green-900/30 dark:hover:text-green-300;
+  }
+  .action-icon-btn-warn {
+    @apply hover:border-amber-200 hover:bg-amber-50 hover:text-amber-600 dark:hover:border-amber-700 dark:hover:bg-amber-900/30 dark:hover:text-amber-300;
+  }
+  .action-text-btn {
+    @apply inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-gray-100;
+  }
+  .action-link {
+    @apply inline-flex items-center gap-1.5 font-medium text-gray-700 transition-colors hover:text-gray-900 dark:text-gray-200 dark:hover:text-white;
   }
 }

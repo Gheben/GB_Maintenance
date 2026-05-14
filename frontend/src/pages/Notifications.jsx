@@ -10,41 +10,52 @@ export default function Notifications() {
   const [log, setLog] = useState([])
   const [logTotal, setLogTotal] = useState(0)
   const [logPage, setLogPage] = useState(1)
+  const [logLimit, setLogLimit] = useState(25)
   const [tab, setTab] = useState('inapp')
 
   useEffect(() => { fetchNotifications() }, [])
   useEffect(() => {
     if (tab === 'log') {
-      notificationsApi.log({ page: logPage, limit: 30 }).then(r => { setLog(r.data.data); setLogTotal(r.data.total) })
+      notificationsApi.log({ page: logPage, limit: logLimit }).then(r => { setLog(r.data.data); setLogTotal(r.data.total) })
     }
-  }, [tab, logPage])
+  }, [tab, logPage, logLimit])
 
   return (
     <Layout title="Notifications">
-      <div className="max-w-3xl space-y-4">
-        <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
-          {[['inapp','In-app'],['log','Notification log']].map(([k,l]) => (
-            <button key={k} onClick={() => setTab(k)}
-              className={`px-4 py-2 text-sm font-medium ${tab === k ? 'border-b-2 border-brand-600 text-brand-600' : 'text-gray-500 hover:text-gray-700'}`}>{l}</button>
-          ))}
+      <div className="space-y-4">
+        <div className="py-2 -mx-4 sm:mx-0 px-4 sm:px-0 border-b border-gray-200 dark:border-gray-700">
+          <nav className="flex flex-wrap gap-1.5">
+            {[['inapp','In-app'],['log','Notification log']].map(([k,l]) => (
+              <button key={k} onClick={() => setTab(k)}
+                className={`px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                  tab === k ? 'bg-brand-600 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700/50 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}>{l}</button>
+            ))}
+          </nav>
         </div>
 
         {tab === 'inapp' && (
           <div className="card overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
               <span className="text-sm font-medium">{unreadCount} unread</span>
-              {unreadCount > 0 && <button className="text-xs text-brand-600 hover:underline" onClick={markAllRead}>Mark all read</button>}
+              {unreadCount > 0 && <button className="action-text-btn" onClick={markAllRead}>Mark all read</button>}
             </div>
-            <div className="divide-y divide-gray-100 dark:divide-gray-700">
+            <div className="p-2 space-y-2">
               {notifications.length === 0 && <p className="text-center text-gray-500 py-8 text-sm">No notifications</p>}
-              {notifications.map(n => (
-                <div key={n.id} onClick={() => !n.is_read && markRead([n.id])}
-                  className={`px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 ${!n.is_read ? 'bg-blue-50 dark:bg-blue-950/30' : ''}`}>
-                  <p className="text-sm font-medium">{n.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{n.message}</p>
-                  <p className="text-[11px] text-gray-400 mt-1">{format(new Date(n.created_at), 'MMM dd HH:mm')}</p>
-                </div>
-              ))}
+              {notifications.map(n => {
+                const message = String(n.message || '').trim()
+                const showMessage = message && message !== '-'
+                return (
+                  <div key={n.id} onClick={() => !n.is_read && markRead([n.id])}
+                    className={`px-3 py-2.5 rounded-xl border cursor-pointer transition-colors ${!n.is_read ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900/40' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700'} hover:bg-gray-50 dark:hover:bg-gray-700/50`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold leading-5">{n.title}</p>
+                      <p className="text-[11px] text-gray-400 whitespace-nowrap pt-0.5">{format(new Date(n.created_at), 'MMM dd HH:mm')}</p>
+                    </div>
+                    {showMessage && <p className="text-xs text-gray-500 mt-1">{message}</p>}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -67,7 +78,7 @@ export default function Notifications() {
                 ))}
               </tbody>
             </table>
-            <div className="p-4"><Pagination page={logPage} limit={30} total={logTotal} onChange={setLogPage} /></div>
+            <div className="p-4"><Pagination page={logPage} limit={logLimit} total={logTotal} onChange={setLogPage} onLimitChange={setLogLimit} /></div>
           </div>
         )}
       </div>
