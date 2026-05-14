@@ -66,7 +66,7 @@ app.get('/api/docs.json', requireAuth, (req, res) => {
   const role  = req.user.role;
   const perms = req.user.permissions || {};
   if (role !== 'admin' && role !== 'superadmin' && !perms.api && !perms.apikeys) {
-    return res.status(403).json({ error: 'Accesso negato' });
+    return res.status(403).json({ error: 'Access denied' });
   }
   res.json(openApiSpec);
 });
@@ -193,24 +193,24 @@ app.get(['/docs', '/docs/'], (req, res) => {
     <h1>GB Maintenance &mdash; API Reference</h1>
     <span class="badge">v1</span>
     <a class="back-btn" id="back-btn" href="/">&#x2190; App</a>
-    <button class="download-btn" onclick="downloadPostman()" title="Scarica OpenAPI 3.0 per Postman">&#x2B07; Postman</button>
+    <button class="download-btn" onclick="downloadPostman()" title="Download OpenAPI 3.0 for Postman">&#x2B07; Postman</button>
   </div>
 
   <div id="auth-banner">
     <div class="dot"></div>
-    <span>Autenticato come <strong id="auth-user"></strong> &mdash; token iniettato automaticamente.</span>
-    <button class="copy-btn" onclick="copyToken()">Copia token</button>
+    <span>Authenticated as <strong id="auth-user"></strong> &mdash; token injected automatically.</span>
+    <button class="copy-btn" onclick="copyToken()">Copy token</button>
   </div>
 
   <div id="no-auth-banner">
     <div class="dot"></div>
     <span>
-      Non autenticato. Clicca <strong>Authorize 🔓</strong> e incolla il tuo JWT, oppure
-      <a href="/" style="color:#fbbf24;text-decoration:underline">effettua il login</a> e torna qui &mdash; il token sarà iniettato in automatico.
-      &nbsp;&nbsp;<strong>Come ottenere il token:</strong>
+      Not authenticated. Click <strong>Authorize 🔓</strong> and paste your JWT, or
+      <a href="/" style="color:#fbbf24;text-decoration:underline">sign in</a> and come back &mdash; the token will be injected automatically.
+      &nbsp;&nbsp;<strong>How to get a token:</strong>
       POST <code style="background:#2a200a;padding:1px 6px;border-radius:4px">/api/auth/login</code>
-      con <code style="background:#2a200a;padding:1px 6px;border-radius:4px">{"username":"…","password":"…"}</code>
-      e copia il campo <code style="background:#2a200a;padding:1px 6px;border-radius:4px">token</code>.
+      with <code style="background:#2a200a;padding:1px 6px;border-radius:4px">{"username":"…","password":"…"}</code>
+      and copy the <code style="background:#2a200a;padding:1px 6px;border-radius:4px">token</code> field.
     </span>
   </div>
 
@@ -233,8 +233,8 @@ app.get(['/docs', '/docs/'], (req, res) => {
           '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f1117;font-family:system-ui,sans-serif;">',
           '  <div style="text-align:center;color:#f1f5f9;max-width:420px;padding:40px;">',
           '    <div style="font-size:64px;margin-bottom:16px;">&#x1F512;</div>',
-          '    <h1 style="margin:0 0 12px;font-size:28px;font-weight:700;color:#f87171;">Accesso negato</h1>',
-          '    <p style="color:#94a3b8;margin:0 0 28px;line-height:1.6;">Non hai i permessi per accedere alla documentazione API. Contatta un amministratore.</p>',
+          '    <h1 style="margin:0 0 12px;font-size:28px;font-weight:700;color:#f87171;">Access denied</h1>',
+          '    <p style="color:#94a3b8;margin:0 0 28px;line-height:1.6;">You do not have permission to access the API documentation. Contact an administrator.</p>',
           '    <a href="/" style="display:inline-block;padding:10px 28px;background:#1e40af;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Torna all&rsquo;App</a>',
           '  </div>',
           '</div>'
@@ -255,8 +255,8 @@ app.get(['/docs', '/docs/'], (req, res) => {
     function copyToken() {
       var t = getStoredToken(); if (!t) return;
       var btn = document.querySelector('.copy-btn');
-      var done = function() { btn.textContent = 'Copiato!'; setTimeout(function(){ btn.textContent = 'Copia token'; }, 1500); };
-      var fail = function() { btn.textContent = 'Errore!';  setTimeout(function(){ btn.textContent = 'Copia token'; }, 1500); };
+      var done = function() { btn.textContent = 'Copied!'; setTimeout(function(){ btn.textContent = 'Copy token'; }, 1500); };
+      var fail = function() { btn.textContent = 'Error!';  setTimeout(function(){ btn.textContent = 'Copy token'; }, 1500); };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(t).then(done).catch(function(){ fallbackCopy(t, done, fail); });
       } else { fallbackCopy(t, done, fail); }
@@ -282,10 +282,10 @@ app.get(['/docs', '/docs/'], (req, res) => {
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a'); a.href = url; a.download = 'GBMaintenance_OpenAPI.json'; a.click();
         URL.revokeObjectURL(url);
-        btn.innerHTML = '&#x2705; Scaricato!';
+        btn.innerHTML = '&#x2705; Downloaded!';
         setTimeout(function(){ btn.innerHTML = orig; btn.disabled = false; }, 2000);
       } catch(e) {
-        btn.innerHTML = '&#x274C; Errore';
+        btn.innerHTML = '&#x274C; Error';
         setTimeout(function(){ btn.innerHTML = orig; btn.disabled = false; }, 2000);
       }
     }
@@ -295,7 +295,7 @@ app.get(['/docs', '/docs/'], (req, res) => {
       var user  = getStoredUser();
       if (token) {
         document.getElementById('auth-banner').classList.add('visible');
-        document.getElementById('auth-user').textContent = user || 'utente';
+        document.getElementById('auth-user').textContent = user || 'user';
       } else {
         document.getElementById('no-auth-banner').classList.add('visible');
         document.body.classList.add('not-authed');

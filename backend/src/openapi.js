@@ -7,62 +7,62 @@ const spec = {
     title: 'GB Maintenance API',
     version: '1.0.0',
     description: `
-## Autenticazione
+## Authentication
 
-La maggior parte degli endpoint richiede un **JWT Bearer token**.
+Most endpoints require a **JWT Bearer token**.
 
-**Come ottenere il token:**
+**How to get the token:**
 
 \`\`\`
 POST /api/auth/login
 { "username": "sysadmin", "password": "Ballarini1993!" }
 \`\`\`
 
-Copia il campo \`token\` dalla risposta, clicca **"Authorize"** (🔓) in cima a questa pagina e incollalo.
+Copy the \`token\` field from the response, click **"Authorize"** (🔓) at the top of this page, and paste it.
 
-Il token è valido per la durata impostata in \`JWT_EXPIRES_IN\` (default **8 ore**).
+The token is valid for the duration configured in \`JWT_EXPIRES_IN\` (default **8 hours**).
 
 ---
 
-### Gerarchia dei ruoli
+### Role hierarchy
 
-| Ruolo | Livello |
+| Role | Level |
 |---|---|
-| \`superadmin\` | Accesso totale |
-| \`admin\` | Gestione utenti, asset, servizi, manutenzioni, impostazioni |
-| \`change_manager\` | Approva/rifiuta manutenzioni |
-| \`operator\` | Crea e gestisce asset, servizi, manutenzioni, incidenti |
-| \`viewer\` | Sola lettura |
-| \`subscriber\` | Solo status page e notifiche |
+| \`superadmin\` | Full access |
+| \`admin\` | Manage users, assets, services, maintenance, settings |
+| \`change_manager\` | Approve/reject maintenance |
+| \`operator\` | Create and manage assets, services, maintenance, incidents |
+| \`viewer\` | Read-only |
+| \`subscriber\` | Status page and notifications only |
 
 ---
 
 ### API Keys
 
-In alternativa al JWT puoi usare una **API Key** nell'header:
+As an alternative to JWT, you can use an **API Key** in the header:
 \`\`\`
 X-Api-Key: gbm_your_api_key_here
 \`\`\`
 
-Le API key si creano da **Impostazioni → API Keys**.
+API keys are created from **Settings -> API Keys**.
     `,
   },
-  servers: [{ url: '/api', description: 'Server corrente' }],
+  servers: [{ url: '/api', description: 'Current server' }],
   tags: [
-    { name: 'Auth',          description: 'Autenticazione, sessioni, TOTP, SAML' },
-    { name: 'Users',         description: 'Gestione utenti' },
-    { name: 'Groups',        description: 'Gruppi locali e mappature LDAP' },
-    { name: 'Assets',        description: 'Asset aziendali (server, VM, servizi di rete…)' },
-    { name: 'Services',      description: 'Servizi applicativi' },
-    { name: 'Maintenance',   description: 'Finestre di manutenzione programmate e non' },
-    { name: 'Incidents',     description: 'Incidenti e aggiornamenti di stato' },
-    { name: 'Notifications', description: 'Notifiche in-app e log' },
-    { name: 'Settings',      description: 'Configurazione SMTP, LDAP, SAML, webhook, generali' },
-    { name: 'Status',        description: 'Status page pubblica' },
-    { name: 'Reports',       description: 'Report e dashboard' },
-    { name: 'Templates',     description: 'Template di manutenzione' },
-    { name: 'Blackout',      description: 'Periodi di blackout (manutenzioni vietate)' },
-    { name: 'ApiKeys',       description: 'API Keys per accesso programmatico' },
+    { name: 'Auth',          description: 'Authentication, sessions, TOTP, SAML' },
+    { name: 'Users',         description: 'User management' },
+    { name: 'Groups',        description: 'Local groups and LDAP mappings' },
+    { name: 'Assets',        description: 'Company assets (servers, VMs, network services)' },
+    { name: 'Services',      description: 'Application services' },
+    { name: 'Maintenance',   description: 'Scheduled and unscheduled maintenance windows' },
+    { name: 'Incidents',     description: 'Incidents and status updates' },
+    { name: 'Notifications', description: 'In-app notifications and logs' },
+    { name: 'Settings',      description: 'SMTP, LDAP, SAML, webhook, and general configuration' },
+    { name: 'Status',        description: 'Public status page' },
+    { name: 'Reports',       description: 'Reports and dashboard' },
+    { name: 'Templates',     description: 'Maintenance templates' },
+    { name: 'Blackout',      description: 'Blackout periods (maintenance not allowed)' },
+    { name: 'ApiKeys',       description: 'API Keys for programmatic access' },
     { name: 'Audit',         description: 'Audit log' },
   ],
   components: {
@@ -71,19 +71,19 @@ Le API key si creano da **Impostazioni → API Keys**.
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
-        description: 'JWT ottenuto da POST /api/auth/login',
+        description: 'JWT obtained from POST /api/auth/login',
       },
       apiKeyAuth: {
         type: 'apiKey',
         in: 'header',
         name: 'X-Api-Key',
-        description: 'API Key creata da Impostazioni → API Keys',
+        description: 'API Key created from Settings -> API Keys',
       },
     },
     schemas: {
       Error: {
         type: 'object',
-        properties: { error: { type: 'string', example: 'Non autorizzato' } },
+        properties: { error: { type: 'string', example: 'Unauthorized' } },
       },
       Ok: {
         type: 'object',
@@ -150,7 +150,7 @@ Le API key si creano da **Impostazioni → API Keys**.
         type: 'object',
         properties: {
           id:              { type: 'string', format: 'uuid' },
-          title:           { type: 'string', example: 'Aggiornamento kernel server web' },
+          title:           { type: 'string', example: 'Web server kernel update' },
           type:            { type: 'string', enum: ['planned','emergency','upgrade','security_patch','infrastructure','other'] },
           status:          { type: 'string', enum: ['draft','pending_approval','approved','in_progress','completed','cancelled'] },
           impact_level:    { type: 'string', enum: ['critical','high','medium','low'] },
@@ -165,7 +165,7 @@ Le API key si creano da **Impostazioni → API Keys**.
         type: 'object',
         properties: {
           id:          { type: 'string', format: 'uuid' },
-          title:       { type: 'string', example: 'Database non raggiungibile' },
+          title:       { type: 'string', example: 'Database unreachable' },
           status:      { type: 'string', enum: ['investigating','identified','monitoring','resolved'] },
           severity:    { type: 'string', enum: ['critical','high','medium','low'] },
           description: { type: 'string', nullable: true },
@@ -189,7 +189,7 @@ Le API key si creano da **Impostazioni → API Keys**.
         type: 'object',
         properties: {
           id:               { type: 'string', format: 'uuid' },
-          name:             { type: 'string', example: 'Patch mensile' },
+          name:             { type: 'string', example: 'Monthly patch' },
           type:             { type: 'string' },
           impact_level:     { type: 'string' },
           duration_minutes: { type: 'integer' },
@@ -200,7 +200,7 @@ Le API key si creano da **Impostazioni → API Keys**.
         type: 'object',
         properties: {
           id:          { type: 'string', format: 'uuid' },
-          name:        { type: 'string', example: 'Freeze natalizio' },
+          name:        { type: 'string', example: 'Christmas freeze' },
           start_date:  { type: 'string', format: 'date' },
           end_date:    { type: 'string', format: 'date' },
           description: { type: 'string', nullable: true },
@@ -214,7 +214,7 @@ Le API key si creano da **Impostazioni → API Keys**.
     // ─── AUTH ──────────────────────────────────────────────────────────────────
     '/auth/login': {
       post: {
-        tags: ['Auth'], summary: 'Login (locale o LDAP)',
+        tags: ['Auth'], summary: 'Login (local or LDAP)',
         security: [],
         requestBody: {
           required: true,
@@ -222,51 +222,51 @@ Le API key si creano da **Impostazioni → API Keys**.
             properties: {
               username:  { type: 'string', example: 'sysadmin' },
               password:  { type: 'string', example: 'Ballarini1993!' },
-              totp_code: { type: 'string', example: '123456', description: 'Richiesto se TOTP è abilitato' },
+              totp_code: { type: 'string', example: '123456', description: 'Required if TOTP is enabled' },
             },
           }}},
         },
         responses: {
-          200: { description: 'Login riuscito', content: { 'application/json': { schema: {
+          200: { description: 'Login successful', content: { 'application/json': { schema: {
             type: 'object', properties: {
               token: { type: 'string' },
               user:  { $ref: '#/components/schemas/User' },
-              totp_required: { type: 'boolean', description: 'Se true, fornire totp_code e ripetere' },
+              totp_required: { type: 'boolean', description: 'If true, provide totp_code and retry' },
             },
           }}}},
-          401: { description: 'Credenziali non valide' },
-          423: { description: 'Account bloccato (troppi tentativi)' },
+          401: { description: 'Invalid credentials' },
+          423: { description: 'Account locked (too many attempts)' },
         },
       },
     },
     '/auth/logout': {
-      post: { tags: ['Auth'], summary: 'Logout (revoca sessione corrente)',
+      post: { tags: ['Auth'], summary: 'Logout (revoke current session)',
         responses: { 200: { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Ok' } } } } },
       },
     },
     '/auth/me': {
-      get: { tags: ['Auth'], summary: 'Profilo utente corrente',
-        responses: { 200: { description: 'Utente', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } },
+      get: { tags: ['Auth'], summary: 'Current user profile',
+        responses: { 200: { description: 'User', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } },
       },
     },
     '/auth/change-password': {
-      post: { tags: ['Auth'], summary: 'Cambio password',
+      post: { tags: ['Auth'], summary: 'Change password',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['current_password','new_password'],
           properties: { current_password: { type: 'string' }, new_password: { type: 'string' } },
         }}}},
-        responses: { 200: { description: 'Password cambiata' }, 400: { description: 'Password attuale non corretta' } },
+        responses: { 200: { description: 'Password changed' }, 400: { description: 'Current password is incorrect' } },
       },
     },
     '/auth/sessions': {
-      get: { tags: ['Auth'], summary: 'Lista sessioni attive',
-        responses: { 200: { description: 'Sessioni', content: { 'application/json': { schema: { type: 'array', items: { type: 'object' } } } } } },
+      get: { tags: ['Auth'], summary: 'Active session list',
+        responses: { 200: { description: 'Sessions', content: { 'application/json': { schema: { type: 'array', items: { type: 'object' } } } } } },
       },
-      delete: { tags: ['Auth'], summary: 'Revoca tutte le sessioni',
-        responses: { 200: { description: 'Sessioni revocate' } },
+      delete: { tags: ['Auth'], summary: 'Revoke all sessions',
+        responses: { 200: { description: 'Sessions revoked' } },
       },
     },
     '/auth/totp/setup': {
-      post: { tags: ['Auth'], summary: 'Inizia setup TOTP — restituisce QR code e secret',
+      post: { tags: ['Auth'], summary: 'Start TOTP setup - returns QR code and secret',
         responses: { 200: { description: 'Setup TOTP', content: { 'application/json': { schema: {
           type: 'object', properties: { qr_url: { type: 'string' }, secret: { type: 'string' } },
         }}}},
@@ -274,43 +274,43 @@ Le API key si creano da **Impostazioni → API Keys**.
       },
     },
     '/auth/totp/verify': {
-      post: { tags: ['Auth'], summary: 'Verifica e attiva TOTP',
+      post: { tags: ['Auth'], summary: 'Verify and enable TOTP',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['token'],
           properties: { token: { type: 'string', example: '123456' } },
         }}}},
-        responses: { 200: { description: 'TOTP attivato' }, 400: { description: 'Codice non valido' } },
+        responses: { 200: { description: 'TOTP enabled' }, 400: { description: 'Invalid code' } },
       },
     },
     '/auth/totp/disable': {
-      post: { tags: ['Auth'], summary: 'Disabilita TOTP',
+      post: { tags: ['Auth'], summary: 'Disable TOTP',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['token'],
           properties: { token: { type: 'string' } },
         }}}},
-        responses: { 200: { description: 'TOTP disabilitato' } },
+        responses: { 200: { description: 'TOTP disabled' } },
       },
     },
     '/auth/saml/metadata': {
-      get: { tags: ['Auth'], summary: 'SP Metadata XML per configurazione IdP SAML', security: [],
+      get: { tags: ['Auth'], summary: 'SP Metadata XML for SAML IdP configuration', security: [],
         responses: { 200: { description: 'XML metadata', content: { 'application/xml': {} } } },
       },
     },
     '/auth/saml/login': {
-      get: { tags: ['Auth'], summary: 'Redirect a IdP SAML per login', security: [],
-        responses: { 302: { description: 'Redirect a IdP' } },
+      get: { tags: ['Auth'], summary: 'Redirect to SAML IdP for login', security: [],
+        responses: { 302: { description: 'Redirect to IdP' } },
       },
     },
 
     // ─── USERS ────────────────────────────────────────────────────────────────
     '/users': {
-      get: { tags: ['Users'], summary: 'Lista utenti (admin)',
+      get: { tags: ['Users'], summary: 'User list (admin)',
         parameters: [
           { in: 'query', name: 'page',  schema: { type: 'integer', default: 1 } },
           { in: 'query', name: 'limit', schema: { type: 'integer', default: 20 } },
           { in: 'query', name: 'search', schema: { type: 'string' } },
         ],
-        responses: { 200: { description: 'Lista utenti', content: { 'application/json': { schema: { $ref: '#/components/schemas/Pagination' } } } } },
+        responses: { 200: { description: 'User list', content: { 'application/json': { schema: { $ref: '#/components/schemas/Pagination' } } } } },
       },
-      post: { tags: ['Users'], summary: 'Crea utente locale (admin)',
+      post: { tags: ['Users'], summary: 'Create local user (admin)',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['username','password','email'],
           properties: {
             username:     { type: 'string' },
@@ -321,51 +321,51 @@ Le API key si creano da **Impostazioni → API Keys**.
             permissions:  { type: 'object' },
           },
         }}}},
-        responses: { 201: { description: 'Utente creato', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } },
+        responses: { 201: { description: 'User created', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } },
       },
     },
     '/users/{id}': {
-      get:    { tags: ['Users'], summary: 'Dettaglio utente', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
-        responses: { 200: { description: 'Utente', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } } },
-      put:    { tags: ['Users'], summary: 'Aggiorna utente', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
+      get:    { tags: ['Users'], summary: 'User details', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: { 200: { description: 'User', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } } },
+      put:    { tags: ['Users'], summary: 'Update user', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } },
-        responses: { 200: { description: 'Utente aggiornato' } } },
-      delete: { tags: ['Users'], summary: 'Elimina utente', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
-        responses: { 200: { description: 'Eliminato' } } },
+        responses: { 200: { description: 'User updated' } } },
+      delete: { tags: ['Users'], summary: 'Delete user', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: { 200: { description: 'Deleted' } } },
     },
 
     // ─── GROUPS ───────────────────────────────────────────────────────────────
     '/groups': {
-      get:  { tags: ['Groups'], summary: 'Lista gruppi locali',
-        responses: { 200: { description: 'Gruppi', content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, description: { type: 'string' } } } } } } } },
+      get:  { tags: ['Groups'], summary: 'Local group list',
+        responses: { 200: { description: 'Groups', content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, description: { type: 'string' } } } } } } } },
       },
-      post: { tags: ['Groups'], summary: 'Crea gruppo',
+      post: { tags: ['Groups'], summary: 'Create group',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, description: { type: 'string' } } } } } },
-        responses: { 201: { description: 'Gruppo creato' } },
+        responses: { 201: { description: 'Group created' } },
       },
     },
     '/groups/{id}': {
-      get:    { tags: ['Groups'], summary: 'Dettaglio gruppo con membri e mappature LDAP', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Gruppo' } } },
-      put:    { tags: ['Groups'], summary: 'Aggiorna gruppo', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Aggiornato' } } },
-      delete: { tags: ['Groups'], summary: 'Elimina gruppo', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Eliminato' } } },
+      get:    { tags: ['Groups'], summary: 'Group details with members and LDAP mappings', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Group' } } },
+      put:    { tags: ['Groups'], summary: 'Update group', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Updated' } } },
+      delete: { tags: ['Groups'], summary: 'Delete group', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Deleted' } } },
     },
     '/groups/{id}/members': {
-      post:   { tags: ['Groups'], summary: 'Aggiungi membro', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['user_id'], properties: { user_id: { type: 'string', format: 'uuid' } } } } } }, responses: { 201: { description: 'Membro aggiunto' } } },
+      post:   { tags: ['Groups'], summary: 'Add member', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['user_id'], properties: { user_id: { type: 'string', format: 'uuid' } } } } } }, responses: { 201: { description: 'Member added' } } },
     },
     '/groups/{id}/members/{userId}': {
-      delete: { tags: ['Groups'], summary: 'Rimuovi membro', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }, { in: 'path', name: 'userId', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Rimosso' } } },
+      delete: { tags: ['Groups'], summary: 'Remove member', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }, { in: 'path', name: 'userId', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Removed' } } },
     },
     '/groups/ldap/mappings': {
-      get:  { tags: ['Groups'], summary: 'Lista mappature LDAP→gruppo', responses: { 200: { description: 'Mappature' } } },
-      post: { tags: ['Groups'], summary: 'Crea mappatura LDAP',
+      get:  { tags: ['Groups'], summary: 'LDAP-to-group mapping list', responses: { 200: { description: 'Mappings' } } },
+      post: { tags: ['Groups'], summary: 'Create LDAP mapping',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['ldap_group_dn','local_group_id'], properties: { ldap_group_dn: { type: 'string' }, local_group_id: { type: 'string', format: 'uuid' } } } } } },
-        responses: { 201: { description: 'Mappatura creata' } },
+        responses: { 201: { description: 'Mapping created' } },
       },
     },
 
     // ─── ASSETS ───────────────────────────────────────────────────────────────
     '/assets': {
-      get: { tags: ['Assets'], summary: 'Lista asset',
+      get: { tags: ['Assets'], summary: 'Asset list',
         parameters: [
           { in: 'query', name: 'page',   schema: { type: 'integer', default: 1 } },
           { in: 'query', name: 'limit',  schema: { type: 'integer', default: 20 } },
@@ -374,354 +374,354 @@ Le API key si creano da **Impostazioni → API Keys**.
           { in: 'query', name: 'status', schema: { type: 'string' } },
           { in: 'query', name: 'type',   schema: { type: 'string' } },
         ],
-        responses: { 200: { description: 'Asset paginati', content: { 'application/json': { schema: { $ref: '#/components/schemas/Pagination' } } } } },
+        responses: { 200: { description: 'Paginated assets', content: { 'application/json': { schema: { $ref: '#/components/schemas/Pagination' } } } } },
       },
-      post: { tags: ['Assets'], summary: 'Crea asset',
+      post: { tags: ['Assets'], summary: 'Create asset',
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Asset' } } } },
-        responses: { 201: { description: 'Asset creato', content: { 'application/json': { schema: { $ref: '#/components/schemas/Asset' } } } } },
+        responses: { 201: { description: 'Asset created', content: { 'application/json': { schema: { $ref: '#/components/schemas/Asset' } } } } },
       },
     },
     '/assets/{id}': {
-      get:    { tags: ['Assets'], summary: 'Dettaglio asset con dipendenze e servizi', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Asset', content: { 'application/json': { schema: { $ref: '#/components/schemas/Asset' } } } } } },
-      put:    { tags: ['Assets'], summary: 'Aggiorna asset', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Asset' } } } }, responses: { 200: { description: 'Aggiornato' } } },
-      delete: { tags: ['Assets'], summary: 'Disattiva asset (soft-delete)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Disattivato' } } },
+      get:    { tags: ['Assets'], summary: 'Asset details with dependencies and services', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Asset', content: { 'application/json': { schema: { $ref: '#/components/schemas/Asset' } } } } } },
+      put:    { tags: ['Assets'], summary: 'Update asset', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Asset' } } } }, responses: { 200: { description: 'Updated' } } },
+      delete: { tags: ['Assets'], summary: 'Deactivate asset (soft delete)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Deactivated' } } },
     },
     '/assets/{id}/status': {
-      patch: { tags: ['Assets'], summary: 'Aggiorna stato asset manualmente',
+      patch: { tags: ['Assets'], summary: 'Update asset status manually',
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['status'], properties: { status: { type: 'string', enum: ['operational','degraded','partial_outage','major_outage','maintenance','unknown'] } } } } } },
-        responses: { 200: { description: 'Stato aggiornato' } },
+        responses: { 200: { description: 'Status updated' } },
       },
     },
     '/assets/{id}/probe': {
-      post: { tags: ['Assets'], summary: 'Avvia probe manuale immediato',
+      post: { tags: ['Assets'], summary: 'Run manual probe now',
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Risultato probe' } },
+        responses: { 200: { description: 'Probe result' } },
       },
     },
     '/assets/{id}/probes': {
-      get: { tags: ['Assets'], summary: 'Storico probe asset',
+      get: { tags: ['Assets'], summary: 'Asset probe history',
         parameters: [
           { in: 'path', name: 'id', required: true, schema: { type: 'string' } },
           { in: 'query', name: 'limit', schema: { type: 'integer', default: 50 } },
         ],
-        responses: { 200: { description: 'Risultati probe' } },
+        responses: { 200: { description: 'Probe results' } },
       },
     },
     '/assets/{id}/history': {
-      get: { tags: ['Assets'], summary: 'Storico stati asset',
+      get: { tags: ['Assets'], summary: 'Asset status history',
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Storico stati' } },
+        responses: { 200: { description: 'Status history' } },
       },
     },
     '/assets/{id}/dependencies': {
-      post:   { tags: ['Assets'], summary: 'Aggiungi dipendenza',
+      post:   { tags: ['Assets'], summary: 'Add dependency',
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['depends_on_id'], properties: { depends_on_id: { type: 'string', format: 'uuid' } } } } } },
-        responses: { 201: { description: 'Dipendenza creata' } },
+        responses: { 201: { description: 'Dependency created' } },
       },
     },
     '/assets/{id}/dependencies/{depId}': {
-      delete: { tags: ['Assets'], summary: 'Rimuovi dipendenza',
+      delete: { tags: ['Assets'], summary: 'Remove dependency',
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }, { in: 'path', name: 'depId', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Rimossa' } },
+        responses: { 200: { description: 'Removed' } },
       },
     },
 
     // ─── SERVICES ─────────────────────────────────────────────────────────────
     '/services': {
-      get: { tags: ['Services'], summary: 'Lista servizi',
+      get: { tags: ['Services'], summary: 'Service list',
         parameters: [
           { in: 'query', name: 'page',   schema: { type: 'integer' } },
           { in: 'query', name: 'limit',  schema: { type: 'integer' } },
           { in: 'query', name: 'search', schema: { type: 'string' } },
           { in: 'query', name: 'public', schema: { type: 'boolean' } },
         ],
-        responses: { 200: { description: 'Servizi paginati' } },
+        responses: { 200: { description: 'Paginated services' } },
       },
-      post: { tags: ['Services'], summary: 'Crea servizio',
+      post: { tags: ['Services'], summary: 'Create service',
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Service' } } } },
-        responses: { 201: { description: 'Servizio creato' } },
+        responses: { 201: { description: 'Service created' } },
       },
     },
     '/services/{id}': {
-      get:    { tags: ['Services'], summary: 'Dettaglio servizio', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Servizio' } } },
-      put:    { tags: ['Services'], summary: 'Aggiorna servizio', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: {} } } }, responses: { 200: { description: 'Aggiornato' } } },
-      delete: { tags: ['Services'], summary: 'Elimina servizio', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Eliminato' } } },
+      get:    { tags: ['Services'], summary: 'Service details', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Service' } } },
+      put:    { tags: ['Services'], summary: 'Update service', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: {} } } }, responses: { 200: { description: 'Updated' } } },
+      delete: { tags: ['Services'], summary: 'Delete service', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Deleted' } } },
     },
     '/services/{id}/uptime': {
-      get: { tags: ['Services'], summary: 'Dati uptime ultimi 30 giorni',
+      get: { tags: ['Services'], summary: 'Uptime data for last 30 days',
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
-        responses: { 200: { description: 'Array uptime giornaliero' } },
+        responses: { 200: { description: 'Daily uptime array' } },
       },
     },
     '/services/{id}/assets': {
-      post:   { tags: ['Services'], summary: 'Associa asset al servizio', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['asset_id'], properties: { asset_id: { type: 'string', format: 'uuid' } } } } } }, responses: { 201: { description: 'Associato' } } },
+      post:   { tags: ['Services'], summary: 'Attach asset to service', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['asset_id'], properties: { asset_id: { type: 'string', format: 'uuid' } } } } } }, responses: { 201: { description: 'Attached' } } },
     },
     '/services/{id}/assets/{assetId}': {
-      delete: { tags: ['Services'], summary: 'Rimuovi asset dal servizio', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }, { in: 'path', name: 'assetId', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Rimosso' } } },
+      delete: { tags: ['Services'], summary: 'Remove asset from service', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }, { in: 'path', name: 'assetId', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Removed' } } },
     },
     '/services/{id}/subscribe': {
-      post:   { tags: ['Services'], summary: 'Iscriviti alle notifiche del servizio', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Iscritto' } } },
+      post:   { tags: ['Services'], summary: 'Subscribe to service notifications', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Subscribed' } } },
     },
     '/services/{id}/unsubscribe': {
-      post:   { tags: ['Services'], summary: 'Disiscrivi dalle notifiche del servizio', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Disiscritto' } } },
+      post:   { tags: ['Services'], summary: 'Unsubscribe from service notifications', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Unsubscribed' } } },
     },
 
     // ─── MAINTENANCE ──────────────────────────────────────────────────────────
     '/maintenance': {
-      get: { tags: ['Maintenance'], summary: 'Lista manutenzioni',
+      get: { tags: ['Maintenance'], summary: 'Maintenance list',
         parameters: [
           { in: 'query', name: 'page',     schema: { type: 'integer' } },
           { in: 'query', name: 'limit',    schema: { type: 'integer' } },
           { in: 'query', name: 'status',   schema: { type: 'string' } },
-          { in: 'query', name: 'upcoming', schema: { type: 'boolean' }, description: 'Solo manutenzioni future/in corso' },
+          { in: 'query', name: 'upcoming', schema: { type: 'boolean' }, description: 'Only future/in-progress maintenance' },
           { in: 'query', name: 'asset_id', schema: { type: 'string', format: 'uuid' } },
         ],
-        responses: { 200: { description: 'Manutenzioni paginate' } },
+        responses: { 200: { description: 'Paginated maintenance' } },
       },
-      post: { tags: ['Maintenance'], summary: 'Crea manutenzione',
+      post: { tags: ['Maintenance'], summary: 'Create maintenance',
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/MaintenanceWindow' } } } },
-        responses: { 201: { description: 'Manutenzione creata — auto-pending_approval se high/critical/emergency' } },
+        responses: { 201: { description: 'Maintenance created - auto pending_approval for high/critical/emergency' } },
       },
     },
     '/maintenance/calendar': {
-      get: { tags: ['Maintenance'], summary: 'Manutenzioni per range date (per calendario)',
+      get: { tags: ['Maintenance'], summary: 'Maintenance by date range (for calendar)',
         parameters: [
           { in: 'query', name: 'from', required: true, schema: { type: 'string', format: 'date' } },
           { in: 'query', name: 'to',   required: true, schema: { type: 'string', format: 'date' } },
         ],
-        responses: { 200: { description: 'Array manutenzioni nel range' } },
+        responses: { 200: { description: 'Maintenance array in range' } },
       },
     },
     '/maintenance/{id}': {
-      get:    { tags: ['Maintenance'], summary: 'Dettaglio manutenzione', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Manutenzione' } } },
-      put:    { tags: ['Maintenance'], summary: 'Aggiorna manutenzione', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: {} } } }, responses: { 200: { description: 'Aggiornata' } } },
-      delete: { tags: ['Maintenance'], summary: 'Elimina manutenzione (admin)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Eliminata' } } },
+      get:    { tags: ['Maintenance'], summary: 'Maintenance details', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Maintenance' } } },
+      put:    { tags: ['Maintenance'], summary: 'Update maintenance', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: {} } } }, responses: { 200: { description: 'Updated' } } },
+      delete: { tags: ['Maintenance'], summary: 'Delete maintenance (admin)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Deleted' } } },
     },
     '/maintenance/{id}/approve': {
-      post: { tags: ['Maintenance'], summary: 'Approva manutenzione (change_manager)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Approvata' } } },
+      post: { tags: ['Maintenance'], summary: 'Approve maintenance (change_manager)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Approved' } } },
     },
     '/maintenance/{id}/reject': {
-      post: { tags: ['Maintenance'], summary: 'Rifiuta manutenzione (change_manager)',
+      post: { tags: ['Maintenance'], summary: 'Reject maintenance (change_manager)',
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { reason: { type: 'string' } } } } } },
-        responses: { 200: { description: 'Rifiutata' } },
+        responses: { 200: { description: 'Rejected' } },
       },
     },
     '/maintenance/{id}/start': {
-      post: { tags: ['Maintenance'], summary: 'Avvia manutenzione (operator)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Avviata' } } },
+      post: { tags: ['Maintenance'], summary: 'Start maintenance (operator)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Started' } } },
     },
     '/maintenance/{id}/complete': {
-      post: { tags: ['Maintenance'], summary: 'Completa manutenzione', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Completata' } } },
+      post: { tags: ['Maintenance'], summary: 'Complete maintenance', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Completed' } } },
     },
     '/maintenance/{id}/cancel': {
-      post: { tags: ['Maintenance'], summary: 'Cancella manutenzione', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Cancellata' } } },
+      post: { tags: ['Maintenance'], summary: 'Cancel maintenance', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Cancelled' } } },
     },
 
     // ─── INCIDENTS ────────────────────────────────────────────────────────────
     '/incidents': {
-      get: { tags: ['Incidents'], summary: 'Lista incidenti',
+      get: { tags: ['Incidents'], summary: 'Incident list',
         parameters: [
           { in: 'query', name: 'page',     schema: { type: 'integer' } },
           { in: 'query', name: 'limit',    schema: { type: 'integer' } },
           { in: 'query', name: 'status',   schema: { type: 'string', enum: ['investigating','identified','monitoring','resolved'] } },
           { in: 'query', name: 'severity', schema: { type: 'string', enum: ['critical','high','medium','low'] } },
         ],
-        responses: { 200: { description: 'Incidenti paginati' } },
+        responses: { 200: { description: 'Paginated incidents' } },
       },
-      post: { tags: ['Incidents'], summary: 'Crea incidente',
+      post: { tags: ['Incidents'], summary: 'Create incident',
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Incident' } } } },
-        responses: { 201: { description: 'Incidente creato' } },
+        responses: { 201: { description: 'Incident created' } },
       },
     },
     '/incidents/active': {
-      get: { tags: ['Incidents'], summary: 'Incidenti attivi (non risolti)',
-        responses: { 200: { description: 'Incidenti attivi' } },
+      get: { tags: ['Incidents'], summary: 'Active incidents (unresolved)',
+        responses: { 200: { description: 'Active incidents' } },
       },
     },
     '/incidents/{id}': {
-      get:    { tags: ['Incidents'], summary: 'Dettaglio incidente con asset e aggiornamenti', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Incidente' } } },
-      put:    { tags: ['Incidents'], summary: 'Aggiorna incidente', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: {} } } }, responses: { 200: { description: 'Aggiornato' } } },
-      delete: { tags: ['Incidents'], summary: 'Elimina incidente (admin)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Eliminato' } } },
+      get:    { tags: ['Incidents'], summary: 'Incident details with assets and updates', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Incident' } } },
+      put:    { tags: ['Incidents'], summary: 'Update incident', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: {} } } }, responses: { 200: { description: 'Updated' } } },
+      delete: { tags: ['Incidents'], summary: 'Delete incident (admin)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Deleted' } } },
     },
     '/incidents/{id}/updates': {
-      post: { tags: ['Incidents'], summary: 'Aggiungi aggiornamento a incidente',
+      post: { tags: ['Incidents'], summary: 'Add incident update',
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['message','status'], properties: {
           message: { type: 'string' },
           status:  { type: 'string', enum: ['investigating','identified','monitoring','resolved'] },
         }}}}},
-        responses: { 201: { description: 'Aggiornamento aggiunto — se resolved, ripristina stato asset' } },
+        responses: { 201: { description: 'Update added - if resolved, restore asset status' } },
       },
     },
 
     // ─── NOTIFICATIONS ────────────────────────────────────────────────────────
     '/notifications': {
-      get: { tags: ['Notifications'], summary: 'Notifiche in-app utente corrente',
+      get: { tags: ['Notifications'], summary: 'Current user in-app notifications',
         parameters: [{ in: 'query', name: 'unread', schema: { type: 'boolean' } }],
-        responses: { 200: { description: 'Notifiche + unread_count' } },
+        responses: { 200: { description: 'Notifications + unread_count' } },
       },
     },
     '/notifications/read': {
-      post: { tags: ['Notifications'], summary: 'Segna notifiche come lette',
-        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'Array di id, o ometti per segnare tutte' } } } } } },
-        responses: { 200: { description: 'Notifiche aggiornate' } },
+      post: { tags: ['Notifications'], summary: 'Mark notifications as read',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'Array of IDs, or omit to mark all' } } } } } },
+        responses: { 200: { description: 'Notifications updated' } },
       },
     },
     '/notifications/log': {
-      get: { tags: ['Notifications'], summary: 'Log notifiche inviate (admin)',
+      get: { tags: ['Notifications'], summary: 'Sent notifications log (admin)',
         parameters: [
           { in: 'query', name: 'page',    schema: { type: 'integer' } },
           { in: 'query', name: 'channel', schema: { type: 'string', enum: ['email','webhook','in_app'] } },
           { in: 'query', name: 'status',  schema: { type: 'string', enum: ['sent','failed'] } },
         ],
-        responses: { 200: { description: 'Log notifiche' } },
+        responses: { 200: { description: 'Notification logs' } },
       },
     },
     '/notifications/templates': {
-      get: { tags: ['Notifications'], summary: 'Lista template email (admin)', responses: { 200: { description: 'Template' } } },
+      get: { tags: ['Notifications'], summary: 'Email template list (admin)', responses: { 200: { description: 'Template' } } },
     },
     '/notifications/templates/{id}': {
-      put: { tags: ['Notifications'], summary: 'Aggiorna template email',
+      put: { tags: ['Notifications'], summary: 'Update email template',
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { subject_template: { type: 'string' }, body_html_template: { type: 'string' } } } } } },
-        responses: { 200: { description: 'Template aggiornato' } },
+        responses: { 200: { description: 'Template updated' } },
       },
     },
 
     // ─── SETTINGS ─────────────────────────────────────────────────────────────
     '/settings': {
-      get: { tags: ['Settings'], summary: 'Tutte le impostazioni (admin)', responses: { 200: { description: 'Settings object' } } },
+      get: { tags: ['Settings'], summary: 'All settings (admin)', responses: { 200: { description: 'Settings object' } } },
     },
     '/settings/smtp': {
-      put: { tags: ['Settings'], summary: 'Salva configurazione SMTP',
+      put: { tags: ['Settings'], summary: 'Save SMTP configuration',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { host: { type: 'string' }, port: { type: 'integer' }, secure: { type: 'boolean' }, user: { type: 'string' }, pass: { type: 'string' }, from: { type: 'string' } } } } } },
-        responses: { 200: { description: 'Salvato' } },
+        responses: { 200: { description: 'Saved' } },
       },
     },
     '/settings/smtp/test': {
-      post: { tags: ['Settings'], summary: 'Invia email di test SMTP',
+      post: { tags: ['Settings'], summary: 'Send SMTP test email',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['to'], properties: { to: { type: 'string', format: 'email' } } } } } },
-        responses: { 200: { description: 'Email inviata' }, 500: { description: 'Errore SMTP' } },
+        responses: { 200: { description: 'Email sent' }, 500: { description: 'SMTP error' } },
       },
     },
     '/settings/ldap': {
-      get: { tags: ['Settings'], summary: 'Configurazione LDAP', responses: { 200: { description: 'Config LDAP' } } },
-      put: { tags: ['Settings'], summary: 'Salva configurazione LDAP', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Salvato' } } },
+      get: { tags: ['Settings'], summary: 'LDAP configuration', responses: { 200: { description: 'Config LDAP' } } },
+      put: { tags: ['Settings'], summary: 'Save LDAP configuration', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Saved' } } },
     },
     '/settings/ldap/test': {
-      post: { tags: ['Settings'], summary: 'Test connessione LDAP', responses: { 200: { description: 'Connessione riuscita' } } },
+      post: { tags: ['Settings'], summary: 'Test LDAP connection', responses: { 200: { description: 'Connection successful' } } },
     },
     '/settings/saml': {
-      get: { tags: ['Settings'], summary: 'Configurazione SAML', responses: { 200: { description: 'Config SAML' } } },
-      put: { tags: ['Settings'], summary: 'Salva configurazione SAML', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Salvato' } } },
+      get: { tags: ['Settings'], summary: 'SAML configuration', responses: { 200: { description: 'Config SAML' } } },
+      put: { tags: ['Settings'], summary: 'Save SAML configuration', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Saved' } } },
     },
     '/settings/webhooks': {
-      get: { tags: ['Settings'], summary: 'Lista webhook', responses: { 200: { description: 'Webhook' } } },
-      put: { tags: ['Settings'], summary: 'Salva webhook', requestBody: { required: true, content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: { url: { type: 'string' }, type: { type: 'string', enum: ['teams','slack','generic'] }, events: { type: 'array', items: { type: 'string' } } } } } } } }, responses: { 200: { description: 'Salvati' } } },
+      get: { tags: ['Settings'], summary: 'Webhook list', responses: { 200: { description: 'Webhook' } } },
+      put: { tags: ['Settings'], summary: 'Save webhooks', requestBody: { required: true, content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: { url: { type: 'string' }, type: { type: 'string', enum: ['teams','slack','generic'] }, events: { type: 'array', items: { type: 'string' } } } } } } } }, responses: { 200: { description: 'Saved' } } },
     },
     '/settings/general': {
-      get: { tags: ['Settings'], summary: 'Impostazioni generali', responses: { 200: { description: 'General settings' } } },
-      put: { tags: ['Settings'], summary: 'Salva impostazioni generali', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Salvato' } } },
+      get: { tags: ['Settings'], summary: 'General settings', responses: { 200: { description: 'General settings' } } },
+      put: { tags: ['Settings'], summary: 'Save general settings', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Saved' } } },
     },
 
     // ─── STATUS ───────────────────────────────────────────────────────────────
     '/status': {
-      get: { tags: ['Status'], summary: 'Status page pubblica (no auth)', security: [],
-        responses: { 200: { description: 'Stato globale, servizi, incidenti attivi, manutenzioni programmate' } },
+      get: { tags: ['Status'], summary: 'Public status page (no auth)', security: [],
+        responses: { 200: { description: 'Global status, services, active incidents, scheduled maintenance' } },
       },
     },
     '/status/services/{slug}': {
-      get: { tags: ['Status'], summary: 'Dettaglio servizio su status page', security: [],
+      get: { tags: ['Status'], summary: 'Service details on status page', security: [],
         parameters: [{ in: 'path', name: 'slug', required: true, schema: { type: 'string', example: 'erp-gestionale' } }],
-        responses: { 200: { description: 'Servizio con storico 90 giorni' } },
+        responses: { 200: { description: 'Service with 90-day history' } },
       },
     },
 
     // ─── REPORTS ──────────────────────────────────────────────────────────────
     '/reports/dashboard': {
-      get: { tags: ['Reports'], summary: 'Dati dashboard (contatori, uptime medio…)',
+      get: { tags: ['Reports'], summary: 'Dashboard data (counters, average uptime...)',
         responses: { 200: { description: 'Dashboard stats' } },
       },
     },
     '/reports/maintenance': {
-      get: { tags: ['Reports'], summary: 'Report manutenzioni',
+      get: { tags: ['Reports'], summary: 'Maintenance report',
         parameters: [
           { in: 'query', name: 'from',   schema: { type: 'string', format: 'date' } },
           { in: 'query', name: 'to',     schema: { type: 'string', format: 'date' } },
           { in: 'query', name: 'format', schema: { type: 'string', enum: ['json','csv','pdf'], default: 'json' } },
         ],
         responses: {
-          200: { description: 'JSON / CSV / PDF in base al parametro format' },
+          200: { description: 'JSON / CSV / PDF based on the format parameter' },
         },
       },
     },
     '/reports/uptime': {
-      get: { tags: ['Reports'], summary: 'Uptime per servizio',
+      get: { tags: ['Reports'], summary: 'Uptime per service',
         parameters: [
           { in: 'query', name: 'from', schema: { type: 'string', format: 'date' } },
           { in: 'query', name: 'to',   schema: { type: 'string', format: 'date' } },
         ],
-        responses: { 200: { description: 'Uptime % per servizio' } },
+        responses: { 200: { description: 'Uptime % per service' } },
       },
     },
     '/reports/assets': {
-      get: { tags: ['Reports'], summary: 'Report asset (contatori per tipo/stato/criticità)',
+      get: { tags: ['Reports'], summary: 'Asset report (counters by type/status/criticality)',
         responses: { 200: { description: 'Stats asset' } },
       },
     },
 
     // ─── TEMPLATES ────────────────────────────────────────────────────────────
     '/templates/maintenance': {
-      get:  { tags: ['Templates'], summary: 'Lista template manutenzione', responses: { 200: { description: 'Template' } } },
-      post: { tags: ['Templates'], summary: 'Crea template',
+      get:  { tags: ['Templates'], summary: 'Maintenance template list', responses: { 200: { description: 'Template' } } },
+      post: { tags: ['Templates'], summary: 'Create template',
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/Template' } } } },
-        responses: { 201: { description: 'Template creato' } },
+        responses: { 201: { description: 'Template created' } },
       },
     },
     '/templates/maintenance/{id}': {
-      get:    { tags: ['Templates'], summary: 'Dettaglio template', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Template' } } },
-      put:    { tags: ['Templates'], summary: 'Aggiorna template', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: {} } } }, responses: { 200: { description: 'Aggiornato' } } },
-      delete: { tags: ['Templates'], summary: 'Elimina template', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Eliminato' } } },
+      get:    { tags: ['Templates'], summary: 'Template details', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Template' } } },
+      put:    { tags: ['Templates'], summary: 'Update template', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: {} } } }, responses: { 200: { description: 'Updated' } } },
+      delete: { tags: ['Templates'], summary: 'Delete template', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Deleted' } } },
     },
 
     // ─── BLACKOUT ─────────────────────────────────────────────────────────────
     '/blackout': {
-      get:  { tags: ['Blackout'], summary: 'Lista periodi di blackout', responses: { 200: { description: 'Periodi' } } },
-      post: { tags: ['Blackout'], summary: 'Crea periodo blackout',
+      get:  { tags: ['Blackout'], summary: 'Blackout period list', responses: { 200: { description: 'Periods' } } },
+      post: { tags: ['Blackout'], summary: 'Create blackout period',
         requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/BlackoutPeriod' } } } },
-        responses: { 201: { description: 'Periodo creato' } },
+        responses: { 201: { description: 'Period created' } },
       },
     },
     '/blackout/check': {
-      get: { tags: ['Blackout'], summary: 'Verifica se un intervallo cade in un blackout',
+      get: { tags: ['Blackout'], summary: 'Check whether a range falls in a blackout period',
         parameters: [
           { in: 'query', name: 'from', required: true, schema: { type: 'string', format: 'date-time' } },
           { in: 'query', name: 'to',   required: true, schema: { type: 'string', format: 'date-time' } },
         ],
-        responses: { 200: { description: 'Risultato check: { in_blackout: boolean, period?: BlackoutPeriod }' } },
+        responses: { 200: { description: 'Check result: { in_blackout: boolean, period?: BlackoutPeriod }' } },
       },
     },
     '/blackout/{id}': {
-      get:    { tags: ['Blackout'], summary: 'Dettaglio periodo', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Periodo' } } },
-      put:    { tags: ['Blackout'], summary: 'Aggiorna periodo', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: {} } } }, responses: { 200: { description: 'Aggiornato' } } },
-      delete: { tags: ['Blackout'], summary: 'Elimina periodo', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Eliminato' } } },
+      get:    { tags: ['Blackout'], summary: 'Period details', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Period' } } },
+      put:    { tags: ['Blackout'], summary: 'Update period', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: {} } } }, responses: { 200: { description: 'Updated' } } },
+      delete: { tags: ['Blackout'], summary: 'Delete period', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Deleted' } } },
     },
 
     // ─── API KEYS ─────────────────────────────────────────────────────────────
     '/apikeys': {
-      get:  { tags: ['ApiKeys'], summary: 'Lista API keys (masked)',
+      get:  { tags: ['ApiKeys'], summary: 'API key list (masked)',
         responses: { 200: { description: 'Keys', content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, key_prefix: { type: 'string' }, expires_at: { type: 'string', format: 'date-time', nullable: true }, last_used_at: { type: 'string', format: 'date-time', nullable: true } } } } } } } },
       },
-      post: { tags: ['ApiKeys'], summary: 'Crea API key — restituisce la chiave completa UNA sola volta',
+      post: { tags: ['ApiKeys'], summary: 'Create API key - returns the full key ONLY once',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, expires_at: { type: 'string', format: 'date-time' } } } } } },
-        responses: { 201: { description: 'Key creata', content: { 'application/json': { schema: { type: 'object', properties: { id: { type: 'string' }, key: { type: 'string', description: 'Valore completo — conservare, non sarà più visibile' } } } } } } },
+        responses: { 201: { description: 'Key created', content: { 'application/json': { schema: { type: 'object', properties: { id: { type: 'string' }, key: { type: 'string', description: 'Full value - store it, it will not be visible again' } } } } } } },
       },
     },
     '/apikeys/{id}': {
-      patch:  { tags: ['ApiKeys'], summary: 'Aggiorna nome/scadenza key', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Aggiornata' } } },
-      delete: { tags: ['ApiKeys'], summary: 'Revoca API key', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Revocata' } } },
+      patch:  { tags: ['ApiKeys'], summary: 'Update key name/expiration', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Updated' } } },
+      delete: { tags: ['ApiKeys'], summary: 'Revoke API key', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Revoked' } } },
     },
 
     // ─── AUDIT ────────────────────────────────────────────────────────────────
@@ -737,7 +737,7 @@ Le API key si creano da **Impostazioni → API Keys**.
           { in: 'query', name: 'from',        schema: { type: 'string', format: 'date' } },
           { in: 'query', name: 'to',          schema: { type: 'string', format: 'date' } },
         ],
-        responses: { 200: { description: 'Log paginati', content: { 'application/json': { schema: { $ref: '#/components/schemas/Pagination' } } } } },
+        responses: { 200: { description: 'Paginated logs', content: { 'application/json': { schema: { $ref: '#/components/schemas/Pagination' } } } } },
       },
     },
 
