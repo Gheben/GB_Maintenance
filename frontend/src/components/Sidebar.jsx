@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Server, Package, CalendarClock, AlertTriangle,
   Calendar, Globe, Bell, BarChart2, Users, Settings, ScrollText,
-  Ban, LogOut, BookOpen, ChevronLeft, ChevronRight, X
+  Ban, LogOut, BookOpen, ChevronLeft, ChevronRight, X, FileBadge2
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -14,14 +14,15 @@ const NAV = [
   { to: '/maintenance', icon: CalendarClock, label: 'Maintenance', perm: 'maintenance' },
   { to: '/incidents', icon: AlertTriangle, label: 'Incidents', perm: 'incidents' },
   { to: '/calendar', icon: Calendar, label: 'Calendar', perm: 'calendar' },
-  { to: '/status', icon: Globe, label: 'Status Page', perm: 'status_page' },
   { to: '/notifications', icon: Bell, label: 'Notifications', perm: 'notifications' },
   { to: '/reports', icon: BarChart2, label: 'Reports', perm: 'reports' },
+  { to: '/licenses', icon: FileBadge2, label: 'Licenses', perm: 'maintenance' },
   { divider: true },
   { to: '/users', icon: Users, label: 'Users & Groups', perm: 'users' },
   { to: '/blackout', icon: Ban, label: 'Blackout', perm: 'maintenance' },
   { to: '/audit', icon: ScrollText, label: 'Audit Log', perm: 'audit' },
   { to: '/settings', icon: Settings, label: 'Settings', perm: 'settings' },
+  { to: '/status', icon: Globe, label: 'Status Page', perm: 'status_page' },
   { divider: true },
   { href: '/docs', icon: BookOpen, label: 'API Docs', perm: 'apikeys' },
 ]

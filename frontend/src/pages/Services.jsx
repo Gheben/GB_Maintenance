@@ -4,9 +4,10 @@ import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
 import { Modal } from '../components/Modal'
+import { ItemPicker } from '../components/ItemPicker'
 import { toast } from '../components/Toast'
 import { servicesApi, usersApi, groupsApi, settingsApi } from '../api'
-import { Plus, Search, RefreshCw, Users, User, Database, Pencil } from 'lucide-react'
+import { Plus, Search, RefreshCw, Users, User, Pencil } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const BLANK_FORM = { name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, owner_type: 'user', owner_id: '', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '', system_name: '' }
@@ -17,6 +18,7 @@ export default function Services() {
   const [services, setServices] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(25)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
@@ -24,17 +26,20 @@ export default function Services() {
   const [users, setUsers] = useState([])
   const [localGroups, setLocalGroups] = useState([])
   const [ldapEnabled, setLdapEnabled] = useState(false)
-  const [ldapSearch, setLdapSearch] = useState('')
-  const [ldapResults, setLdapResults] = useState([])
-  const [ldapLoading, setLdapLoading] = useState(false)
+  const [groupSearch, setGroupSearch] = useState('')
+  const [groupResults, setGroupResults] = useState([])
+  const [groupLoading, setGroupLoading] = useState(false)
   const [form, setForm] = useState(BLANK_FORM)
+  const [createDepIds, setCreateDepIds] = useState([])
+  const [editDepIds, setEditDepIds] = useState([])
+  const [editOrigDepIds, setEditOrigDepIds] = useState([])
 
   const load = useCallback(() => {
     setLoading(true)
-    servicesApi.list({ search, page, limit: 20 })
+    servicesApi.list({ search, page, limit })
       .then(r => { setServices(r.data.data); setTotal(r.data.total) })
       .finally(() => setLoading(false))
-  }, [search, page])
+  }, [search, page, limit])
 
   useEffect(() => { load() }, [load])
 
@@ -58,15 +63,22 @@ export default function Services() {
       system_name: form.system_name || undefined,
     }
     try {
-      await servicesApi.create(payload)
+      const res = await servicesApi.create(payload)
+      const newId = res.data?.id
+      if (newId) {
+        for (const depId of createDepIds) {
+          await servicesApi.addDependency(newId, depId).catch(() => {})
+        }
+      }
       toast.success('Service created')
       setShowCreate(false)
       setForm(BLANK_FORM)
+      setCreateDepIds([])
       load()
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
-  const openEdit = (s) => {
+  const openEdit = async (s) => {
     setEditTarget(s)
     setForm({
       name: s.name, description: s.description || '', criticality: s.criticality,
@@ -75,6 +87,15 @@ export default function Services() {
       owner_group_id: s.owner_group_id || '', owner_ldap_dn: s.owner_ldap_dn || '',
       owner_ldap_name: s.owner_ldap_name || '', system_name: s.system_name || ''
     })
+    try {
+      const r = await servicesApi.get(s.id)
+      const depIds = (r.data.depends_on || []).map(d => d.id)
+      setEditDepIds(depIds)
+      setEditOrigDepIds(depIds)
+    } catch {
+      setEditDepIds([])
+      setEditOrigDepIds([])
+    }
   }
 
   const handleEdit = async (e) => {
@@ -89,68 +110,98 @@ export default function Services() {
     }
     try {
       await servicesApi.update(editTarget.id, payload)
+      const toAdd = editDepIds.filter(id => !editOrigDepIds.includes(id))
+      const toRemove = editOrigDepIds.filter(id => !editDepIds.includes(id))
+      for (const depId of toAdd) await servicesApi.addDependency(editTarget.id, depId).catch(() => {})
+      for (const depId of toRemove) await servicesApi.removeDependency(editTarget.id, depId).catch(() => {})
       toast.success('Service updated')
       setEditTarget(null)
       load()
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
-  const handleLdapSearch = async (q) => {
-    setLdapSearch(q)
-    if (!q || q.length < 2) { setLdapResults([]); return }
-    setLdapLoading(true)
+  const handleGroupSearch = async (q) => {
+    setGroupSearch(q)
+    if (!q || q.length < 2) { setGroupResults([]); return }
+
+    const localMatches = localGroups
+      .filter(g => String(g.name || '').toLowerCase().includes(q.toLowerCase()))
+      .slice(0, 20)
+      .map(g => ({ key: `local:${g.id}`, type: 'local_group', label: g.name, id: g.id }))
+
+    if (!ldapEnabled) {
+      setGroupResults(localMatches)
+      return
+    }
+
+    setGroupLoading(true)
     try {
       const r = await settingsApi.searchLdapGroups(q)
-      setLdapResults(r.data || [])
-    } catch { setLdapResults([]) }
-    finally { setLdapLoading(false) }
+      const ldapMatches = (r.data || []).map(g => ({
+        key: `ldap:${g.dn}`,
+        type: 'ldap_group',
+        label: g.name,
+        description: g.description,
+        dn: g.dn,
+      }))
+      setGroupResults([...localMatches, ...ldapMatches])
+    } catch {
+      setGroupResults(localMatches)
+    } finally {
+      setGroupLoading(false)
+    }
   }
 
-  const OwnerFields = ({ formState, setFormState }) => (
+  const ownerFieldsJsx = (
     <div>
       <label className="block text-sm font-medium mb-1">Owner</label>
-      <div className="flex gap-1 mb-2">
+      <div className="flex gap-1 mb-2 flex-wrap">
         {[
           { key: 'user', label: 'User', icon: <User size={11} /> },
-          { key: 'local_group', label: 'Local group', icon: <Users size={11} /> },
-          ...(ldapEnabled ? [{ key: 'ldap_group', label: 'LDAP group', icon: <Database size={11} /> }] : []),
+          { key: 'local_group', label: 'Group', icon: <Users size={11} /> },
         ].map(t => (
           <button key={t.key} type="button"
-            onClick={() => setFormState(f => ({ ...f, owner_type: t.key, owner_id: '', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))}
-            className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors ${formState.owner_type === t.key ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-300 text-gray-600 hover:border-brand-400'}`}>
+            onClick={() => setForm(f => ({ ...f, owner_type: t.key, owner_id: '', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))}
+            className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors ${(t.key === 'local_group' ? form.owner_type !== 'user' : form.owner_type === t.key) ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-300 text-gray-600 hover:border-brand-400'}`}>
             {t.icon}{t.label}
           </button>
         ))}
       </div>
-      {formState.owner_type === 'user' && (
-        <select className="input" value={formState.owner_id} onChange={e => setFormState(f => ({ ...f, owner_id: e.target.value }))}>
+      {form.owner_type === 'user' && (
+        <select className="input" value={form.owner_id} onChange={e => setForm(f => ({ ...f, owner_id: e.target.value }))}>
           <option value="">— None —</option>
           {users.map(u => <option key={u.id} value={u.id}>{u.display_name || u.username} ({u.auth_type || 'local'})</option>)}
         </select>
       )}
-      {formState.owner_type === 'local_group' && (
-        <select className="input" value={formState.owner_group_id} onChange={e => setFormState(f => ({ ...f, owner_group_id: e.target.value }))}>
-          <option value="">— No group —</option>
-          {localGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
-      )}
-      {formState.owner_type === 'ldap_group' && (
+      {form.owner_type !== 'user' && (
         <div className="relative">
-          <input className="input" placeholder="Search LDAP group (min 2 chars)..."
-            value={formState.owner_ldap_dn ? formState.owner_ldap_name : ldapSearch}
+          <input className="input" placeholder="Search local/LDAP group (min 2 chars)..."
+            value={(form.owner_type === 'local_group' && form.owner_group_id) || (form.owner_type === 'ldap_group' && form.owner_ldap_dn)
+              ? (form.owner_type === 'local_group' ? (localGroups.find(g => g.id === form.owner_group_id)?.name || '') : form.owner_ldap_name)
+              : groupSearch}
             onChange={e => {
-              if (formState.owner_ldap_dn) setFormState(f => ({ ...f, owner_ldap_dn: '', owner_ldap_name: '' }))
-              handleLdapSearch(e.target.value)
+              if (form.owner_type !== 'user') {
+                setForm(f => ({ ...f, owner_type: 'local_group', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))
+              }
+              handleGroupSearch(e.target.value)
             }} />
-          {formState.owner_ldap_dn && <span className="absolute right-2 top-2 text-xs text-green-600 font-medium">✓ selected</span>}
-          {ldapLoading && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
-          {ldapResults.length > 0 && !formState.owner_ldap_dn && (
+          {(form.owner_group_id || form.owner_ldap_dn) && <span className="absolute right-2 top-2 text-xs text-green-600 font-medium">selected</span>}
+          {groupLoading && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
+          {groupResults.length > 0 && !form.owner_group_id && !form.owner_ldap_dn && (
             <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-              {ldapResults.map(g => (
-                <button key={g.dn} type="button"
-                  onClick={() => { setFormState(f => ({ ...f, owner_ldap_dn: g.dn, owner_ldap_name: g.name })); setLdapResults([]) }}
+              {groupResults.map(g => (
+                <button key={g.key} type="button"
+                  onClick={() => {
+                    if (g.type === 'local_group') {
+                      setForm(f => ({ ...f, owner_type: 'local_group', owner_group_id: g.id, owner_ldap_dn: '', owner_ldap_name: '' }))
+                    } else {
+                      setForm(f => ({ ...f, owner_type: 'ldap_group', owner_group_id: '', owner_ldap_dn: g.dn, owner_ldap_name: g.label }))
+                    }
+                    setGroupResults([])
+                  }}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 dark:hover:bg-gray-700">
-                  <span className="font-medium">{g.name}</span>
+                  <span className="font-medium">{g.label}</span>
+                  <span className="text-xs text-gray-400 ml-2">{g.type === 'local_group' ? 'Local' : 'LDAP'}</span>
                   {g.description && <span className="text-xs text-gray-400 ml-2">{g.description}</span>}
                 </button>
               ))}
@@ -161,7 +212,7 @@ export default function Services() {
     </div>
   )
 
-  const ServiceForm = ({ onSubmit, onClose, submitLabel }) => (
+  const serviceFormBody = (onSubmit, onClose, submitLabel, extraContent = null) => (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium mb-1">Name *</label>
@@ -171,12 +222,12 @@ export default function Services() {
         <label className="block text-sm font-medium mb-1">Description</label>
         <textarea className="input" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium mb-1">System / Group</label>
           <input className="input" placeholder="e.g. ERP, Network, Cloud" value={form.system_name} onChange={e => setForm(f => ({ ...f, system_name: e.target.value }))} />
         </div>
-        <OwnerFields formState={form} setFormState={setForm} />
+        {ownerFieldsJsx}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -192,9 +243,10 @@ export default function Services() {
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <input type="checkbox" id="public" checked={form.is_public} onChange={e => setForm(f => ({ ...f, is_public: e.target.checked }))} />
-        <label htmlFor="public" className="text-sm">Visible on public status page</label>
+        <input type="checkbox" id="svc-public" checked={form.is_public} onChange={e => setForm(f => ({ ...f, is_public: e.target.checked }))} />
+        <label htmlFor="svc-public" className="text-sm">Visible on public status page</label>
       </div>
+      {extraContent}
       <div className="flex justify-end gap-3">
         <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
         <button type="submit" className="btn-primary">{submitLabel}</button>
@@ -249,13 +301,32 @@ export default function Services() {
               </tbody>
             </table>
           </div>
-          <div className="p-4"><Pagination page={page} limit={20} total={total} onChange={setPage} /></div>
+          <div className="p-4"><Pagination page={page} limit={limit} total={total} onChange={setPage} onLimitChange={setLimit} /></div>
         </div>
       </div>
 
       {showCreate && (
         <Modal title="New Service" onClose={() => setShowCreate(false)}>
-          <ServiceForm onSubmit={handleCreate} onClose={() => setShowCreate(false)} submitLabel="Create" />
+          {serviceFormBody(handleCreate, () => setShowCreate(false), 'Create',
+            <ItemPicker
+              label="Depends on (services)"
+              allItems={services}
+              selectedIds={createDepIds}
+              onToggle={id => setCreateDepIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])}
+            />
+          )}
+        </Modal>
+      )}
+      {editTarget && (
+        <Modal title={`Edit Service: ${editTarget.name}`} onClose={() => setEditTarget(null)}>
+          {serviceFormBody(handleEdit, () => setEditTarget(null), 'Save',
+            <ItemPicker
+              label="Depends on (services)"
+              allItems={services.filter(s => s.id !== editTarget?.id)}
+              selectedIds={editDepIds}
+              onToggle={id => setEditDepIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])}
+            />
+          )}
         </Modal>
       )}
     </Layout>

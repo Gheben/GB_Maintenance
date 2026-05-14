@@ -79,7 +79,10 @@ export const assetsApi = {
   history: (id) => api.get(`/assets/${id}/history`),
   probes: (id, params) => api.get(`/assets/${id}/probes`, { params }),
   probeNow: (id) => api.post(`/assets/${id}/probe`),
+  users: (id) => api.get(`/assets/${id}/users`),
   maintenance: (id) => api.get(`/assets/${id}/maintenance`),
+  licenses: (id) => api.get(`/assets/${id}/licenses`),
+  updateLicenses: (id, licenseIds) => api.put(`/assets/${id}/licenses`, { license_ids: licenseIds }),
   patchStatus: (id, status) => api.patch(`/assets/${id}/status`, { status }),
   addDependency: (id, dep_id) => api.post(`/assets/${id}/dependencies`, { depends_on_id: dep_id }),
   removeDependency: (id, dep_id) => api.delete(`/assets/${id}/dependencies/${dep_id}`),
@@ -98,6 +101,11 @@ export const servicesApi = {
   subscribe: (id, data) => api.post(`/services/${id}/subscribe`, data),
   unsubscribe: (id) => api.delete(`/services/${id}/subscribe`),
   removeSubscriber: (id, subId) => api.delete(`/services/${id}/subscribers/${subId}`),
+  addDependency: (id, depId) => api.post(`/services/${id}/dependencies`, { depends_on_id: depId }),
+  removeDependency: (id, depId) => api.delete(`/services/${id}/dependencies/${depId}`),
+  maintenance: (id) => api.get(`/services/${id}/maintenance`),
+  licenses: (id) => api.get(`/services/${id}/licenses`),
+  updateLicenses: (id, licenseIds) => api.put(`/services/${id}/licenses`, { license_ids: licenseIds }),
 }
 
 // ─── Maintenance ──────────────────────────────────────────────────────────────
@@ -113,6 +121,22 @@ export const maintenanceApi = {
   start: (id) => api.post(`/maintenance/${id}/start`),
   complete: (id, notes) => api.post(`/maintenance/${id}/complete`, { notes }),
   cancel: (id, reason) => api.post(`/maintenance/${id}/cancel`, { reason }),
+  users: (id) => api.get(`/maintenance/${id}/users`),
+}
+
+// ─── Maintenance Types ────────────────────────────────────────────────────────
+export const maintenanceTypesApi = {
+  list: () => api.get('/maintenance-types'),
+  create: (data) => api.post('/maintenance-types', data),
+  update: (id, data) => api.put(`/maintenance-types/${id}`, data),
+  delete: (id) => api.delete(`/maintenance-types/${id}`),
+}
+
+export const assetCategoriesApi = {
+  list: () => api.get('/asset-categories'),
+  create: (data) => api.post('/asset-categories', data),
+  update: (id, data) => api.put(`/asset-categories/${id}`, data),
+  delete: (id) => api.delete(`/asset-categories/${id}`),
 }
 
 // ─── Incidents ────────────────────────────────────────────────────────────────
@@ -124,6 +148,7 @@ export const incidentsApi = {
   update: (id, data) => api.put(`/incidents/${id}`, data),
   delete: (id) => api.delete(`/incidents/${id}`),
   addUpdate: (id, data) => api.post(`/incidents/${id}/updates`, data),
+  users: (id) => api.get(`/incidents/${id}/users`),
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -145,6 +170,7 @@ export const settingsApi = {
   saveLdap: (data) => api.put('/settings/ldap', data),
   testLdap: (data) => api.post('/settings/ldap/test', data),
   searchLdapGroups: (q) => api.get('/settings/ldap/groups', { params: { q } }),
+  searchLdapUsers: (q) => api.get('/settings/ldap/users', { params: { q } }),
   getSaml: () => api.get('/settings/saml'),
   saveSaml: (data) => api.put('/settings/saml', data),
   getWebhooks: () => api.get('/settings/webhooks'),
@@ -162,6 +188,8 @@ export const settingsApi = {
 export const statusApi = {
   overview: () => api.get('/status'),
   service: (slug) => api.get(`/status/services/${slug}`),
+  subscribeMaintenance: (id) => api.post(`/status/maintenance/${id}/subscribe`),
+  unsubscribeMaintenance: (id) => api.delete(`/status/maintenance/${id}/subscribe`),
 }
 
 // ─── Reports ──────────────────────────────────────────────────────────────────
@@ -203,4 +231,37 @@ export const blackoutApi = {
   create: (data) => api.post('/blackout', data),
   update: (id, data) => api.put(`/blackout/${id}`, data),
   delete: (id) => api.delete(`/blackout/${id}`),
+}
+
+// ─── Licenses ────────────────────────────────────────────────────────────────
+export const licensesApi = {
+  list: (params) => api.get('/licenses', { params }),
+  get: (id) => api.get(`/licenses/${id}`),
+  create: (data) => api.post('/licenses', data),
+  update: (id, data) => api.put(`/licenses/${id}`, data),
+  delete: (id) => api.delete(`/licenses/${id}`),
+  approve: (id) => api.post(`/licenses/${id}/approve`),
+  reject: (id, reason) => api.post(`/licenses/${id}/reject`, { reason }),
+  requestApproval: (id, data) => api.post(`/licenses/${id}/request-approval`, data || {}),
+  approvalInfo: (token) => api.get(`/licenses/approval/${encodeURIComponent(token)}`),
+  approvalApprove: (token) => api.post(`/licenses/approval/${encodeURIComponent(token)}/approve`),
+  approvalReject: (token, reason) => api.post(`/licenses/approval/${encodeURIComponent(token)}/reject`, { reason }),
+}
+
+export const suppliersApi = {
+  list: (params) => api.get('/suppliers', { params }),
+  get: (id) => api.get(`/suppliers/${id}`),
+  create: (data) => api.post('/suppliers', data),
+  update: (id, data) => api.put(`/suppliers/${id}`, data),
+  delete: (id) => api.delete(`/suppliers/${id}`),
+}
+
+export const uploadsApi = {
+  uploadLicenseDocument: (file) => {
+    const data = new FormData()
+    data.append('file', file)
+    return api.post('/uploads/license-document', data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
 }

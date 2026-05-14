@@ -78,7 +78,17 @@ router.get('/:id', async (req, res) => {
      WHERE ss.service_id=$1 ORDER BY ss.created_at DESC`,
     [req.params.id]
   );
-  res.json({ ...service, assets, subscribers });
+  const depends_on = await getMany(
+    `SELECT s.id, s.name, s.slug, s.current_status FROM services s
+     JOIN service_dependencies sd ON sd.depends_on_id=s.id WHERE sd.service_id=$1`,
+    [req.params.id]
+  );
+  const required_by = await getMany(
+    `SELECT s.id, s.name, s.slug, s.current_status FROM services s
+     JOIN service_dependencies sd ON sd.service_id=s.id WHERE sd.depends_on_id=$1`,
+    [req.params.id]
+  );
+  res.json({ ...service, assets, subscribers, depends_on, required_by });
 });
 
 // ─── GET /api/services/:id/uptime ─────────────────────────────────────────────
@@ -180,6 +190,40 @@ router.delete('/:id', requireAdmin, async (req, res) => {
   res.json({ message: 'Servizio disattivato' });
 });
 
+// ─── GET /api/services/:id/maintenance ──────────────────────────────────────
+router.get('/:id/maintenance', async (req, res) => {
+  const rows = await getMany(
+    `SELECT m.id, m.title, m.type, m.status, m.impact_level, m.scheduled_start, m.scheduled_end
+     FROM maintenance_records m
+     JOIN maintenance_assets ma ON ma.maintenance_id=m.id
+     JOIN service_assets sa ON sa.asset_id=ma.asset_id
+     WHERE sa.service_id=$1
+     ORDER BY m.scheduled_start DESC LIMIT 50`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+// ─── POST /api/services/:id/dependencies ─────────────────────────────────────
+router.post('/:id/dependencies', requireOperator, [
+  body('depends_on_id').isUUID(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  if (req.params.id === req.body.depends_on_id) return res.status(400).json({ error: 'Un servizio non può dipendere da se stesso' });
+  await query(
+    `INSERT INTO service_dependencies (service_id, depends_on_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+    [req.params.id, req.body.depends_on_id]
+  );
+  res.status(201).json({ message: 'Dipendenza aggiunta' });
+});
+
+// ─── DELETE /api/services/:id/dependencies/:depId ────────────────────────────
+router.delete('/:id/dependencies/:depId', requireOperator, async (req, res) => {
+  await query('DELETE FROM service_dependencies WHERE service_id=$1 AND depends_on_id=$2', [req.params.id, req.params.depId]);
+  res.json({ message: 'Dipendenza rimossa' });
+});
+
 // ─── POST /api/services/:id/assets ───────────────────────────────────────────
 router.post('/:id/assets', requireOperator, [body('asset_id').isUUID()], async (req, res) => {
   await query(`INSERT INTO service_assets (service_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, req.body.asset_id]);
@@ -226,6 +270,42 @@ router.delete('/:id/subscribe', requireAuth, async (req, res) => {
 router.delete('/:id/subscribers/:subId', requireAdmin, async (req, res) => {
   await query('DELETE FROM service_subscribers WHERE id=$1 AND service_id=$2', [req.params.subId, req.params.id]);
   res.json({ message: 'Iscritto rimosso' });
+});
+
+// ─── GET /api/services/:id/licenses ─────────────────────────────────────────
+router.get('/:id/licenses', async (req, res) => {
+  const rows = await getMany(
+    `SELECT l.id, l.name, l.expiry_date, l.approval_status,
+            CASE WHEN ls.service_id IS NULL THEN false ELSE true END AS assigned
+     FROM licenses l
+     LEFT JOIN license_services ls ON ls.license_id=l.id AND ls.service_id=$1
+     WHERE l.is_active=true
+     ORDER BY l.name`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+// ─── PUT /api/services/:id/licenses ─────────────────────────────────────────
+router.put('/:id/licenses', requireOperator, [
+  body('license_ids').isArray(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const service = await getOne('SELECT id FROM services WHERE id=$1', [req.params.id]);
+  if (!service) return res.status(404).json({ error: 'Servizio non trovato' });
+
+  const licenseIds = Array.isArray(req.body.license_ids) ? req.body.license_ids : [];
+  await query('DELETE FROM license_services WHERE service_id=$1', [req.params.id]);
+  for (const lid of licenseIds) {
+    await query(
+      'INSERT INTO license_services (license_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+      [lid, req.params.id]
+    );
+  }
+
+  res.json({ message: 'Licenses updated' });
 });
 
 function _slugify(text) {

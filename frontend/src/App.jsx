@@ -26,6 +26,8 @@ import BlackoutPeriods from './pages/BlackoutPeriods'
 import ServiceDetail from './pages/ServiceDetail'
 import Calendar from './pages/Calendar'
 import LocalGroups from './pages/LocalGroups'
+import Licenses from './pages/Licenses'
+import LicenseApproval from './pages/LicenseApproval'
 
 const P = ({ children, perm }) => <ProtectedRoute permission={perm}>{children}</ProtectedRoute>
 
@@ -38,6 +40,7 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/status" element={<StatusPage />} />
+              <Route path="/licenses/approval" element={<LicenseApproval />} />
               <Route path="/" element={<P><Dashboard /></P>} />
               <Route path="/assets" element={<P perm="assets"><Assets /></P>} />
               <Route path="/assets/:id" element={<P perm="assets"><AssetDetail /></P>} />
@@ -50,6 +53,7 @@ export default function App() {
               <Route path="/incidents/:id" element={<P perm="incidents"><IncidentDetail /></P>} />
               <Route path="/notifications" element={<P perm="notifications"><Notifications /></P>} />
               <Route path="/users" element={<P perm="users"><Users /></P>} />
+              <Route path="/licenses" element={<P perm="maintenance"><Licenses /></P>} />
               <Route path="/groups" element={<Navigate to="/users?tab=groups" replace />} />
               <Route path="/settings" element={<P perm="settings"><Settings /></P>} />
               <Route path="/reports" element={<P perm="reports"><Reports /></P>} />

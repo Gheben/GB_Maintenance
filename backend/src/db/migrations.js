@@ -505,6 +505,256 @@ const MIGRATIONS = [
       `);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_maint_services_maint ON maintenance_services(maintenance_id)`);
     }
+  },
+  {
+    version: 6,
+    name: 'maintenance_types',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS maintenance_types (
+          id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          slug       VARCHAR(100) UNIQUE NOT NULL,
+          label      VARCHAR(200) NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_maint_types_sort ON maintenance_types(sort_order)`);
+      // Seed existing built-in types
+      const seeds = [
+        ['planned',         'Planned',         1],
+        ['emergency',       'Emergency',        2],
+        ['upgrade',         'Upgrade',          3],
+        ['security_patch',  'Security Patch',   4],
+        ['infrastructure',  'Infrastructure',   5],
+        ['other',           'Other',            6],
+      ];
+      for (const [slug, label, order] of seeds) {
+        await client.query(
+          `INSERT INTO maintenance_types (slug, label, sort_order) VALUES ($1,$2,$3) ON CONFLICT (slug) DO NOTHING`,
+          [slug, label, order]
+        );
+      }
+    }
+  },
+  {
+    version: 7,
+    name: 'maintenance_types_color',
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE maintenance_types ADD COLUMN IF NOT EXISTS color VARCHAR(20) DEFAULT '#6366f1'
+      `);
+      // Assign a distinct default color to each existing seed type
+      const colorMap = [
+        ['planned',        '#3b82f6'],
+        ['emergency',      '#ef4444'],
+        ['upgrade',        '#10b981'],
+        ['security_patch', '#f59e0b'],
+        ['infrastructure', '#8b5cf6'],
+        ['other',          '#6b7280'],
+      ];
+      for (const [slug, color] of colorMap) {
+        await client.query(
+          `UPDATE maintenance_types SET color = $1 WHERE slug = $2 AND (color IS NULL OR color = '#6366f1')`,
+          [color, slug]
+        );
+      }
+    }
+  },
+  {
+    version: 8,
+    name: 'asset_categories',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS asset_categories (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          slug VARCHAR(50) UNIQUE NOT NULL,
+          label VARCHAR(100) NOT NULL,
+          color VARCHAR(20) NOT NULL DEFAULT '#6366f1',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      const seeds = [
+        ['application',    'Application',   '#6366f1', 0],
+        ['infrastructure', 'Infrastructure','#3b82f6', 1],
+        ['database',       'Database',      '#8b5cf6', 2],
+        ['network',        'Network',       '#14b8a6', 3],
+        ['hardware',       'Hardware',      '#f97316', 4],
+        ['api',            'API',           '#10b981', 5],
+        ['other',          'Other',         '#6b7280', 6],
+      ];
+      for (const [slug, label, color, sort_order] of seeds) {
+        await client.query(
+          `INSERT INTO asset_categories (slug, label, color, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT (slug) DO NOTHING`,
+          [slug, label, color, sort_order]
+        );
+      }
+    }
+  },
+  {
+    version: 9,
+    name: 'blackout_service_asset_ids',
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE blackout_periods
+          ADD COLUMN IF NOT EXISTS service_ids UUID[] DEFAULT '{}',
+          ADD COLUMN IF NOT EXISTS asset_ids   UUID[] DEFAULT '{}'
+      `);
+    }
+  },
+  {
+    version: 10,
+    name: 'service_dependencies_and_incident_services',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS service_dependencies (
+          service_id    UUID REFERENCES services(id) ON DELETE CASCADE,
+          depends_on_id UUID REFERENCES services(id) ON DELETE CASCADE,
+          PRIMARY KEY (service_id, depends_on_id)
+        )
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS incident_services (
+          incident_id UUID REFERENCES incidents(id) ON DELETE CASCADE,
+          service_id  UUID REFERENCES services(id)  ON DELETE CASCADE,
+          PRIMARY KEY (incident_id, service_id)
+        )
+      `);
+    }
+  },
+  {
+    version: 11,
+    name: 'asset_owner_extended',
+    up: async (client) => {
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS owner_type VARCHAR(20) DEFAULT 'user'`);
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS owner_group_id UUID REFERENCES local_groups(id) ON DELETE SET NULL`);
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS owner_ldap_dn TEXT`);
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS owner_ldap_name VARCHAR(200)`);
+    }
+  },
+  {
+    version: 12,
+    name: 'maintenance_status_subscribers',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS maintenance_status_subscribers (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          maintenance_id UUID NOT NULL REFERENCES maintenance_windows(id) ON DELETE CASCADE,
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(maintenance_id, user_id)
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_maint_status_subs_maint ON maintenance_status_subscribers(maintenance_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_maint_status_subs_user ON maintenance_status_subscribers(user_id)`);
+    }
+  },
+  {
+    version: 13,
+    name: 'local_groups_role_required',
+    up: async (client) => {
+      await client.query(`ALTER TABLE local_groups ADD COLUMN IF NOT EXISTS role VARCHAR(50)`);
+      await client.query(`UPDATE local_groups SET role='viewer' WHERE role IS NULL OR TRIM(role)=''`);
+      await client.query(`ALTER TABLE local_groups ALTER COLUMN role SET DEFAULT 'viewer'`);
+      await client.query(`ALTER TABLE local_groups ALTER COLUMN role SET NOT NULL`);
+    }
+  },
+  {
+    version: 14,
+    name: 'licenses_module',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS licenses (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(200) NOT NULL,
+          description TEXT,
+          owner_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          supplier VARCHAR(200),
+          maintainer_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          approver_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          expiry_date DATE,
+          renewal_date DATE,
+          reminder_days INTEGER NOT NULL DEFAULT 30,
+          approval_required BOOLEAN NOT NULL DEFAULT TRUE,
+          approval_status VARCHAR(30) NOT NULL DEFAULT 'pending',
+          estimated_cost NUMERIC(12,2),
+          currency VARCHAR(10) NOT NULL DEFAULT 'EUR',
+          notes TEXT,
+          documents JSONB NOT NULL DEFAULT '[]',
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          approved_at TIMESTAMPTZ,
+          approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          rejected_at TIMESTAMPTZ,
+          rejected_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          rejection_reason TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_expiry_date ON licenses(expiry_date)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_approval_status ON licenses(approval_status)`);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS license_assets (
+          license_id UUID NOT NULL REFERENCES licenses(id) ON DELETE CASCADE,
+          asset_id UUID NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+          PRIMARY KEY (license_id, asset_id)
+        )
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS license_services (
+          license_id UUID NOT NULL REFERENCES licenses(id) ON DELETE CASCADE,
+          service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+          PRIMARY KEY (license_id, service_id)
+        )
+      `);
+    }
+  },
+  {
+    version: 15,
+    name: 'suppliers_and_license_contacts',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS suppliers (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          first_name VARCHAR(120) NOT NULL,
+          last_name VARCHAR(120) NOT NULL,
+          company VARCHAR(200) NOT NULL,
+          nationality VARCHAR(100),
+          phone VARCHAR(60),
+          mobile VARCHAR(60),
+          email VARCHAR(200) NOT NULL,
+          vat_number VARCHAR(80),
+          notes TEXT,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_suppliers_company ON suppliers(company)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_suppliers_email ON suppliers(email)`);
+
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL`);
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS owner_contact JSONB`);
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS maintainer_contact JSONB`);
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS approver_contact JSONB`);
+    }
+  },
+  {
+    version: 16,
+    name: 'license_approval_token_workflow',
+    up: async (client) => {
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS approval_token_hash VARCHAR(128)`);
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS approval_token_expires_at TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS approval_requested_at TIMESTAMPTZ`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_approval_token_hash ON licenses(approval_token_hash)`);
+    }
   }
 ];
 

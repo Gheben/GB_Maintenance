@@ -30,8 +30,19 @@ router.get('/', async (req, res) => {
   const total = parseInt(countRes.rows[0].count);
 
   const rows = await getMany(
-    `SELECT a.*, u.display_name as owner_name
-     FROM assets a LEFT JOIN users u ON u.id=a.owner_id
+    `SELECT a.*,
+       u.display_name as owner_name,
+       lg.name as owner_group_name,
+       COALESCE(
+         CASE a.owner_type
+           WHEN 'local_group' THEN lg.name
+           WHEN 'ldap_group'  THEN a.owner_ldap_name
+           ELSE u.display_name
+         END
+       , '') as owner_label
+     FROM assets a
+     LEFT JOIN users u ON u.id=a.owner_id
+     LEFT JOIN local_groups lg ON lg.id=a.owner_group_id
      ${where} ORDER BY a.name LIMIT $${i++} OFFSET $${i}`,
     [...params, parseInt(limit), offset]
   );
@@ -44,8 +55,19 @@ router.get('/categories', (req, res) => res.json(CATEGORIES));
 // ─── GET /api/assets/:id ──────────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   const asset = await getOne(
-    `SELECT a.*, u.display_name as owner_name, u.email as owner_email
-     FROM assets a LEFT JOIN users u ON u.id=a.owner_id
+    `SELECT a.*,
+       u.display_name as owner_name, u.email as owner_email,
+       lg.name as owner_group_name,
+       COALESCE(
+         CASE a.owner_type
+           WHEN 'local_group' THEN lg.name
+           WHEN 'ldap_group'  THEN a.owner_ldap_name
+           ELSE u.display_name
+         END
+       , '') as owner_label
+     FROM assets a
+     LEFT JOIN users u ON u.id=a.owner_id
+     LEFT JOIN local_groups lg ON lg.id=a.owner_group_id
      WHERE a.id=$1`,
     [req.params.id]
   );
@@ -117,6 +139,58 @@ router.get('/:id/maintenance', async (req, res) => {
   res.json(rows);
 });
 
+// ─── GET /api/assets/:id/users ───────────────────────────────────────────────
+router.get('/:id/users', async (req, res) => {
+  const rows = await getMany(
+    `SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
+     FROM service_subscribers ss
+     JOIN service_assets sa ON sa.service_id = ss.service_id
+     LEFT JOIN users u ON u.id = ss.user_id
+     WHERE sa.asset_id = $1 AND u.id IS NOT NULL
+     ORDER BY u.display_name`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+// ─── GET /api/assets/:id/licenses ───────────────────────────────────────────
+router.get('/:id/licenses', async (req, res) => {
+  const rows = await getMany(
+    `SELECT l.id, l.name, l.expiry_date, l.approval_status,
+            CASE WHEN la.asset_id IS NULL THEN false ELSE true END AS assigned
+     FROM licenses l
+     LEFT JOIN license_assets la ON la.license_id=l.id AND la.asset_id=$1
+     WHERE l.is_active=true
+     ORDER BY l.name`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+// ─── PUT /api/assets/:id/licenses ───────────────────────────────────────────
+router.put('/:id/licenses', requireOperator, [
+  body('license_ids').isArray(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const asset = await getOne('SELECT id FROM assets WHERE id=$1', [req.params.id]);
+  if (!asset) return res.status(404).json({ error: 'Asset non trovato' });
+
+  const licenseIds = Array.isArray(req.body.license_ids) ? req.body.license_ids : [];
+  await transaction(async (client) => {
+    await client.query('DELETE FROM license_assets WHERE asset_id=$1', [req.params.id]);
+    for (const lid of licenseIds) {
+      await client.query(
+        'INSERT INTO license_assets (license_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+        [lid, req.params.id]
+      );
+    }
+  });
+
+  res.json({ message: 'Licenses updated' });
+});
+
 // ─── POST /api/assets ─────────────────────────────────────────────────────────
 router.post('/', requireOperator, [
   body('name').isString().trim().isLength({ min: 1, max: 200 }),
@@ -124,6 +198,10 @@ router.post('/', requireOperator, [
   body('criticality').optional().isIn(CRITICALITIES),
   body('description').optional().isString(),
   body('owner_id').optional().isUUID(),
+  body('owner_type').optional().isIn(['user','local_group','ldap_group']),
+  body('owner_group_id').optional({ nullable: true }).isUUID(),
+  body('owner_ldap_dn').optional({ nullable: true }).isString(),
+  body('owner_ldap_name').optional({ nullable: true }).isString().trim(),
   body('probe_enabled').optional().isBoolean(),
   body('probe_type').optional().isIn(['http','https','tcp']),
   body('probe_url').optional().isString(),
@@ -139,14 +217,19 @@ router.post('/', requireOperator, [
   try {
     const slug = _slugify(req.body.name) + '-' + Date.now().toString(36);
     const result = await query(
-      `INSERT INTO assets (name, slug, category, criticality, description, owner_id,
+      `INSERT INTO assets (name, slug, category, criticality, description, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name,
          probe_enabled, probe_type, probe_url, probe_interval_seconds, probe_timeout_seconds,
          expected_status_code, tags, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
       [
         req.body.name, slug,
         req.body.category, req.body.criticality || 'medium',
-        req.body.description || null, req.body.owner_id || null,
+        req.body.description || null,
+        req.body.owner_type === 'user' ? (req.body.owner_id||null) : null,
+        req.body.owner_type || 'user',
+        req.body.owner_type === 'local_group' ? (req.body.owner_group_id||null) : null,
+        req.body.owner_type === 'ldap_group' ? (req.body.owner_ldap_dn||null) : null,
+        req.body.owner_type === 'ldap_group' ? (req.body.owner_ldap_name||null) : null,
         req.body.probe_enabled || false, req.body.probe_type || null,
         req.body.probe_url || null, req.body.probe_interval_seconds || 300,
         req.body.probe_timeout_seconds || 10, req.body.expected_status_code || 200,
@@ -170,7 +253,8 @@ router.put('/:id', requireOperator, async (req, res) => {
   const asset = await getOne('SELECT id FROM assets WHERE id=$1', [req.params.id]);
   if (!asset) return res.status(404).json({ error: 'Asset non trovato' });
 
-  const allowed = ['name','category','criticality','description','owner_id','probe_enabled',
+  const allowed = ['name','category','criticality','description','owner_id','owner_type',
+    'owner_group_id','owner_ldap_dn','owner_ldap_name','probe_enabled',
     'probe_type','probe_url','probe_interval_seconds','probe_timeout_seconds',
     'expected_status_code','tags','metadata','is_active'];
   const sets = []; const vals = []; let i = 1;

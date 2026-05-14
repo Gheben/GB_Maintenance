@@ -1,31 +1,118 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
-import { servicesApi } from '../api'
-import { StatusBadge } from '../components/StatusBadge'
-import { Modal, ConfirmDialog } from '../components/Modal'
+import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
+import { ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Server, Trash2, Plus, ExternalLink, User, Mail, Pencil, Save, X } from 'lucide-react'
+import { servicesApi, usersApi, groupsApi, settingsApi } from '../api'
 import { format } from 'date-fns'
+import { Trash2, ArrowLeft, Pencil, Save, X, Plus, ExternalLink, User, Users, Mail, Cog } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+
+const CRITICALITIES = ['critical','high','medium','low']
+const TABS = [['info','Info'],['deps','Dependencies'],['assets','Linked Assets'],['licenses','Licenses'],['maintenance','Maintenance'],['users','Users']]
 
 export default function ServiceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { hasRole } = useAuth()
   const [service, setService] = useState(null)
-  const [uptime, setUptime] = useState([])
-  const [showDelete, setShowDelete] = useState(false)
+  const [maintenance, setMaintenance] = useState([])
+  const [allServices, setAllServices] = useState([])
+  const [tab, setTab] = useState('info')
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [depSearch, setDepSearch] = useState('')
+  const [addingDep, setAddingDep] = useState(false)
+  const [userSearch, setUserSearch] = useState('')
+  const [userLimit, setUserLimit] = useState(25)
+  
+  // Owner states
+  const [ownerUsers, setOwnerUsers] = useState([])
+  const [localGroups, setLocalGroups] = useState([])
+  const [ldapEnabled, setLdapEnabled] = useState(false)
+  const [groupSearch, setGroupSearch] = useState('')
+  const [groupResults, setGroupResults] = useState([])
+  const [groupLoading, setGroupLoading] = useState(false)
+  const [licenseRows, setLicenseRows] = useState([])
+  const [savingLicenses, setSavingLicenses] = useState(false)
 
   const load = () => {
-    servicesApi.get(id).then(r => setService(r.data))
-    servicesApi.uptime(id).then(r => setUptime(r.data))
+    servicesApi.get(id).then(r => setService(r.data)).catch(() => navigate('/services'))
+    servicesApi.maintenance(id).then(r => setMaintenance(r.data)).catch(() => {})
   }
+
   useEffect(() => { load() }, [id])
+
+  useEffect(() => {
+    if (tab === 'deps') {
+      servicesApi.list({ limit: 200 }).then(r => {
+        const list = Array.isArray(r.data) ? r.data : (r.data.data || [])
+        setAllServices(list.filter(s => s.id !== id))
+      }).catch(() => {})
+    }
+    if (tab === 'licenses') {
+      servicesApi.licenses(id).then(r => setLicenseRows(Array.isArray(r.data) ? r.data : [])).catch(() => setLicenseRows([]))
+    }
+  }, [tab, id])
+
+  const loadOwnerData = () => {
+    usersApi.list({ limit: 500 }).then(r => {
+      const list = Array.isArray(r.data) ? r.data : (r.data.data || [])
+      setOwnerUsers(list.filter(u => u.is_active !== false))
+    }).catch(() => {})
+    groupsApi.list().then(r => setLocalGroups(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    settingsApi.getLdap().then(r => setLdapEnabled(r.data?.enabled || false)).catch(() => {})
+  }
+
+  const handleGroupSearch = async (q) => {
+    setGroupSearch(q)
+    if (!q || q.length < 2) { setGroupResults([]); return }
+
+    const localMatches = localGroups
+      .filter(g => String(g.name || '').toLowerCase().includes(q.toLowerCase()))
+      .slice(0, 20)
+      .map(g => ({ key: `local:${g.id}`, type: 'local_group', label: g.name, id: g.id }))
+
+    if (!ldapEnabled) {
+      setGroupResults(localMatches)
+      return
+    }
+
+    setGroupLoading(true)
+    try {
+      const r = await settingsApi.searchLdapGroups(q)
+      const ldapMatches = (r.data || []).map(g => ({
+        key: `ldap:${g.dn}`,
+        type: 'ldap_group',
+        label: g.name,
+        description: g.description,
+        dn: g.dn,
+      }))
+      setGroupResults([...localMatches, ...ldapMatches])
+    } catch {
+      setGroupResults(localMatches)
+    } finally {
+      setGroupLoading(false)
+    }
+  }
+
+  const saveLicenses = async () => {
+    setSavingLicenses(true)
+    try {
+      const selected = licenseRows.filter(l => l.assigned).map(l => l.id)
+      await servicesApi.updateLicenses(id, selected)
+      toast.success('Licenses updated')
+      const r = await servicesApi.licenses(id)
+      setLicenseRows(Array.isArray(r.data) ? r.data : [])
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error updating licenses')
+    } finally {
+      setSavingLicenses(false)
+    }
+  }
 
   const handleDelete = async () => {
     try { await servicesApi.delete(id); toast.success('Service deleted'); navigate('/services') }
@@ -34,8 +121,23 @@ export default function ServiceDetail() {
 
   const enterEdit = () => {
     if (!service) return
-    setEditForm({ name: service.name || '', description: service.description || '', sla_target: service.sla_target || '' })
+    loadOwnerData()
+    setEditForm({
+      name: service.name || '',
+      description: service.description || '',
+      criticality: service.criticality || 'medium',
+      sla_target: service.sla_target || service.sla_uptime_percent || '',
+      system_name: service.system_name || '',
+      owner_type: service.owner_type || 'user',
+      owner_id: service.owner_id || '',
+      owner_group_id: service.owner_group_id || '',
+      owner_ldap_dn: service.owner_ldap_dn || '',
+      owner_ldap_name: service.owner_ldap_name || '',
+    })
+    setGroupResults([])
+    setGroupSearch('')
     setEditMode(true)
+    setTab('info')
   }
 
   const cancelEdit = () => { setEditMode(false); setEditForm(null) }
@@ -44,115 +146,337 @@ export default function ServiceDetail() {
     if (!editForm.name.trim()) { toast.error('Name is required'); return }
     setSaving(true)
     try {
-      await servicesApi.update(id, editForm)
+      await servicesApi.update(id, {
+        name: editForm.name,
+        description: editForm.description || null,
+        criticality: editForm.criticality,
+        sla_uptime_percent: editForm.sla_target ? parseFloat(editForm.sla_target) : undefined,
+        system_name: editForm.system_name || null,
+        owner_type: editForm.owner_type,
+        owner_id: editForm.owner_type === 'user' ? (editForm.owner_id || null) : null,
+        owner_group_id: editForm.owner_type === 'local_group' ? (editForm.owner_group_id || null) : null,
+        owner_ldap_dn: editForm.owner_type === 'ldap_group' ? (editForm.owner_ldap_dn || null) : null,
+        owner_ldap_name: editForm.owner_type === 'ldap_group' ? (editForm.owner_ldap_name || null) : null,
+      })
       toast.success('Service updated')
       setEditMode(false); setEditForm(null); load()
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setSaving(false) }
   }
 
-  if (!service) return <Layout title="Service"><p className="text-gray-500">Loading...</p></Layout>
+  const addDep = async (depId) => {
+    try { await servicesApi.addDependency(id, depId); toast.success('Dependency added'); load() }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
+  const removeDep = async (depId) => {
+    try { await servicesApi.removeDependency(id, depId); toast.success('Dependency removed'); load() }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
 
-  const canEdit = hasRole('superadmin','admin')
+  if (!service) return <Layout title="Service"><div className="text-center py-16 text-gray-500">Loading...</div></Layout>
+
+  const canEdit = hasRole('superadmin', 'admin')
+  const existingDepIds = new Set((service.depends_on || []).map(d => d.id))
+  const filteredServices = allServices.filter(s =>
+    s.name.toLowerCase().includes(depSearch.toLowerCase()) && !existingDepIds.has(s.id)
+  )
+  const qU = userSearch.toLowerCase()
+  const subs = service.subscribers || []
+  const filteredSubs = subs.filter(u => !qU ||
+    (u.display_name||'').toLowerCase().includes(qU) ||
+    (u.username||'').toLowerCase().includes(qU) ||
+    (u.email||'').toLowerCase().includes(qU))
+  const visibleSubs = filteredSubs.slice(0, userLimit)
 
   return (
     <Layout title={service.name}>
-      <div className="max-w-4xl space-y-6">
-        {/* Info card */}
-        <div className="card p-6 flex flex-col sm:flex-row sm:items-start gap-4">
-          <div className="w-12 h-12 rounded-lg bg-brand-600 flex items-center justify-center text-white flex-shrink-0">
-            <Server size={24} />
-          </div>
-          <div className="flex-1 min-w-0">
-            {editMode && editForm ? (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Name *</label>
-                  <input className="input" value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Description</label>
-                  <textarea className="input" rows={2} value={editForm.description} onChange={e => setEditForm(f => ({...f, description: e.target.value}))} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">SLA %</label>
-                  <input className="input w-32" type="number" min="0" max="100" step="0.1" value={editForm.sla_target} onChange={e => setEditForm(f => ({...f, sla_target: e.target.value}))} />
-                </div>
-                <div className="flex gap-2">
-                  <button className="btn-secondary flex items-center gap-1" onClick={cancelEdit} disabled={saving}><X size={14} />Cancel</button>
-                  <button className="btn-primary flex items-center gap-1" onClick={saveEdit} disabled={saving}><Save size={14} />{saving ? 'Saving...' : 'Save'}</button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h2 className="text-xl font-bold">{service.name}</h2>
-                  <StatusBadge status={service.current_status} />
-                </div>
-                {service.description && <p className="text-gray-500 mt-1">{service.description}</p>}
-                <div className="flex flex-wrap gap-6 mt-3 text-sm text-gray-600">
-                  {service.sla_target && <span>SLA target: <strong>{service.sla_target}%</strong></span>}
-                  {service.system_name && <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 text-xs font-medium">{service.system_name}</span>}
-                  {service.url && <a href={service.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-brand-600 hover:underline"><ExternalLink size={13} />{service.url}</a>}
-                  {service.slug && <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{service.slug}</span>}
-                </div>
-                {(service.owner_label || service.owner_name || service.owner_group_name || service.owner_ldap_name) && (
-                  <div className="mt-3 flex items-center gap-2 text-sm">
-                    <User size={14} className="text-gray-400" />
-                    <span className="font-medium text-gray-700 dark:text-gray-300">Owner:</span>
-                    <span>{service.owner_label || service.owner_name || service.owner_group_name || service.owner_ldap_name}</span>
-                    {service.owner_type === 'local_group' && <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded">local group</span>}
-                    {service.owner_type === 'ldap_group' && <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">LDAP group</span>}
-                    {service.owner_email && service.owner_type !== 'local_group' && service.owner_type !== 'ldap_group' && (
-                      <a href={`mailto:${service.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs">
-                        <Mail size={12} />{service.owner_email}
-                      </a>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-          <div className="flex gap-1">
-            {!editMode && canEdit && <button className="p-2 text-gray-500 hover:bg-gray-50 rounded-lg" onClick={enterEdit}><Pencil size={18} /></button>}
-            {!editMode && <button className="p-2 text-red-500 hover:bg-red-50 rounded-lg" onClick={() => setShowDelete(true)}><Trash2 size={18} /></button>}
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <Link to="/services" className="flex items-center gap-1 text-gray-500 hover:text-gray-700 text-sm"><ArrowLeft size={16} />Services</Link>
+          <div className="flex gap-2">
+            {!editMode && canEdit && <button className="btn-secondary flex items-center gap-1" onClick={enterEdit}><Pencil size={14} />Edit</button>}
+            {editMode && <>
+              <button className="btn-secondary flex items-center gap-1" onClick={cancelEdit} disabled={saving}><X size={14} />Cancel</button>
+              <button className="btn-primary flex items-center gap-1" onClick={saveEdit} disabled={saving}><Save size={14} />{saving ? 'Saving...' : 'Save'}</button>
+            </>}
+            {!editMode && canEdit && <button className="btn-danger flex items-center gap-1" onClick={() => setDeleteConfirm(true)}><Trash2 size={14} />Delete</button>}
           </div>
         </div>
 
-        {/* Uptime chart */}
-        {uptime.length > 0 && (
-          <div className="card p-4">
-            <h3 className="font-semibold mb-4">Uptime last 30 days</h3>
-            <ResponsiveContainer width="100%" height={140}>
-              <AreaChart data={uptime}>
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => format(new Date(d), 'MM/dd')} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
-                <Tooltip formatter={(v) => [`${v}%`, 'Uptime']} />
-                <Area type="monotone" dataKey="uptime_pct" stroke="#3b82f6" fill="#93c5fd" />
-              </AreaChart>
-            </ResponsiveContainer>
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+          {TABS.map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === key ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Info tab */}
+        {tab === 'info' && (editMode && editForm ? (
+          <div className="card p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Name *</label>
+              <input className="input" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Criticality</label>
+                <select className="input" value={editForm.criticality} onChange={e => setEditForm(f => ({ ...f, criticality: e.target.value }))}>
+                  {CRITICALITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">SLA target %</label>
+                <input className="input" type="number" min="0" max="100" step="0.1" value={editForm.sla_target} onChange={e => setEditForm(f => ({ ...f, sla_target: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Description</label>
+              <textarea className="input" rows={3} value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">System / Group</label>
+              <input className="input" value={editForm.system_name} onChange={e => setEditForm(f => ({ ...f, system_name: e.target.value }))} />
+            </div>
+            {/* Owner Selection */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Owner</label>
+              <div className="flex gap-1 mb-2 flex-wrap">
+                {[
+                  { key: 'user', label: 'User', icon: <User size={11} /> },
+                  { key: 'local_group', label: 'Group', icon: <Users size={11} /> },
+                ].map(t => (
+                  <button key={t.key} type="button"
+                    onClick={() => setEditForm(f => ({ ...f, owner_type: t.key, owner_id: '', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))}
+                    className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors ${(t.key === 'local_group' ? editForm.owner_type !== 'user' : editForm.owner_type === t.key) ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-300 text-gray-600 hover:border-brand-400'}`}>
+                    {t.icon}{t.label}
+                  </button>
+                ))}
+              </div>
+              {editForm.owner_type === 'user' && (
+                <select className="input" value={editForm.owner_id} onChange={e => setEditForm(f => ({ ...f, owner_id: e.target.value }))}>
+                  <option value="">— None —</option>
+                  {ownerUsers.map(u => <option key={u.id} value={u.id}>{u.display_name || u.username} ({u.auth_type || 'local'})</option>)}
+                </select>
+              )}
+              {editForm.owner_type !== 'user' && (
+                <div className="relative">
+                  <input className="input" placeholder="Search local/LDAP group (min 2 chars)..."
+                    value={(editForm.owner_type === 'local_group' && editForm.owner_group_id) || (editForm.owner_type === 'ldap_group' && editForm.owner_ldap_dn)
+                      ? (editForm.owner_type === 'local_group' ? (localGroups.find(g => g.id === editForm.owner_group_id)?.name || '') : editForm.owner_ldap_name)
+                      : groupSearch}
+                    onChange={e => {
+                      if (editForm.owner_type !== 'user') {
+                        setEditForm(f => ({ ...f, owner_type: 'local_group', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))
+                      }
+                      handleGroupSearch(e.target.value)
+                    }} />
+                  {(editForm.owner_group_id || editForm.owner_ldap_dn) && <span className="absolute right-2 top-2 text-xs text-green-600 font-medium">selected</span>}
+                  {groupLoading && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
+                  {groupResults.length > 0 && !editForm.owner_group_id && !editForm.owner_ldap_dn && (
+                    <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+                      {groupResults.map(g => (
+                        <button key={g.key} type="button"
+                          onClick={() => {
+                            if (g.type === 'local_group') {
+                              setEditForm(f => ({ ...f, owner_type: 'local_group', owner_group_id: g.id, owner_ldap_dn: '', owner_ldap_name: '' }))
+                            } else {
+                              setEditForm(f => ({ ...f, owner_type: 'ldap_group', owner_group_id: '', owner_ldap_dn: g.dn, owner_ldap_name: g.label }))
+                            }
+                            setGroupResults([])
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 dark:hover:bg-gray-700">
+                          <span className="font-medium">{g.label}</span>
+                          <span className="text-xs text-gray-400 ml-2">{g.type === 'local_group' ? 'Local' : 'LDAP'}</span>
+                          {g.description && <span className="text-xs text-gray-400 ml-2">{g.description}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="card p-6">
+            <div className="flex flex-wrap items-center gap-3 mb-3">
+              <StatusBadge status={service.current_status} />
+              <CriticalityBadge criticality={service.criticality} />
+              {service.system_name && <span className="badge bg-indigo-100 text-indigo-700">{service.system_name}</span>}
+              {service.slug && <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{service.slug}</span>}
+            </div>
+            {service.description && <p className="text-gray-600 dark:text-gray-300 mb-3">{service.description}</p>}
+            <div className="flex flex-wrap gap-6 text-sm text-gray-600 dark:text-gray-400">
+              {(service.sla_target || service.sla_uptime_percent) && <span>SLA: <strong>{service.sla_target || service.sla_uptime_percent}%</strong></span>}
+              {service.url && <a href={service.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-brand-600 hover:underline"><ExternalLink size={13} />{service.url}</a>}
+            </div>
+            {(service.owner_label || service.owner_name) && (
+              <div className="mt-3 flex items-center gap-2 text-sm">
+                <User size={14} className="text-gray-400" />
+                <span className="font-medium text-gray-700 dark:text-gray-300">Owner:</span>
+                <span>{service.owner_label || service.owner_name}</span>
+                {service.owner_email && <a href={`mailto:${service.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs"><Mail size={12} />{service.owner_email}</a>}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Deps tab */}
+        {tab === 'deps' && (
+          <div className="card p-5 space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <h3 className="font-medium mb-3 text-sm">Depends on</h3>
+                {(service.depends_on || []).length === 0 && <p className="text-gray-500 text-sm">No dependencies</p>}
+                {(service.depends_on || []).map(s => (
+                  <div key={s.id} className="flex items-center justify-between py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                    <Link to={`/services/${s.id}`} className="text-sm text-brand-600 hover:underline flex items-center gap-1.5">
+                      <Cog size={13} />{s.name}
+                    </Link>
+                    {canEdit && <button onClick={() => removeDep(s.id)} className="text-xs text-red-400 hover:text-red-600 ml-2"><X size={13} /></button>}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <h3 className="font-medium mb-3 text-sm">Required by</h3>
+                {(service.required_by || []).length === 0 && <p className="text-gray-500 text-sm">None</p>}
+                {(service.required_by || []).map(s => (
+                  <Link key={s.id} to={`/services/${s.id}`} className="block text-sm text-brand-600 hover:underline py-1">{s.name}</Link>
+                ))}
+              </div>
+            </div>
+            {canEdit && (
+              <div>
+                <button className="btn-secondary text-xs flex items-center gap-1 mb-3" onClick={() => setAddingDep(o => !o)}>
+                  <Plus size={13} />{addingDep ? 'Cancel' : 'Add dependency'}
+                </button>
+                {addingDep && (
+                  <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+                    <div className="p-2 bg-gray-50 dark:bg-gray-700/50">
+                      <input className="input py-1 text-sm" placeholder="Search service..." value={depSearch} onChange={e => setDepSearch(e.target.value)} />
+                    </div>
+                    <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+                      {filteredServices.slice(0, 25).map(s => (
+                        <button key={s.id} type="button" onClick={() => { addDep(s.id); setAddingDep(false); setDepSearch('') }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 dark:hover:bg-brand-900/20 flex items-center justify-between">
+                          <span>{s.name}</span>
+                          <StatusBadge status={s.current_status} />
+                        </button>
+                      ))}
+                      {filteredServices.length === 0 && <p className="text-center py-4 text-sm text-gray-500">No services found</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Assets */}
-        {service.assets && service.assets.length > 0 && (
-          <div className="card p-4">
-            <h3 className="font-semibold mb-3">Linked Assets ({service.assets.length})</h3>
+        {/* Assets tab */}
+        {tab === 'assets' && (
+          <div className="card p-5">
+            {(service.assets || []).length === 0 && <p className="text-gray-500 text-sm">No linked assets</p>}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {service.assets.map(a => (
-                <div key={a.id} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50">
-                  <StatusBadge status={a.current_status} />
+              {(service.assets || []).map(a => (
+                <Link key={a.id} to={`/assets/${a.id}`} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <StatusBadge status={a.status} />
                   <span className="text-sm font-medium">{a.name}</span>
-                  <span className="text-xs text-gray-400 ml-auto">{a.asset_type}</span>
-                </div>
+                  <CriticalityBadge criticality={a.criticality} />
+                </Link>
               ))}
             </div>
           </div>
         )}
+
+        {tab === 'licenses' && (
+          <div className="card p-5 space-y-4">
+            {licenseRows.length === 0 && <p className="text-gray-500 text-sm">No active licenses available.</p>}
+            {licenseRows.length > 0 && (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {licenseRows.map(l => (
+                  <label key={l.id} className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={!!l.assigned}
+                      onChange={e => setLicenseRows(rows => rows.map(x => x.id === l.id ? { ...x, assigned: e.target.checked } : x))}
+                      disabled={!canEdit}
+                    />
+                    <div className="text-sm">
+                      <div className="font-medium">{l.name}</div>
+                      <div className="text-xs text-gray-500">Status: {l.approval_status || 'n/a'} {l.expiry_date ? `| Expiry: ${String(l.expiry_date).slice(0, 10)}` : ''}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+            {canEdit && (
+              <div className="flex justify-end">
+                <button className="btn-primary" onClick={saveLicenses} disabled={savingLicenses}>{savingLicenses ? 'Saving...' : 'Save licenses'}</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Maintenance tab */}
+        {tab === 'maintenance' && (
+          <div className="space-y-2">
+            {maintenance.length === 0 && <p className="text-gray-500 text-sm">No maintenance records</p>}
+            {maintenance.map(m => (
+              <Link key={m.id} to={`/maintenance/${m.id}`} className="card p-4 flex items-center justify-between hover:border-brand-300">
+                <div>
+                  <p className="font-medium text-sm">{m.title}</p>
+                  <p className="text-xs text-gray-500">{format(new Date(m.scheduled_start), 'MMM dd yyyy HH:mm')}</p>
+                </div>
+                <StatusBadge status={m.status} />
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Users tab */}
+        {tab === 'users' && (
+          <div className="card overflow-hidden">
+            <div className="p-3 border-b border-gray-100 dark:border-gray-700">
+              <input className="input text-sm" placeholder="Search users..."
+                value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserLimit(25) }} />
+            </div>
+            {filteredSubs.length === 0 ? (
+              <p className="text-gray-500 text-sm p-5 text-center">No users subscribed to this service.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>{['Display Name','Username','Email','Notifications','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {visibleSubs.map(u => (
+                    <tr key={u.id}>
+                      <td className="px-4 py-2 font-medium">{u.display_name || u.username || u.email}</td>
+                      <td className="px-4 py-2 text-gray-500">{u.username || '—'}</td>
+                      <td className="px-4 py-2 text-gray-500">{u.email || '—'}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        {[u.notify_maintenance && 'Maintenance', u.notify_incidents && 'Incidents', u.notify_recovery && 'Recovery'].filter(Boolean).join(', ') || '—'}
+                      </td>
+                      <td className="px-4 py-2">{u.user_id ? <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-500">registered</span> : <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-700">email</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {filteredSubs.length > userLimit && (
+              <div className="p-3 text-center border-t border-gray-100">
+                <button className="text-sm text-brand-600 hover:underline" onClick={() => setUserLimit(l => l + 25)}>
+                  Show {filteredSubs.length - userLimit} more
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {showDelete && <ConfirmDialog title="Delete Service" message={`Delete "${service.name}"?`} danger confirmLabel="Delete" onConfirm={handleDelete} onCancel={() => setShowDelete(false)} />}
+      {deleteConfirm && <ConfirmDialog title="Delete Service" message={`Delete "${service.name}"?`} danger confirmLabel="Delete" onConfirm={handleDelete} onCancel={() => setDeleteConfirm(false)} />}
     </Layout>
   )
 }
-
