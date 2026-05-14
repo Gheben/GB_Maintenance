@@ -6,6 +6,7 @@ import {
   Ban, LogOut, BookOpen, ChevronLeft, ChevronRight, X, FileBadge2
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { settingsApi } from '../api'
 
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', perm: 'dashboard' },
@@ -30,6 +31,7 @@ const NAV = [
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const { user, logout, hasPermission } = useAuth()
   const navigate = useNavigate()
+  const [branding, setBranding] = useState({ app_name: 'GB Maintenance', app_brand_image_url: '' })
 
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
@@ -41,8 +43,35 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
+  useEffect(() => {
+    settingsApi.publicBranding()
+      .then(r => {
+        const b = r.data || {}
+        setBranding({
+          app_name: b.app_name || 'GB Maintenance',
+          app_brand_image_url: b.app_brand_image_url || '',
+        })
+      })
+      .catch(() => {})
+
+    const onBrandingUpdate = (ev) => {
+      const b = ev?.detail || {}
+      setBranding({
+        app_name: b.app_name || 'GB Maintenance',
+        app_brand_image_url: b.app_brand_image_url || '',
+      })
+    }
+
+    window.addEventListener('app-branding-updated', onBrandingUpdate)
+    return () => window.removeEventListener('app-branding-updated', onBrandingUpdate)
+  }, [])
+
   // Collapse only applies on desktop; mobile drawer always shows full width + labels
   const cl = collapsed && isDesktop
+  const appName = branding.app_name || 'GB Maintenance'
+  const brandImage = String(branding.app_brand_image_url || '').trim()
+  const [nameTop, ...restName] = appName.split(/\s+/).filter(Boolean)
+  const nameBottom = restName.join(' ')
 
   const handleLogout = async () => { await logout(); navigate('/login') }
 
@@ -72,11 +101,15 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
         {/* Header / Logo */}
         <div style={{ paddingTop: 'env(safe-area-inset-top)' }}
           className={`border-b border-gray-700 flex items-center ${cl ? 'px-1 py-4 justify-between' : 'px-4 py-4 gap-3'}`}>
-          <img src="/logo.svg" alt="GB Maintenance" className="w-9 h-9 rounded-lg flex-shrink-0" />
+          {brandImage ? (
+            <img src={brandImage} alt={appName} className="w-9 h-9 rounded-lg flex-shrink-0 object-contain bg-gray-800" />
+          ) : (
+            <img src="/logo.svg" alt={appName} className="w-9 h-9 rounded-lg flex-shrink-0" />
+          )}
           {!cl && (
             <div className="min-w-0 flex-1">
-              <span className="font-bold text-base leading-tight block">GB</span>
-              <span className="text-xs font-normal text-gray-400 tracking-wide">Maintenance</span>
+              <span className="font-bold text-base leading-tight block truncate">{nameTop || 'GB'}</span>
+              <span className="text-xs font-normal text-gray-400 tracking-wide truncate">{nameBottom || 'Maintenance'}</span>
             </div>
           )}
           {/* Mobile: close button */}
