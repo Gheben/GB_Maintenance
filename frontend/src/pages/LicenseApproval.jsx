@@ -1,6 +1,33 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { licensesApi } from '../api'
+import { CheckCircle2, CircleAlert, RefreshCw, ShieldCheck, XCircle } from 'lucide-react'
+import { licensesApi, settingsApi } from '../api'
+
+const DEFAULT_BRANDING = {
+  app_name: 'GB Maintenance',
+  approval_page_title: 'License Approval',
+  approval_page_subtitle: 'Review the request and confirm whether the license can be approved.',
+  approval_page_logo_url: '',
+  approval_page_primary_color: '#2563eb',
+  approval_page_side_kicker: 'Approval Flow',
+  approval_page_side_title: 'Simple, but brandable',
+  approval_page_side_description: "This page can now be branded from Licenses > Template with company name, custom title, subtitle, logo, and primary color, so the approval request feels like part of the customer's own portal.",
+  approval_page_side_point_1: 'Company/app name shown in the public header',
+  approval_page_side_point_2: 'Custom title and subtitle for approval requests',
+  approval_page_side_point_3: 'Company logo uploaded from Licenses > Template',
+  approval_page_side_point_4: 'Primary accent color used for CTA and highlights',
+  approval_page_back_to_login_label: 'Back to login',
+  approval_page_footer_text: 'Powered by {app_name}',
+  approval_page_load_button_label: 'Load request',
+  approval_page_loading_label: 'Loading approval request...',
+  approval_page_approve_button_label: 'Approve',
+  approval_page_reject_button_label: 'Reject',
+  approval_page_refresh_button_label: 'Refresh',
+  approval_page_reject_reason_label: 'Reject reason (optional)',
+  approval_page_reject_reason_placeholder: 'Add a note for the requester, if needed.',
+  approval_page_missing_token_text: 'Missing approval token',
+  approval_page_load_error_text: 'Cannot load approval request',
+}
 
 export default function LicenseApproval() {
   const [searchParams] = useSearchParams()
@@ -12,10 +39,17 @@ export default function LicenseApproval() {
   const [error, setError] = useState('')
   const [result, setResult] = useState('')
   const [reason, setReason] = useState('')
+  const [branding, setBranding] = useState(DEFAULT_BRANDING)
+
+  useEffect(() => {
+    settingsApi.publicBranding()
+      .then(r => setBranding(prev => ({ ...prev, ...(r.data || {}) })))
+      .catch(() => setBranding(DEFAULT_BRANDING))
+  }, [])
 
   const load = async () => {
     if (!token) {
-      setError('Missing approval token')
+      setError(branding.approval_page_missing_token_text || DEFAULT_BRANDING.approval_page_missing_token_text)
       return
     }
     setLoading(true)
@@ -26,7 +60,7 @@ export default function LicenseApproval() {
       setInfo(r.data)
     } catch (err) {
       setInfo(null)
-      setError(err.response?.data?.error || 'Cannot load approval request')
+      setError(err.response?.data?.error || branding.approval_page_load_error_text || DEFAULT_BRANDING.approval_page_load_error_text)
     } finally {
       setLoading(false)
     }
@@ -60,44 +94,120 @@ export default function LicenseApproval() {
     }
   }
 
+  const accent = branding.approval_page_primary_color || DEFAULT_BRANDING.approval_page_primary_color
+  const logoUrl = String(branding.approval_page_logo_url || '').trim()
+  const title = branding.approval_page_title || DEFAULT_BRANDING.approval_page_title
+  const subtitle = branding.approval_page_subtitle || DEFAULT_BRANDING.approval_page_subtitle
+  const appName = branding.app_name || DEFAULT_BRANDING.app_name
+  const sidePoints = [1, 2, 3, 4]
+    .map(idx => branding[`approval_page_side_point_${idx}`] || DEFAULT_BRANDING[`approval_page_side_point_${idx}`])
+    .filter(Boolean)
+  const footerTextTemplate = branding.approval_page_footer_text || DEFAULT_BRANDING.approval_page_footer_text
+  const footerText = String(footerTextTemplate).replaceAll('{app_name}', appName)
+  const initials = appName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase())
+    .join('') || 'GB'
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4 sm:p-8">
-      <div className="max-w-xl mx-auto card p-6 sm:p-8 space-y-4">
-        <h1 className="text-xl font-semibold">License Approval</h1>
-
-        {!info && !loading && (
-          <button className="btn-primary" onClick={load}>Load request</button>
-        )}
-
-        {loading && <p className="text-sm text-gray-500">Loading...</p>}
-
-        {error && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{error}</div>}
-        {result && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">{result}</div>}
-
-        {info && (
-          <div className="space-y-3">
-            <div className="text-sm"><span className="text-gray-500">License:</span> <strong>{info.name}</strong></div>
-            <div className="text-sm"><span className="text-gray-500">Supplier:</span> {info.supplier_company || '—'}</div>
-            <div className="text-sm"><span className="text-gray-500">Expiry:</span> {info.expiry_date ? String(info.expiry_date).slice(0, 10) : '—'}</div>
-            <div className="text-sm"><span className="text-gray-500">Status:</span> {info.approval_status}</div>
-            <div className="text-sm"><span className="text-gray-500">Link expires:</span> {info.expires_at ? new Date(info.expires_at).toLocaleString() : '—'}</div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Reject reason (optional)</label>
-              <textarea className="input" rows={3} value={reason} onChange={e => setReason(e.target.value)} />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button className="btn-primary" disabled={busy} onClick={approve}>Approve</button>
-              <button className="btn-secondary" disabled={busy} onClick={reject}>Reject</button>
-              <button className="btn-secondary" disabled={busy} onClick={load}>Refresh</button>
+    <div
+      className="min-h-screen p-4 sm:p-8"
+      style={{
+        background: `radial-gradient(circle at top left, ${accent}22, transparent 35%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)`,
+      }}
+    >
+      <div className="max-w-5xl mx-auto grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <section className="rounded-[28px] border border-white/70 bg-white/85 backdrop-blur shadow-xl overflow-hidden">
+          <div className="p-6 sm:p-8 border-b border-gray-100" style={{ background: `linear-gradient(135deg, ${accent}18, transparent 70%)` }}>
+            <div className="flex items-start gap-4">
+              {logoUrl ? (
+                <img src={logoUrl} alt={appName} className="w-14 h-14 rounded-2xl object-contain bg-gray-100 shadow-sm border border-gray-100 p-2" />
+              ) : (
+                <div className="w-14 h-14 rounded-2xl text-white font-bold flex items-center justify-center shadow-sm" style={{ backgroundColor: accent }}>
+                  {initials}
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-[0.22em] text-gray-500 font-semibold">{appName}</div>
+                <h1 className="mt-2 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">{title}</h1>
+                <p className="mt-3 text-sm sm:text-base text-gray-600 max-w-2xl">{subtitle}</p>
+              </div>
             </div>
           </div>
-        )}
 
-        <div className="pt-2 text-sm">
-          <Link to="/login" className="text-brand-600 hover:underline">Back to login</Link>
-        </div>
+          <div className="p-6 sm:p-8 space-y-5">
+            {!info && !loading && (
+              <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-white font-medium shadow-sm transition-transform hover:-translate-y-0.5" style={{ backgroundColor: accent }} onClick={load}>
+                <ShieldCheck size={18} />{branding.approval_page_load_button_label || DEFAULT_BRANDING.approval_page_load_button_label}
+              </button>
+            )}
+
+            {loading && <p className="text-sm text-gray-500">{branding.approval_page_loading_label || DEFAULT_BRANDING.approval_page_loading_label}</p>}
+
+            {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3"><CircleAlert size={18} className="mt-0.5 shrink-0" />{error}</div>}
+            {result && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-2xl p-4 flex items-start gap-3"><CheckCircle2 size={18} className="mt-0.5 shrink-0" />{result}</div>}
+
+            {info && (
+              <div className="space-y-5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    ['License', info.name || '—'],
+                    ['Supplier', info.supplier_company || '—'],
+                    ['Expiry', info.expiry_date ? String(info.expiry_date).slice(0, 10) : '—'],
+                    ['Status', info.approval_status || '—'],
+                    ['Link expires', info.expires_at ? new Date(info.expires_at).toLocaleString() : '—'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+                      <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">{label}</div>
+                      <div className="mt-1 text-sm sm:text-base text-gray-900 font-medium break-words">{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                  <label className="block text-sm font-semibold mb-2 text-gray-800">{branding.approval_page_reject_reason_label || DEFAULT_BRANDING.approval_page_reject_reason_label}</label>
+                  <textarea className="input min-h-[120px]" rows={4} value={reason} onChange={e => setReason(e.target.value)} placeholder={branding.approval_page_reject_reason_placeholder || DEFAULT_BRANDING.approval_page_reject_reason_placeholder} />
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-white font-medium shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60" style={{ backgroundColor: accent }} disabled={busy} onClick={approve}><CheckCircle2 size={18} />{branding.approval_page_approve_button_label || DEFAULT_BRANDING.approval_page_approve_button_label}</button>
+                  <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-700 font-medium border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60" disabled={busy} onClick={reject}><XCircle size={18} />{branding.approval_page_reject_button_label || DEFAULT_BRANDING.approval_page_reject_button_label}</button>
+                  <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-600 font-medium border border-gray-200 bg-gray-50 hover:bg-gray-100 disabled:opacity-60" disabled={busy} onClick={load}><RefreshCw size={18} />{branding.approval_page_refresh_button_label || DEFAULT_BRANDING.approval_page_refresh_button_label}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <aside className="rounded-[28px] border border-white/70 bg-white/80 backdrop-blur shadow-xl p-6 sm:p-8 space-y-5">
+          <div>
+            <div className="text-xs uppercase tracking-[0.22em] text-gray-500 font-semibold">{branding.approval_page_side_kicker || DEFAULT_BRANDING.approval_page_side_kicker}</div>
+            <h2 className="mt-2 text-2xl font-bold text-gray-900">{branding.approval_page_side_title || DEFAULT_BRANDING.approval_page_side_title}</h2>
+            <p className="mt-3 text-sm text-gray-600">{branding.approval_page_side_description || DEFAULT_BRANDING.approval_page_side_description}</p>
+          </div>
+
+          <div className="space-y-3">
+            {sidePoints.map(item => (
+              <div key={item} className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0 mt-0.5" style={{ backgroundColor: accent }}>
+                  <CheckCircle2 size={14} />
+                </div>
+                <p className="text-sm text-gray-700">{item}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-2 text-sm">
+            <Link to="/login" className="inline-flex items-center gap-2 hover:underline" style={{ color: accent }}>
+              <ShieldCheck size={16} />{branding.approval_page_back_to_login_label || DEFAULT_BRANDING.approval_page_back_to_login_label}
+            </Link>
+          </div>
+        </aside>
+      </div>
+      <div className="max-w-5xl mx-auto pt-4 text-center text-xs text-gray-500">
+        {footerText}
       </div>
     </div>
   )
