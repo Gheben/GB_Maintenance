@@ -834,6 +834,104 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contract_notes TEXT`);
       await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contract_documents JSONB NOT NULL DEFAULT '[]'::jsonb`);
     }
+  },
+  {
+    version: 19,
+    name: 'maintenance_owner_approval_workflow',
+    up: async (client) => {
+      await client.query(`
+        ALTER TABLE maintenance_windows
+          ADD COLUMN IF NOT EXISTS owner_approval_required BOOLEAN NOT NULL DEFAULT FALSE,
+          ADD COLUMN IF NOT EXISTS owner_approval_status VARCHAR(30) NOT NULL DEFAULT 'not_required',
+          ADD COLUMN IF NOT EXISTS owner_approval_updated_at TIMESTAMPTZ
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS maintenance_owner_approvals (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          maintenance_id UUID NOT NULL REFERENCES maintenance_windows(id) ON DELETE CASCADE,
+          owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          owner_email VARCHAR(200),
+          owner_name VARCHAR(200),
+          owner_source_type VARCHAR(20) NOT NULL,
+          owner_source_id UUID NOT NULL,
+          owner_source_name VARCHAR(300),
+          status VARCHAR(30) NOT NULL DEFAULT 'pending',
+          response_note TEXT,
+          proposed_start TIMESTAMPTZ,
+          proposed_end TIMESTAMPTZ,
+          creator_response_note TEXT,
+          creator_proposed_start TIMESTAMPTZ,
+          creator_proposed_end TIMESTAMPTZ,
+          requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          responded_at TIMESTAMPTZ,
+          creator_responded_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(maintenance_id, owner_user_id, owner_source_type, owner_source_id)
+        )
+      `);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_moa_maintenance ON maintenance_owner_approvals(maintenance_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_moa_owner_user ON maintenance_owner_approvals(owner_user_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_moa_status ON maintenance_owner_approvals(status)`);
+
+      const templates = [
+        {
+          event_type: 'maintenance_owner_approval_requested',
+          name: 'Maintenance Owner Approval Requested',
+          subject_template: '[APPROVAL REQUIRED] Maintenance: {{title}}',
+          body_html_template: `<h2>Maintenance Approval Required</h2>
+<p>A maintenance request requires your decision as owner.</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Title</td><td style="padding:8px;border:1px solid #e5e7eb">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Source</td><td style="padding:8px;border:1px solid #e5e7eb">{{owner_source_type}} - {{owner_source_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Start</td><td style="padding:8px;border:1px solid #e5e7eb">{{scheduled_start}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">End</td><td style="padding:8px;border:1px solid #e5e7eb">{{scheduled_end}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Requested by</td><td style="padding:8px;border:1px solid #e5e7eb">{{created_by_name}}</td></tr>
+</table>
+<p style="margin-top:16px"><a href="{{app_url}}/maintenance/{{id}}" style="background:#1d4ed8;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Maintenance</a></p>`
+        },
+        {
+          event_type: 'maintenance_owner_reschedule_proposed',
+          name: 'Maintenance Reschedule Proposed by Owner',
+          subject_template: '[RESCHEDULE PROPOSED] Maintenance: {{title}}',
+          body_html_template: `<h2>Owner Proposed a New Date</h2>
+<p>An owner proposed a new schedule for this maintenance.</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Title</td><td style="padding:8px;border:1px solid #e5e7eb">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Owner</td><td style="padding:8px;border:1px solid #e5e7eb">{{owner_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Proposed start</td><td style="padding:8px;border:1px solid #e5e7eb">{{proposed_start}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Proposed end</td><td style="padding:8px;border:1px solid #e5e7eb">{{proposed_end}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Note</td><td style="padding:8px;border:1px solid #e5e7eb">{{response_note}}</td></tr>
+</table>
+<p style="margin-top:16px"><a href="{{app_url}}/maintenance/{{id}}" style="background:#0f766e;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Review Request</a></p>`
+        },
+        {
+          event_type: 'maintenance_owner_reschedule_countered',
+          name: 'Maintenance Reschedule Counter Proposal',
+          subject_template: '[COUNTER PROPOSAL] Maintenance: {{title}}',
+          body_html_template: `<h2>New Date Proposed by Creator</h2>
+<p>The maintenance creator proposed another schedule.</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Title</td><td style="padding:8px;border:1px solid #e5e7eb">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">New start</td><td style="padding:8px;border:1px solid #e5e7eb">{{creator_proposed_start}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">New end</td><td style="padding:8px;border:1px solid #e5e7eb">{{creator_proposed_end}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Note</td><td style="padding:8px;border:1px solid #e5e7eb">{{creator_response_note}}</td></tr>
+</table>
+<p style="margin-top:16px"><a href="{{app_url}}/maintenance/{{id}}" style="background:#b45309;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Maintenance</a></p>`
+        }
+      ];
+
+      for (const t of templates) {
+        await client.query(
+          `INSERT INTO notification_templates (name, event_type, subject_template, body_html_template)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (event_type) DO NOTHING`,
+          [t.name, t.event_type, t.subject_template, t.body_html_template]
+        );
+      }
+    }
   }
 ];
 
