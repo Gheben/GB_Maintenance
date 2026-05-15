@@ -19,6 +19,7 @@ export default function IncidentDetail() {
   const [incident, setIncident] = useState(null)
   const [tab, setTab] = useState('info')
   const [incidentUsers, setIncidentUsers] = useState([])
+  const [impactedOffices, setImpactedOffices] = useState([])
   const [userSearch, setUserSearch] = useState('')
   const [userLimit, setUserLimit] = useState(25)
   const [updateForm, setUpdateForm] = useState({ status: 'investigating', message: '' })
@@ -33,7 +34,19 @@ export default function IncidentDetail() {
 
   useEffect(() => {
     if (tab === 'users') {
-      incidentsApi.users(id).then(r => setIncidentUsers(r.data)).catch(() => {})
+      incidentsApi.users(id)
+        .then((r) => {
+          const payload = r.data
+          if (Array.isArray(payload)) {
+            setIncidentUsers(payload)
+            const offices = [...new Set(payload.map((u) => String(u.office || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+            setImpactedOffices(offices)
+            return
+          }
+          setIncidentUsers(Array.isArray(payload?.users) ? payload.users : [])
+          setImpactedOffices(Array.isArray(payload?.offices_impacted) ? payload.offices_impacted : [])
+        })
+        .catch(() => {})
     }
   }, [tab, id])
 
@@ -167,6 +180,20 @@ export default function IncidentDetail() {
         {tab === 'users' && (
           <div className="card overflow-hidden">
             <div className="p-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="mb-3">
+                <p className="text-xs font-medium text-gray-500 mb-1">Offices impacted ({impactedOffices.length})</p>
+                {impactedOffices.length === 0 ? (
+                  <p className="text-xs text-gray-400">No office data available</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {impactedOffices.map((office) => (
+                      <span key={office} className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                        {office}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <input className="input text-sm" placeholder="Search users..."
                 value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserLimit(25) }} />
             </div>
@@ -175,7 +202,7 @@ export default function IncidentDetail() {
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>{['Display Name','Username','Email','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                  <tr>{['Display Name','Username','Email','Office','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {visibleUsers.map(u => (
@@ -183,6 +210,7 @@ export default function IncidentDetail() {
                       <td className="px-4 py-2 font-medium">{u.display_name || u.username}</td>
                       <td className="px-4 py-2 text-gray-500">{u.username}</td>
                       <td className="px-4 py-2 text-gray-500">{u.email || '—'}</td>
+                      <td className="px-4 py-2 text-gray-500">{u.office || '—'}</td>
                       <td className="px-4 py-2 text-gray-500">{u.role}</td>
                       <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-bold ${u.auth_type === 'ldap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{u.auth_type || 'local'}</span></td>
                     </tr>

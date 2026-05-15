@@ -135,6 +135,18 @@ export default function BlackoutPeriods() {
                       ))}
                     </div>
                   )}
+                  <div className="mt-2">
+                    <p className="text-xs text-gray-500">Offices impacted: <strong>{p.offices_impacted_count || 0}</strong></p>
+                    {Array.isArray(p.offices_impacted) && p.offices_impacted.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {p.offices_impacted.map((office) => (
+                          <span key={office} className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                            {office}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex gap-1 shrink-0 ml-3">
                   <button className="p-1.5 text-gray-400 hover:bg-gray-100 rounded hover:text-brand-600 transition-colors" onClick={(e) => { e.stopPropagation(); openEdit(p) }}><Pencil size={14} /></button>

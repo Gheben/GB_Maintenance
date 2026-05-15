@@ -993,58 +993,63 @@ router.delete('/:id', requireAdmin, [
 // ─── GET /api/maintenance/:id/users ──────────────────────────────────────────
 router.get('/:id/users', async (req, res) => {
   const rows = await getMany(
-    `SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
-     FROM service_subscribers ss
-     JOIN maintenance_services ms ON ms.service_id = ss.service_id
-     LEFT JOIN users u ON u.id = ss.user_id
-     WHERE ms.maintenance_id = $1 AND u.id IS NOT NULL
-     UNION
-     SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
-     FROM service_subscribers ss
-     JOIN service_assets sa ON sa.service_id = ss.service_id
-     JOIN maintenance_assets ma ON ma.asset_id = sa.asset_id
-     LEFT JOIN users u ON u.id = ss.user_id
-     WHERE ma.maintenance_id = $1 AND u.id IS NOT NULL
-     UNION
-     SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
-     FROM maintenance_assets ma
-     JOIN assets a ON a.id = ma.asset_id
-    JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
-     JOIN users u ON (
-       (ot->>'type' = 'user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid)
-       OR (
-         ot->>'type' = 'local_group'
-         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
-         AND EXISTS (
-           SELECT 1 FROM user_group_members ugm
-           WHERE ugm.group_id = (ot->>'id')::uuid
-             AND ugm.user_id = u.id
+    `WITH resolved_users AS (
+       SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       FROM service_subscribers ss
+       JOIN maintenance_services ms ON ms.service_id = ss.service_id
+       LEFT JOIN users u ON u.id = ss.user_id
+       WHERE ms.maintenance_id = $1 AND u.id IS NOT NULL
+       UNION
+       SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       FROM service_subscribers ss
+       JOIN service_assets sa ON sa.service_id = ss.service_id
+       JOIN maintenance_assets ma ON ma.asset_id = sa.asset_id
+       LEFT JOIN users u ON u.id = ss.user_id
+       WHERE ma.maintenance_id = $1 AND u.id IS NOT NULL
+       UNION
+       SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       FROM maintenance_assets ma
+       JOIN assets a ON a.id = ma.asset_id
+      JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
+       JOIN users u ON (
+         (ot->>'type' = 'user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid)
+         OR (
+           ot->>'type' = 'local_group'
+           AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+           AND EXISTS (
+             SELECT 1 FROM user_group_members ugm
+             WHERE ugm.group_id = (ot->>'id')::uuid
+               AND ugm.user_id = u.id
+           )
          )
        )
-     )
-     WHERE ma.maintenance_id = $1 AND u.is_active = true
-     UNION
-     SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
-     FROM maintenance_services ms
-     JOIN services s ON s.id = ms.service_id
-    JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
-     JOIN users u ON (
-       (ot->>'type' = 'user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid)
-       OR (
-         ot->>'type' = 'local_group'
-         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
-         AND EXISTS (
-           SELECT 1 FROM user_group_members ugm
-           WHERE ugm.group_id = (ot->>'id')::uuid
-             AND ugm.user_id = u.id
+       WHERE ma.maintenance_id = $1 AND u.is_active = true
+       UNION
+       SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       FROM maintenance_services ms
+       JOIN services s ON s.id = ms.service_id
+      JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
+       JOIN users u ON (
+         (ot->>'type' = 'user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid)
+         OR (
+           ot->>'type' = 'local_group'
+           AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+           AND EXISTS (
+             SELECT 1 FROM user_group_members ugm
+             WHERE ugm.group_id = (ot->>'id')::uuid
+               AND ugm.user_id = u.id
+           )
          )
        )
+       WHERE ms.maintenance_id = $1 AND u.is_active = true
      )
-     WHERE ms.maintenance_id = $1 AND u.is_active = true
-     ORDER BY display_name`,
+     SELECT id, username, display_name, email, office, role, auth_type
+     FROM resolved_users
+     ORDER BY display_name NULLS LAST, username`,
     [req.params.id]
   );
-  res.json(rows);
+  const officesImpacted = [...new Set(rows.map((u) => String(u.office || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  res.json({ users: rows, offices_impacted: officesImpacted, offices_impacted_count: officesImpacted.length });
 });
 
 module.exports = router;
