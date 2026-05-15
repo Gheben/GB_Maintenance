@@ -25,16 +25,27 @@ router.get('/', async (req, res) => {
   const includeLdapMembers = ['1', 'true', 'yes', 'on'].includes(String(req.query.include_ldap_members || '').toLowerCase());
 
   const groups = await getMany(
-    `SELECT lg.*, COUNT(DISTINCT ugm.user_id)::int as local_member_count,
-            COUNT(DISTINCT lgm.id)::int as ldap_mapping_count,
-            COALESCE(
-              ARRAY_AGG(DISTINCT lgm.ldap_group_dn) FILTER (WHERE lgm.ldap_group_dn IS NOT NULL AND TRIM(lgm.ldap_group_dn) <> ''),
-              '{}'::text[]
-            ) AS ldap_group_dns
+    `SELECT lg.*,
+            COALESCE(loc.local_member_count, 0) AS local_member_count,
+            COALESCE(map.ldap_mapping_count, 0) AS ldap_mapping_count,
+            COALESCE(map.ldap_group_dns, '{}'::text[]) AS ldap_group_dns
      FROM local_groups lg
-     LEFT JOIN user_group_members ugm ON ugm.group_id = lg.id
-     LEFT JOIN ldap_group_mappings lgm ON lgm.local_group_id = lg.id
-     GROUP BY lg.id ORDER BY lg.name`
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS local_member_count
+       FROM user_group_members ugm
+       WHERE ugm.group_id = lg.id
+     ) loc ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT
+         COUNT(*)::int AS ldap_mapping_count,
+         COALESCE(
+           ARRAY_AGG(lgm.ldap_group_dn) FILTER (WHERE lgm.ldap_group_dn IS NOT NULL AND TRIM(lgm.ldap_group_dn) <> ''),
+           '{}'::text[]
+         ) AS ldap_group_dns
+       FROM ldap_group_mappings lgm
+       WHERE lgm.local_group_id = lg.id
+     ) map ON TRUE
+     ORDER BY lg.name`
   );
 
   const enriched = includeLdapMembers

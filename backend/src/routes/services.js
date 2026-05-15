@@ -70,11 +70,11 @@ router.get('/', async (req, res) => {
   const rows = await getMany(
     `SELECT s.*, u.display_name as owner_name, u.email as owner_email,
        lg.name as owner_group_name,
-       (SELECT COUNT(*)::int FROM license_services ls JOIN licenses l ON l.id=ls.license_id WHERE ls.service_id=s.id AND l.is_active=true) as license_count,
-       (SELECT COUNT(*)::int FROM license_services ls JOIN licenses l ON l.id=ls.license_id WHERE ls.service_id=s.id AND l.is_active=true AND l.expiry_date IS NOT NULL AND l.expiry_date < CURRENT_DATE) as expired_license_count,
-       (SELECT MIN(l.expiry_date) FROM license_services ls JOIN licenses l ON l.id=ls.license_id WHERE ls.service_id=s.id AND l.is_active=true AND l.expiry_date IS NOT NULL AND l.expiry_date >= CURRENT_DATE) as next_license_expiry,
-       (SELECT l.name FROM license_services ls JOIN licenses l ON l.id=ls.license_id WHERE ls.service_id=s.id AND l.is_active=true ORDER BY l.expiry_date NULLS LAST, l.name LIMIT 1) as primary_license_name,
-       (SELECT sp.company FROM license_services ls JOIN licenses l ON l.id=ls.license_id LEFT JOIN suppliers sp ON sp.id=l.supplier_id WHERE ls.service_id=s.id AND l.is_active=true ORDER BY l.expiry_date NULLS LAST, l.name LIMIT 1) as primary_supplier_name,
+       COALESCE(lic.license_count, 0) as license_count,
+       COALESCE(lic.expired_license_count, 0) as expired_license_count,
+       lic.next_license_expiry,
+       prim.primary_license_name,
+       prim.primary_supplier_name,
        COALESCE(NULLIF(s.owner_targets->0->>'name',''),
          CASE s.owner_type
            WHEN 'local_group' THEN lg.name
@@ -90,6 +90,26 @@ router.get('/', async (req, res) => {
      FROM services s
      LEFT JOIN users u ON u.id=s.owner_id
      LEFT JOIN local_groups lg ON lg.id=s.owner_group_id
+     LEFT JOIN LATERAL (
+       SELECT
+         COUNT(*)::int AS license_count,
+         COUNT(*) FILTER (WHERE l.expiry_date IS NOT NULL AND l.expiry_date < CURRENT_DATE)::int AS expired_license_count,
+         MIN(l.expiry_date) FILTER (WHERE l.expiry_date IS NOT NULL AND l.expiry_date >= CURRENT_DATE) AS next_license_expiry
+       FROM license_services ls
+       JOIN licenses l ON l.id = ls.license_id
+       WHERE ls.service_id = s.id AND l.is_active = true
+     ) lic ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT
+         l.name AS primary_license_name,
+         sp.company AS primary_supplier_name
+       FROM license_services ls
+       JOIN licenses l ON l.id = ls.license_id
+       LEFT JOIN suppliers sp ON sp.id = l.supplier_id
+       WHERE ls.service_id = s.id AND l.is_active = true
+       ORDER BY l.expiry_date NULLS LAST, l.name
+       LIMIT 1
+     ) prim ON TRUE
      ${where} ORDER BY s.system_name NULLS LAST, s.name LIMIT $${i++} OFFSET $${i}`,
     [...params, parseInt(limit), offset]
   );

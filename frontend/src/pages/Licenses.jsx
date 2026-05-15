@@ -1471,7 +1471,7 @@ export default function Licenses() {
 
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="min-w-[980px] w-full text-sm">
+                <table className="min-w-[900px] w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
                     <tr>{['Name', 'Supplier', 'Owner', 'Approver', 'Expiry', 'Status', 'Scope', 'Open'].map(h => (
                       <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
@@ -1490,7 +1490,10 @@ export default function Licenses() {
                             {approvalStatusMeta(l.approval_status, l.approval_required !== false).label}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{l.asset_count || 0} assets • {l.service_count || 0} services</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 leading-tight">
+                          <div>{l.asset_count || 0} assets</div>
+                          <div>{l.service_count || 0} services</div>
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 justify-end">
                             <button className="action-icon-btn" onClick={() => openEditLicense(l)} title="Edit"><Pencil size={14} /></button>
