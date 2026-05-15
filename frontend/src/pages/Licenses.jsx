@@ -169,6 +169,59 @@ function approvalStatusMeta(status, approvalRequired = true) {
   return { label: 'Pending', cls: 'bg-amber-100 text-amber-700' }
 }
 
+const FALLBACK_REGION_CODES = [
+  'AD', 'AE', 'AL', 'AR', 'AT', 'AU', 'BA', 'BE', 'BG', 'BR', 'BY', 'CA', 'CH', 'CL', 'CN', 'CO', 'CR',
+  'CY', 'CZ', 'DE', 'DK', 'DO', 'DZ', 'EE', 'EG', 'ES', 'FI', 'FR', 'GB', 'GE', 'GR', 'HR', 'HU', 'IE',
+  'IL', 'IN', 'IQ', 'IR', 'IS', 'IT', 'JP', 'KR', 'KZ', 'LB', 'LI', 'LT', 'LU', 'LV', 'MA', 'MC', 'MD',
+  'ME', 'MK', 'MT', 'MX', 'NL', 'NO', 'NZ', 'PE', 'PL', 'PT', 'RO', 'RS', 'RU', 'SA', 'SE', 'SI', 'SK',
+  'SM', 'TN', 'TR', 'UA', 'US', 'UY', 'VA', 'VE', 'ZA'
+]
+
+function regionCodeToFlag(code) {
+  if (!/^[A-Z]{2}$/.test(code || '')) return ''
+  const base = 127397
+  return String.fromCodePoint(...code.split('').map(ch => base + ch.charCodeAt(0)))
+}
+
+const COUNTRY_OPTIONS = (() => {
+  const regionCodes = typeof Intl.supportedValuesOf === 'function'
+    ? Intl.supportedValuesOf('region')
+    : FALLBACK_REGION_CODES
+
+  const displayNames = new Intl.DisplayNames(['it'], { type: 'region' })
+  return [...new Set(regionCodes)]
+    .filter(code => /^[A-Z]{2}$/.test(code))
+    .map((code) => {
+      const name = displayNames.of(code) || code
+      return {
+        code,
+        name,
+        label: `${regionCodeToFlag(code)} ${name}`.trim(),
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'it'))
+})()
+
+function NationalityPicker({ value, onChange }) {
+  const customOption = useMemo(() => {
+    const current = String(value || '').trim()
+    if (!current) return null
+    const found = COUNTRY_OPTIONS.some(option => option.name === current)
+    if (found) return null
+    return { name: current, label: `🏳️ ${current}` }
+  }, [value])
+
+  return (
+    <select className="input" value={value || ''} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Select nationality</option>
+      {customOption ? <option value={customOption.name}>{customOption.label}</option> : null}
+      {COUNTRY_OPTIONS.map(option => (
+        <option key={option.code} value={option.name}>{option.label}</option>
+      ))}
+    </select>
+  )
+}
+
 function normalizeSupplierPayload(form) {
   return {
     ...form,
@@ -269,7 +322,7 @@ function SupplierForm({ value, onChange }) {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div>
           <label className="block text-sm font-medium mb-1">Nationality</label>
-          <input className="input" value={value.nationality} onChange={e => set('nationality', e.target.value)} />
+          <NationalityPicker value={value.nationality} onChange={(next) => set('nationality', next)} />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Phone</label>
@@ -371,7 +424,7 @@ function SupplierFormTabbed({ value, onChange, onUploadDoc }) {
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-sm font-medium mb-1">Nationality</label>
-              <input className="input" value={value.nationality} onChange={e => set('nationality', e.target.value)} />
+              <NationalityPicker value={value.nationality} onChange={(next) => set('nationality', next)} />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Phone</label>
