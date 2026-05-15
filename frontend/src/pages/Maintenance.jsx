@@ -155,7 +155,14 @@ export default function Maintenance() {
                                 <ClipboardCheck size={13} />
                               </span>
                             )}
-                            <Link to={`/maintenance/${m.id}`} className="action-link text-sm" onClick={e => e.stopPropagation()}>{m.title}</Link>
+                            <span
+                              className="text-sm text-gray-800 dark:text-gray-100"
+                              onClick={(e) => e.stopPropagation()}
+                              onDoubleClick={(e) => e.stopPropagation()}
+                              title="Use row or arrow interactions"
+                            >
+                              {m.title}
+                            </span>
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-500">{m.type}</td>
