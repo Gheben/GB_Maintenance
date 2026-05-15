@@ -5,7 +5,7 @@ import { usersApi, groupsApi, settingsApi } from '../api'
 import { Pagination } from '../components/Pagination'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
-import { Plus, Trash2, Users as UsersIcon, X, User, Shield, CheckCircle, XCircle, Pencil, Save, ShieldCheck } from 'lucide-react'
+import { Plus, Trash2, Users as UsersIcon, X, User, Shield, CheckCircle, XCircle, Pencil, Save, ShieldCheck, Wand2 } from 'lucide-react'
 
 const DEFAULT_ROLES = ['admin','change_manager','operator','viewer','subscriber']
 const TABS = [
@@ -41,28 +41,81 @@ function passwordPolicyOk(password) {
   return PASSWORD_RULES.every((r) => r.test(password))
 }
 
+function getPasswordStrength(password) {
+  const value = String(password || '')
+  if (!value) return { score: 0, level: 'none', label: '' }
+
+  const baseScore = PASSWORD_RULES.reduce((acc, r) => acc + (r.test(value) ? 1 : 0), 0)
+  const lengthBonus = value.length >= 12 ? 1 : 0
+  const score = baseScore + lengthBonus
+
+  if (score <= 2) return { score, level: 'weak', label: 'Weak' }
+  if (score <= 4) return { score, level: 'medium', label: 'Medium' }
+  return { score, level: 'strong', label: 'Strong' }
+}
+
+function generateStrongPassword(length = 14) {
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const lower = 'abcdefghijklmnopqrstuvwxyz'
+  const digits = '0123456789'
+  const special = '!@#$%^&*()-_=+[]{};:,.?'
+  const all = `${upper}${lower}${digits}${special}`
+
+  const pick = (chars) => chars[Math.floor(Math.random() * chars.length)]
+  const chars = [pick(upper), pick(lower), pick(digits), pick(special)]
+
+  for (let i = chars.length; i < Math.max(8, length); i += 1) {
+    chars.push(pick(all))
+  }
+
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const tmp = chars[i]
+    chars[i] = chars[j]
+    chars[j] = tmp
+  }
+
+  const password = chars.join('')
+  return passwordPolicyOk(password) ? password : generateStrongPassword(length)
+}
+
 function PasswordRequirements({ password, optional = false }) {
   const value = String(password || '')
+  if (!value.length) return null
+
   const checks = PASSWORD_RULES.map((r) => ({ ...r, ok: r.test(value) }))
-  const showChecks = !optional || value.length > 0
+  const strength = getPasswordStrength(value)
+  const strengthWidth = `${Math.min(100, Math.max(10, (strength.score / 5) * 100))}%`
+  const strengthBarClass = strength.level === 'strong'
+    ? 'bg-green-500'
+    : strength.level === 'medium'
+      ? 'bg-amber-500'
+      : 'bg-red-500'
+  const strengthTextClass = strength.level === 'strong'
+    ? 'text-green-600 dark:text-green-400'
+    : strength.level === 'medium'
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-red-600 dark:text-red-400'
 
   return (
     <div className="mt-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/60 px-3 py-2">
       <p className="text-xs font-medium text-gray-600 dark:text-gray-300">
         Password requirements {optional && <span className="font-normal text-gray-400">(applied only if you set a new password)</span>}
       </p>
-      {showChecks ? (
-        <ul className="mt-1 space-y-1">
-          {checks.map((r) => (
-            <li key={r.key} className={`text-xs flex items-center gap-1.5 ${r.ok ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
-              {r.ok ? <CheckCircle size={12} /> : <XCircle size={12} />}
-              <span>{r.label}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-xs text-gray-400 mt-1">Leave empty to keep the current password.</p>
-      )}
+      <div className="mt-2">
+        <div className="h-1.5 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+          <div className={`h-full transition-all ${strengthBarClass}`} style={{ width: strengthWidth }} />
+        </div>
+        <p className={`mt-1 text-xs font-medium ${strengthTextClass}`}>Strength: {strength.label}</p>
+      </div>
+      <ul className="mt-2 space-y-1">
+        {checks.map((r) => (
+          <li key={r.key} className={`text-xs flex items-center gap-1.5 ${r.ok ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+            {r.ok ? <CheckCircle size={12} /> : <XCircle size={12} />}
+            <span>{r.label}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -260,6 +313,11 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
     finally { setSaving(false) }
   }
 
+  const handleGeneratePassword = () => {
+    setPassword(generateStrongPassword())
+    toast.success('Password generated')
+  }
+
   return (
     <Modal title={`Edit user: ${u.username}`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -279,7 +337,13 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">New password</label>
-          <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave empty to keep current password" />
+          <div className="flex items-center gap-2">
+            <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave empty to keep current password" />
+            <button type="button" className="btn-secondary whitespace-nowrap" onClick={handleGeneratePassword}>
+              <Wand2 size={14} />
+              Generate
+            </button>
+          </div>
           <PasswordRequirements password={password} optional />
         </div>
         <div>
@@ -368,6 +432,11 @@ function UsersTab({ roleOptions, roleProfiles }) {
       setForm({ username: '', display_name: '', email: '', password: '', role: 'operator', permissions: {}, group_id: '' }); load()
     }
     catch (err) { toast.error(err.response?.data?.errors?.[0]?.msg || err.response?.data?.error || 'Error') }
+  }
+
+  const handleGenerateCreatePassword = () => {
+    setForm(f => ({ ...f, password: generateStrongPassword() }))
+    toast.success('Password generated')
   }
 
   const handleDelete = async () => {
@@ -475,7 +544,13 @@ function UsersTab({ roleOptions, roleProfiles }) {
             <div><label className="block text-sm font-medium mb-1">Email *</label>
               <input className="input" type="email" required value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
             <div><label className="block text-sm font-medium mb-1">Password *</label>
-              <input className="input" type="password" required value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+              <div className="flex items-center gap-2">
+                <input className="input" type="password" required value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                <button type="button" className="btn-secondary whitespace-nowrap" onClick={handleGenerateCreatePassword}>
+                  <Wand2 size={14} />
+                  Generate
+                </button>
+              </div>
               <PasswordRequirements password={form.password} />
             </div>
             <div><label className="block text-sm font-medium mb-1">Local group *</label>
