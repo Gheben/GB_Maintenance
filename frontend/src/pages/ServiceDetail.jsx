@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
-import { ConfirmDialog } from '../components/Modal'
+import { ConfirmDialog, Modal } from '../components/Modal'
 import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { servicesApi, usersApi, groupsApi, settingsApi } from '../api'
@@ -12,6 +12,12 @@ import { useAuth } from '../contexts/AuthContext'
 
 const CRITICALITIES = ['critical','high','medium','low']
 const TABS = [['info','Info'],['deps','Dependencies'],['assets','Linked Assets'],['licenses','Licenses'],['maintenance','Maintenance'],['users','Users']]
+
+function approvalStatusMeta(status) {
+  if (status === 'approved') return { label: 'Approved', cls: 'bg-green-100 text-green-700' }
+  if (status === 'rejected') return { label: 'Rejected', cls: 'bg-red-100 text-red-700' }
+  return { label: 'Pending', cls: 'bg-amber-100 text-amber-700' }
+}
 
 export default function ServiceDetail() {
   const { id } = useParams()
@@ -31,9 +37,7 @@ export default function ServiceDetail() {
   const [addingDep, setAddingDep] = useState(false)
   const [depDeleteTarget, setDepDeleteTarget] = useState(null)
   const [userSearch, setUserSearch] = useState('')
-  const [userLimit, setUserLimit] = useState(25)
   const [serviceUsers, setServiceUsers] = useState([])
-  const [selectedOffice, setSelectedOffice] = useState('')
   
   // Owner states
   const [ownerUsers, setOwnerUsers] = useState([])
@@ -41,6 +45,10 @@ export default function ServiceDetail() {
   const [ldapEnabled, setLdapEnabled] = useState(false)
   const [licenseRows, setLicenseRows] = useState([])
   const [savingLicenses, setSavingLicenses] = useState(false)
+  const [licensePickerOpen, setLicensePickerOpen] = useState(false)
+  const [licenseSearch, setLicenseSearch] = useState('')
+  const [licenseRemoveTarget, setLicenseRemoveTarget] = useState(null)
+  const [usersModalOpen, setUsersModalOpen] = useState(false)
 
   const load = () => {
     servicesApi.get(id).then(r => setService(r.data)).catch(() => navigate('/services'))
@@ -74,6 +82,7 @@ export default function ServiceDetail() {
   }
 
   const saveLicenses = async () => {
+    if (!editMode || !canEdit) return
     setSavingLicenses(true)
     try {
       const selected = licenseRows.filter(l => l.assigned).map(l => l.id)
@@ -173,6 +182,12 @@ export default function ServiceDetail() {
     setDepDeleteTarget(null)
   }
 
+  const confirmRemoveLicense = () => {
+    if (!licenseRemoveTarget) return
+    setLicenseRows((rows) => rows.map((x) => x.id === licenseRemoveTarget.id ? { ...x, assigned: false } : x))
+    setLicenseRemoveTarget(null)
+  }
+
   if (!service) return <Layout title="Service"><div className="text-center py-16 text-gray-500">Loading...</div></Layout>
 
   const canEdit = hasRole('superadmin', 'admin')
@@ -186,11 +201,18 @@ export default function ServiceDetail() {
       (u.display_name||'').toLowerCase().includes(qU) ||
       (u.username||'').toLowerCase().includes(qU) ||
       (u.email||'').toLowerCase().includes(qU)
-    const matchesOffice = !selectedOffice || String(u.office || '').trim() === selectedOffice
-    return matchesSearch && matchesOffice
+    return matchesSearch
   })
-  const visibleUsers = filteredUsers.slice(0, userLimit)
   const impactedOffices = [...new Set(serviceUsers.map((u) => String(u.office || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  const assignedLicenseRows = licenseRows.filter((l) => !!l.assigned)
+  const availableLicenseRows = licenseRows.filter((l) => !l.assigned)
+  const filteredAvailableLicenseRows = availableLicenseRows.filter((l) => {
+    const q = String(licenseSearch || '').trim().toLowerCase()
+    if (!q) return true
+    return String(l.name || '').toLowerCase().includes(q)
+      || String(l.approval_status || '').toLowerCase().includes(q)
+      || String(l.supplier_name || '').toLowerCase().includes(q)
+  })
   const assignedTargets = Array.isArray(service.user_targets) ? service.user_targets : []
 
   const ownerFieldsJsx = (
@@ -398,29 +420,71 @@ export default function ServiceDetail() {
 
         {tab === 'licenses' && (
           <div className="card p-5 space-y-4">
-            {licenseRows.length === 0 && <p className="text-gray-500 text-sm">No active licenses available.</p>}
-            {licenseRows.length > 0 && (
+            {assignedLicenseRows.length === 0 && <p className="text-gray-500 text-sm">No assigned licenses.</p>}
+            {assignedLicenseRows.length > 0 && (
               <div className="space-y-2 max-h-96 overflow-y-auto">
-                {licenseRows.map(l => (
-                  <label key={l.id} className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={!!l.assigned}
-                      onChange={e => setLicenseRows(rows => rows.map(x => x.id === l.id ? { ...x, assigned: e.target.checked } : x))}
-                      disabled={!canEdit}
-                    />
+                {assignedLicenseRows.map(l => (
+                  <div key={l.id} className="flex items-start justify-between gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700">
                     <div className="text-sm">
                       <div className="font-medium">{l.name}</div>
-                      <div className="text-xs text-gray-500">Status: {l.approval_status || 'n/a'} {l.expiry_date ? `| Expiry: ${String(l.expiry_date).slice(0, 10)}` : ''}</div>
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        <span className={`px-2 py-0.5 rounded-full ${approvalStatusMeta(l.approval_status).cls}`}>{approvalStatusMeta(l.approval_status).label}</span>
+                        {l.expiry_date && <span className="text-gray-500">Expiry: {String(l.expiry_date).slice(0, 10)}</span>}
+                      </div>
                     </div>
-                  </label>
+                    {canEdit && editMode && (
+                      <button
+                        type="button"
+                        className="text-xs text-red-500 hover:text-red-700"
+                        onClick={() => setLicenseRemoveTarget({ id: l.id, name: l.name })}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
-            {canEdit && (
-              <div className="flex justify-end">
+            {canEdit && editMode && (
+              <div className="flex justify-end gap-2">
+                <button type="button" className="btn-secondary" onClick={() => setLicensePickerOpen(true)}>
+                  Add license
+                </button>
                 <button className="btn-primary" onClick={saveLicenses} disabled={savingLicenses}>{savingLicenses ? 'Saving...' : 'Save licenses'}</button>
               </div>
+            )}
+
+            {licensePickerOpen && (
+              <Modal title="Add License" onClose={() => { setLicensePickerOpen(false); setLicenseSearch('') }} size="lg">
+                <div className="space-y-3">
+                  <input
+                    className="w-full h-10 px-3 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
+                    placeholder="Search license..."
+                    value={licenseSearch}
+                    onChange={(e) => setLicenseSearch(e.target.value)}
+                  />
+                  <div className="max-h-[50vh] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-md">
+                    {filteredAvailableLicenseRows.map((l) => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        onClick={() => setLicenseRows(rows => rows.map(x => x.id === l.id ? { ...x, assigned: true } : x))}
+                      >
+                        <div className="text-sm font-medium">{l.name}</div>
+                        <div className="mt-1 flex items-center gap-2 text-xs">
+                          <span className={`px-2 py-0.5 rounded-full ${approvalStatusMeta(l.approval_status).cls}`}>{approvalStatusMeta(l.approval_status).label}</span>
+                          {l.expiry_date && <span className="text-gray-500">Expiry: {String(l.expiry_date).slice(0, 10)}</span>}
+                        </div>
+                      </button>
+                    ))}
+                    {filteredAvailableLicenseRows.length === 0 && <p className="px-3 py-4 text-sm text-gray-500">No licenses available to add.</p>}
+                  </div>
+                  <div className="flex justify-end">
+                    <button type="button" className="btn-secondary" onClick={() => { setLicensePickerOpen(false); setLicenseSearch('') }}>Done</button>
+                  </div>
+                </div>
+              </Modal>
             )}
           </div>
         )}
@@ -445,79 +509,87 @@ export default function ServiceDetail() {
         {tab === 'users' && (
           <div className="card overflow-hidden">
             <div className="p-3 border-b border-gray-100 dark:border-gray-700">
+              {assignedTargets.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-xs font-medium text-gray-500 mb-2">Assigned targets</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {assignedTargets.map((t, idx) => (
+                      <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
+                        {t.name || t.id || t.dn}
+                        <span className="opacity-70">{t.type}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="mb-3">
                 <p className="text-xs font-medium text-gray-500 mb-1">Offices involved ({impactedOffices.length})</p>
                 {impactedOffices.length === 0 ? (
                   <p className="text-xs text-gray-400">No office data available</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedOffice(''); setUserLimit(25) }}
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs border ${selectedOffice === '' ? 'bg-brand-100 text-brand-700 border-brand-200' : 'bg-white text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'}`}
-                    >
-                      All offices
-                    </button>
                     {impactedOffices.map((office) => (
-                      <button
-                        type="button"
+                      <span
                         key={office}
-                        onClick={() => { setSelectedOffice(office); setUserLimit(25) }}
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${selectedOffice === office ? 'bg-indigo-200 text-indigo-900 dark:bg-indigo-700/60 dark:text-indigo-100' : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'}`}
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
                       >
                         {office}
-                      </button>
+                      </span>
                     ))}
                   </div>
                 )}
               </div>
-              <input className="input text-sm" placeholder="Search users..."
-                value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserLimit(25) }} />
-            </div>
-            {assignedTargets.length > 0 && (
-              <div className="px-4 pt-3 pb-1">
-                <p className="text-xs font-medium text-gray-500 mb-2">Assigned targets</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {assignedTargets.map((t, idx) => (
-                    <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
-                      {t.name || t.id || t.dn}
-                      <span className="opacity-70">{t.type}</span>
-                    </span>
-                  ))}
-                </div>
+              <div className="flex justify-start">
+                <button type="button" className="btn-secondary" onClick={() => setUsersModalOpen(true)}>
+                  Show users ({filteredUsers.length})
+                </button>
               </div>
-            )}
-            {filteredUsers.length === 0 ? (
+            </div>
+            {filteredUsers.length === 0 && (
               <p className="text-gray-500 text-sm p-5 text-center">
                 {assignedTargets.length > 0
                   ? 'Targets are assigned, but no local users were resolved from current mappings.'
                   : 'No software users assigned to this service.'}
               </p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>{['Display Name','Username','Email','Office','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {visibleUsers.map(u => (
-                    <tr key={u.id}>
-                      <td className="px-4 py-2 font-medium">{u.display_name || u.username || u.email}</td>
-                      <td className="px-4 py-2 text-gray-500">{u.username || '—'}</td>
-                      <td className="px-4 py-2 text-gray-500">{u.email || '—'}</td>
-                      <td className="px-4 py-2 text-gray-500">{u.office || '—'}</td>
-                      <td className="px-4 py-2 text-gray-500">{u.role || '—'}</td>
-                      <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-bold ${u.auth_type === 'ldap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{u.auth_type || 'local'}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             )}
-            {filteredUsers.length > userLimit && (
-              <div className="p-3 text-center border-t border-gray-100">
-                <button className="text-sm text-brand-600 hover:underline" onClick={() => setUserLimit(l => l + 25)}>
-                  Show {filteredUsers.length - userLimit} more
-                </button>
-              </div>
+
+            {usersModalOpen && (
+              <Modal title="Users involved" onClose={() => setUsersModalOpen(false)} size="xl">
+                <div className="space-y-3">
+                  <input
+                    className="input text-sm"
+                    placeholder="Search users..."
+                    value={userSearch}
+                    onChange={e => setUserSearch(e.target.value)}
+                  />
+                  <div className="max-h-[60vh] overflow-auto border border-gray-200 dark:border-gray-700 rounded-md">
+                    {filteredUsers.length === 0 ? (
+                      <p className="text-gray-500 text-sm p-5 text-center">No users match current filters.</p>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 dark:bg-gray-700/50">
+                          <tr>{['Display Name','Username','Email','Office','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                          {filteredUsers.map(u => (
+                            <tr key={u.id}>
+                              <td className="px-4 py-2 font-medium">{u.display_name || u.username || u.email}</td>
+                              <td className="px-4 py-2 text-gray-500">{u.username || '—'}</td>
+                              <td className="px-4 py-2 text-gray-500">{u.email || '—'}</td>
+                              <td className="px-4 py-2 text-gray-500">{u.office || '—'}</td>
+                              <td className="px-4 py-2 text-gray-500">{u.role || '—'}</td>
+                              <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-bold ${u.auth_type === 'ldap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{u.auth_type || 'local'}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                  <div className="flex justify-end">
+                    <button type="button" className="btn-secondary" onClick={() => setUsersModalOpen(false)}>Close</button>
+                  </div>
+                </div>
+              </Modal>
             )}
           </div>
         )}
@@ -533,6 +605,17 @@ export default function ServiceDetail() {
           confirmLabel="Remove"
           onConfirm={confirmRemoveDependency}
           onCancel={() => setDepDeleteTarget(null)}
+        />
+      )}
+
+      {licenseRemoveTarget && (
+        <ConfirmDialog
+          title="Remove License"
+          message={`Remove license "${licenseRemoveTarget.name}" from this service?`}
+          danger
+          confirmLabel="Remove"
+          onConfirm={confirmRemoveLicense}
+          onCancel={() => setLicenseRemoveTarget(null)}
         />
       )}
 

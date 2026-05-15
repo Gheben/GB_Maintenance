@@ -12,19 +12,19 @@ async function getImpactedUsersAndOffices(serviceIds = [], assetIds = []) {
   const aids = Array.isArray(assetIds) ? assetIds : [];
   const users = await getMany(
     `WITH resolved_users AS (
-       SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
        FROM service_subscribers ss
        LEFT JOIN users u ON u.id = ss.user_id
        WHERE ss.service_id = ANY($1::uuid[]) AND u.id IS NOT NULL
        UNION
-       SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
        FROM service_subscribers ss
        JOIN service_assets sa ON sa.service_id = ss.service_id
        LEFT JOIN users u ON u.id = ss.user_id
        WHERE (sa.service_id = ANY($1::uuid[]) OR sa.asset_id = ANY($2::uuid[]))
          AND u.id IS NOT NULL
        UNION
-       SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
        FROM assets a
        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
        JOIN users u ON (
@@ -41,7 +41,70 @@ async function getImpactedUsersAndOffices(serviceIds = [], assetIds = []) {
        )
        WHERE a.id = ANY($2::uuid[]) AND u.is_active = true
        UNION
-       SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
+              lc.username,
+              lc.display_name,
+              lc.email,
+              lc.office,
+              'viewer'::text AS role,
+              'ldap'::text AS auth_type
+       FROM assets a
+       JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
+       JOIN ldap_users_cache lc ON (
+         ot->>'type' = 'ldap_user'
+         AND NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), '') IS NOT NULL
+         AND (
+           LOWER(COALESCE(lc.dn, '')) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
+           OR LOWER(COALESCE(lc.username, '')) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
+           OR LOWER(COALESCE(lc.upn, '')) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
+         )
+       )
+       WHERE a.id = ANY($2::uuid[])
+       UNION
+       SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
+              lc.username,
+              lc.display_name,
+              lc.email,
+              lc.office,
+              'viewer'::text AS role,
+              'ldap'::text AS auth_type
+       FROM assets a
+       JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
+       JOIN ldap_users_cache lc ON (
+         ot->>'type' = 'ldap_group'
+         AND NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), '') IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) m(dn)
+           WHERE LOWER(m.dn) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
+              OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), '')), ',', 1)
+         )
+       )
+       WHERE a.id = ANY($2::uuid[])
+       UNION
+       SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
+              lc.username,
+              lc.display_name,
+              lc.email,
+              lc.office,
+              'viewer'::text AS role,
+              'ldap'::text AS auth_type
+       FROM assets a
+       JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
+       JOIN ldap_group_mappings lgm ON (
+         ot->>'type' = 'local_group'
+         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+         AND lgm.local_group_id = (ot->>'id')::uuid
+       )
+       JOIN ldap_users_cache lc ON EXISTS (
+         SELECT 1
+         FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) m(dn)
+         WHERE LOWER(m.dn) = LOWER(lgm.ldap_group_dn)
+            OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(lgm.ldap_group_dn), ',', 1)
+       )
+       WHERE a.id = ANY($2::uuid[]) AND lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
+       UNION
+       SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
        FROM services s
        JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
        JOIN users u ON (
@@ -57,8 +120,71 @@ async function getImpactedUsersAndOffices(serviceIds = [], assetIds = []) {
          )
        )
        WHERE s.id = ANY($1::uuid[]) AND u.is_active = true
+       UNION
+       SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
+              lc.username,
+              lc.display_name,
+              lc.email,
+              lc.office,
+              'viewer'::text AS role,
+              'ldap'::text AS auth_type
+       FROM services s
+       JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
+       JOIN ldap_users_cache lc ON (
+         ot->>'type' = 'ldap_user'
+         AND NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), '') IS NOT NULL
+         AND (
+           LOWER(COALESCE(lc.dn, '')) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
+           OR LOWER(COALESCE(lc.username, '')) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
+           OR LOWER(COALESCE(lc.upn, '')) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
+         )
+       )
+       WHERE s.id = ANY($1::uuid[])
+       UNION
+       SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
+              lc.username,
+              lc.display_name,
+              lc.email,
+              lc.office,
+              'viewer'::text AS role,
+              'ldap'::text AS auth_type
+       FROM services s
+       JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
+       JOIN ldap_users_cache lc ON (
+         ot->>'type' = 'ldap_group'
+         AND NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), '') IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) m(dn)
+           WHERE LOWER(m.dn) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
+              OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), '')), ',', 1)
+         )
+       )
+       WHERE s.id = ANY($1::uuid[])
+       UNION
+       SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
+              lc.username,
+              lc.display_name,
+              lc.email,
+              lc.office,
+              'viewer'::text AS role,
+              'ldap'::text AS auth_type
+       FROM services s
+       JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
+       JOIN ldap_group_mappings lgm ON (
+         ot->>'type' = 'local_group'
+         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+         AND lgm.local_group_id = (ot->>'id')::uuid
+       )
+       JOIN ldap_users_cache lc ON EXISTS (
+         SELECT 1
+         FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) m(dn)
+         WHERE LOWER(m.dn) = LOWER(lgm.ldap_group_dn)
+            OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(lgm.ldap_group_dn), ',', 1)
+       )
+       WHERE s.id = ANY($1::uuid[]) AND lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
      )
-     SELECT id, username, display_name, email, office, role, auth_type
+     SELECT DISTINCT id, username, display_name, email, office, role, auth_type
      FROM resolved_users
      ORDER BY display_name NULLS LAST, username`,
     [sids, aids]

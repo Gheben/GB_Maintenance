@@ -5,6 +5,7 @@ const { query, getOne, getMany, transaction } = require('../db/database');
 const auditService = require('../services/auditService');
 const probeService = require('../services/probeService');
 const wsService = require('../services/wsService');
+const ldapService = require('../services/ldapService');
 
 const router = Router();
 router.use(requireAuth);
@@ -211,30 +212,212 @@ router.get('/:id/maintenance', async (req, res) => {
 // ─── GET /api/assets/:id/users ───────────────────────────────────────────────
 router.get('/:id/users', async (req, res) => {
   const rows = await getMany(
-    `WITH resolved_users AS (
-       SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+    `WITH target_entries AS (
+       SELECT
+         COALESCE(ut->>'type', '') AS target_type,
+         CASE WHEN (ut->>'id') ~* '^[0-9a-f-]{36}$' THEN (ut->>'id')::uuid ELSE NULL END AS target_uuid,
+         NULLIF(BTRIM(COALESCE(ut->>'dn', ut->>'id', '')), '') AS target_dn
        FROM assets a
        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ut ON true
-       JOIN users u ON (
-         (ut->>'type' = 'user' AND (ut->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ut->>'id')::uuid)
-         OR (
-           ut->>'type' = 'local_group'
-           AND (ut->>'id') ~* '^[0-9a-f-]{36}$'
-           AND EXISTS (
-             SELECT 1 FROM user_group_members ugm
-             WHERE ugm.group_id = (ut->>'id')::uuid
-               AND ugm.user_id = u.id
-           )
+       WHERE a.id = $1
+     ),
+     resolved_users AS (
+       SELECT DISTINCT
+         u.id::text AS id,
+         u.username,
+         u.display_name,
+         u.email,
+         u.office,
+         u.role,
+         u.auth_type
+       FROM target_entries t
+       JOIN users u
+         ON t.target_type = 'user'
+        AND t.target_uuid IS NOT NULL
+        AND u.id = t.target_uuid
+       WHERE u.is_active = true
+
+       UNION
+
+       SELECT DISTINCT
+         u.id::text AS id,
+         u.username,
+         u.display_name,
+         u.email,
+         u.office,
+         u.role,
+         u.auth_type
+       FROM target_entries t
+       JOIN user_group_members ugm
+         ON t.target_type = 'local_group'
+        AND t.target_uuid IS NOT NULL
+        AND ugm.group_id = t.target_uuid
+       JOIN users u ON u.id = ugm.user_id
+       WHERE u.is_active = true
+
+       UNION
+
+       SELECT DISTINCT
+         COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
+         lc.username,
+         lc.display_name,
+         lc.email,
+         lc.office,
+         'viewer'::text AS role,
+         'ldap'::text AS auth_type
+       FROM target_entries t
+       JOIN ldap_users_cache lc
+         ON t.target_type = 'ldap_user'
+        AND t.target_dn IS NOT NULL
+        AND (
+          LOWER(COALESCE(lc.dn, '')) = LOWER(t.target_dn)
+          OR LOWER(COALESCE(lc.username, '')) = LOWER(t.target_dn)
+          OR LOWER(COALESCE(lc.upn, '')) = LOWER(t.target_dn)
+        )
+
+       UNION
+
+       SELECT DISTINCT
+         COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
+         lc.username,
+         lc.display_name,
+         lc.email,
+         lc.office,
+         'viewer'::text AS role,
+         'ldap'::text AS auth_type
+       FROM target_entries t
+       JOIN ldap_users_cache lc
+         ON t.target_type = 'ldap_group'
+        AND t.target_dn IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) m(dn)
+          WHERE LOWER(m.dn) = LOWER(t.target_dn)
+             OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(t.target_dn), ',', 1)
+        )
+
+       UNION
+
+       SELECT DISTINCT
+         COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
+         lc.username,
+         lc.display_name,
+         lc.email,
+         lc.office,
+         'viewer'::text AS role,
+         'ldap'::text AS auth_type
+       FROM target_entries t
+       JOIN ldap_group_mappings lgm
+         ON t.target_type = 'ldap_group'
+        AND t.target_uuid IS NOT NULL
+        AND (lgm.local_group_id = t.target_uuid OR lgm.id = t.target_uuid)
+       JOIN ldap_users_cache lc
+         ON EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) m(dn)
+           WHERE LOWER(m.dn) = LOWER(lgm.ldap_group_dn)
+              OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(lgm.ldap_group_dn), ',', 1)
          )
-       )
-       WHERE a.id = $1 AND u.is_active = true
+       WHERE lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
+
+       UNION
+
+       SELECT DISTINCT
+         COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
+         lc.username,
+         lc.display_name,
+         lc.email,
+         lc.office,
+         'viewer'::text AS role,
+         'ldap'::text AS auth_type
+       FROM target_entries t
+       JOIN ldap_group_mappings lgm
+         ON t.target_type = 'local_group'
+        AND t.target_uuid IS NOT NULL
+        AND lgm.local_group_id = t.target_uuid
+       JOIN ldap_users_cache lc
+         ON EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) m(dn)
+           WHERE LOWER(m.dn) = LOWER(lgm.ldap_group_dn)
+              OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(lgm.ldap_group_dn), ',', 1)
+         )
+       WHERE lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
      )
-     SELECT id, username, display_name, email, office, role, auth_type
+     SELECT DISTINCT id, username, display_name, email, office, role, auth_type
      FROM resolved_users
      ORDER BY display_name NULLS LAST, username`,
     [req.params.id]
   );
-  res.json(rows);
+
+  const ldapGroupRows = await getMany(
+    `WITH target_entries AS (
+       SELECT
+         COALESCE(ut->>'type', '') AS target_type,
+         CASE WHEN (ut->>'id') ~* '^[0-9a-f-]{36}$' THEN (ut->>'id')::uuid ELSE NULL END AS target_uuid,
+         NULLIF(BTRIM(COALESCE(ut->>'dn', ut->>'id', '')), '') AS target_dn
+       FROM assets a
+       JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ut ON true
+       WHERE a.id = $1
+     )
+     SELECT DISTINCT target_dn AS ldap_group_dn
+     FROM target_entries
+     WHERE target_type = 'ldap_group'
+       AND target_dn IS NOT NULL
+       AND target_dn !~* '^[0-9a-f-]{36}$'
+
+     UNION
+
+     SELECT DISTINCT lgm.ldap_group_dn
+     FROM target_entries t
+     JOIN ldap_group_mappings lgm
+       ON t.target_type = 'ldap_group'
+      AND t.target_uuid IS NOT NULL
+      AND (lgm.local_group_id = t.target_uuid OR lgm.id = t.target_uuid)
+     WHERE lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
+
+     UNION
+
+     SELECT DISTINCT lgm.ldap_group_dn
+     FROM target_entries t
+     JOIN ldap_group_mappings lgm
+       ON t.target_type = 'local_group'
+      AND t.target_uuid IS NOT NULL
+      AND lgm.local_group_id = t.target_uuid
+     WHERE lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''`,
+    [req.params.id]
+  );
+
+  let ldapExpanded = [];
+  if (ldapGroupRows.length > 0) {
+    try {
+      const groupDns = ldapGroupRows.map((r) => r.ldap_group_dn).filter(Boolean);
+      ldapExpanded = await ldapService.listUsersInGroups(groupDns, { maxResults: 3000 });
+    } catch (_) {
+      ldapExpanded = [];
+    }
+  }
+
+  const byKey = new Map();
+  const makeKey = (u = {}) => {
+    const id = String(u.id || '').trim().toLowerCase();
+    const email = String(u.email || '').trim().toLowerCase();
+    const username = String(u.username || '').trim().toLowerCase();
+    return id || email || username;
+  };
+
+  for (const user of [...rows, ...ldapExpanded]) {
+    const key = makeKey(user);
+    if (!key) continue;
+    if (!byKey.has(key)) byKey.set(key, user);
+  }
+
+  const merged = [...byKey.values()].sort((a, b) =>
+    String(a.display_name || '').localeCompare(String(b.display_name || ''), undefined, { sensitivity: 'base' })
+    || String(a.username || '').localeCompare(String(b.username || ''), undefined, { sensitivity: 'base' })
+  );
+
+  res.json(merged);
 });
 
 // ─── GET /api/assets/:id/licenses ───────────────────────────────────────────

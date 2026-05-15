@@ -752,5 +752,164 @@ async function countUsersInGroups(groupDns = []) {
   }
 }
 
+async function listUsersInGroups(groupDns = [], options = {}) {
+  const dns = [...new Set((Array.isArray(groupDns) ? groupDns : [])
+    .map(v => String(v || '').trim())
+    .filter(Boolean))];
+  if (dns.length === 0) return [];
+
+  const cfg = await getLdapSettings();
+  if (!cfg || !cfg.enabled || !ldap) return [];
+
+  const searchBases = [
+    cfg.search_base,
+    cfg.base_dn,
+    cfg.group_search_base,
+    cfg.groups_search_base,
+  ].map(v => String(v || '').trim()).filter(Boolean);
+  const uniqueBases = [...new Set(searchBases)];
+  if (uniqueBases.length === 0) return [];
+
+  const maxResults = Math.max(1, Math.min(parseInt(options.maxResults || 2000, 10), 5000));
+  const users = new Map();
+
+  const addUser = (entry = {}, fallbackDn = '') => {
+    const dn = String(entry?.dn || entry?.distinguishedName || fallbackDn || '').trim();
+    const username = String(entry?.sAMAccountName || entry?.uid || '').trim();
+    const upn = String(entry?.userPrincipalName || '').trim();
+    const email = String(entry?.mail || '').trim();
+    const displayName = String(entry?.displayName || entry?.cn || username || email || dn).trim();
+    const office = normalizeOffice(entry?.office || entry?.physicalDeliveryOfficeName);
+
+    const key = dn.toLowerCase() || upn.toLowerCase() || username.toLowerCase() || email.toLowerCase();
+    if (!key || users.has(key)) return;
+
+    users.set(key, {
+      id: dn || upn || username || email,
+      username: username || upn || '',
+      display_name: displayName || null,
+      email: email || null,
+      office: office || null,
+      role: 'viewer',
+      auth_type: 'ldap',
+    });
+  };
+
+  const readEntryByDn = async (client, dn, attrs) => {
+    try {
+      const rows = await _search(client, dn, {
+        filter: '(objectClass=*)',
+        scope: 'base',
+        attributes: attrs,
+        sizeLimit: 1,
+      });
+      return rows[0] || null;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const isGroupObjectClass = (value) => {
+    const values = Array.isArray(value) ? value : [value];
+    const classes = values.map(v => String(v || '').toLowerCase().trim());
+    return classes.some(c => c === 'group' || c === 'groupofnames' || c === 'groupofuniquenames' || c === 'posixgroup');
+  };
+
+  const client = _createClient(cfg);
+  try {
+    await _bind(client, _bindPrincipal(cfg), _bindPassword(cfg));
+
+    const visitedGroups = new Set();
+    const inspectedMembers = new Set();
+    const queue = [...dns];
+
+    while (queue.length > 0 && users.size < maxResults) {
+      const groupDn = String(queue.shift() || '').trim();
+      const groupKey = groupDn.toLowerCase();
+      if (!groupDn || visitedGroups.has(groupKey)) continue;
+      visitedGroups.add(groupKey);
+
+      const escapedDn = _escapeLdap(groupDn);
+      const filters = [
+        `(&(objectClass=user)(memberOf:1.2.840.113556.1.4.1941:=${escapedDn}))`,
+        `(&(|(objectClass=user)(objectClass=person))(memberOf=${escapedDn}))`,
+      ];
+
+      for (const base of uniqueBases) {
+        for (const filter of filters) {
+          if (users.size >= maxResults) break;
+          try {
+            const entries = await _search(client, base, {
+              filter,
+              scope: 'sub',
+              attributes: ['dn', 'distinguishedName', 'cn', 'displayName', 'mail', 'sAMAccountName', 'userPrincipalName', 'uid', 'office', 'physicalDeliveryOfficeName'],
+              sizeLimit: Math.min(5000, maxResults),
+            });
+            for (const entry of entries) {
+              addUser(entry);
+              if (users.size >= maxResults) break;
+            }
+          } catch (_) {
+            // Ignore unsupported filter and continue with fallback strategy.
+          }
+        }
+      }
+
+      if (users.size >= maxResults) break;
+
+      // Fallback recursive expansion for directories that do not support matching rules.
+      const groupEntry = await readEntryByDn(client, groupDn, ['member', 'uniqueMember', 'memberUid']);
+      const members = [
+        ...(Array.isArray(groupEntry?.member) ? groupEntry.member : (groupEntry?.member ? [groupEntry.member] : [])),
+        ...(Array.isArray(groupEntry?.uniqueMember) ? groupEntry.uniqueMember : (groupEntry?.uniqueMember ? [groupEntry.uniqueMember] : [])),
+      ];
+
+      for (const memberDnRaw of members) {
+        if (users.size >= maxResults) break;
+        const memberDn = String(memberDnRaw || '').trim();
+        if (!memberDn) continue;
+        const memberKey = memberDn.toLowerCase();
+        if (inspectedMembers.has(memberKey)) continue;
+        inspectedMembers.add(memberKey);
+
+        const memberEntry = await readEntryByDn(client, memberDn, ['objectClass', 'dn', 'distinguishedName', 'cn', 'displayName', 'mail', 'sAMAccountName', 'userPrincipalName', 'uid', 'office', 'physicalDeliveryOfficeName']);
+        if (memberEntry && isGroupObjectClass(memberEntry.objectClass)) {
+          queue.push(memberDn);
+        } else {
+          addUser(memberEntry || {}, memberDn);
+        }
+      }
+
+      const memberUids = Array.isArray(groupEntry?.memberUid)
+        ? groupEntry.memberUid
+        : (groupEntry?.memberUid ? [groupEntry.memberUid] : []);
+      for (const uid of memberUids) {
+        if (users.size >= maxResults) break;
+        const normalized = String(uid || '').trim();
+        if (!normalized) continue;
+        const key = `uid:${normalized.toLowerCase()}`;
+        if (users.has(key)) continue;
+        users.set(key, {
+          id: `uid:${normalized}`,
+          username: normalized,
+          display_name: normalized,
+          email: null,
+          office: null,
+          role: 'viewer',
+          auth_type: 'ldap',
+        });
+      }
+    }
+
+    return [...users.values()];
+  } catch (err) {
+    logger.warn('LDAP list users in groups failed:', err.message);
+    return [];
+  } finally {
+    client.destroy();
+  }
+}
+
 module.exports.searchUsers = searchUsers;
 module.exports.countUsersInGroups = countUsersInGroups;
+module.exports.listUsersInGroups = listUsersInGroups;
