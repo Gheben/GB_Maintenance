@@ -1,5 +1,6 @@
 const { Router } = require('express');
-const { getMany, getOne } = require('../db/database');
+const { getMany, getOne, query } = require('../db/database');
+const { requireAuth } = require('../middleware/authMiddleware');
 
 const router = Router();
 
@@ -13,39 +14,72 @@ router.get('/', async (req, res) => {
      ORDER BY s.criticality, s.name`
   );
 
-  // Active incidents
-  const incidents = await getMany(
-    `SELECT i.id, i.title, i.severity, i.status, i.started_at, i.description
+  // Active incidents with updates
+  const incidentRows = await getMany(
+    `SELECT i.id, i.title, i.severity, i.status, i.started_at, i.description, i.resolved_at
      FROM incidents i WHERE i.status != 'resolved' ORDER BY i.started_at DESC LIMIT 10`
   );
+  const incidentIds = incidentRows.map(i => i.id);
+  let incidentUpdatesMap = {};
+  if (incidentIds.length > 0) {
+    const updRows = await getMany(
+      `SELECT iu.incident_id, iu.id, iu.status, iu.message, iu.created_at,
+              COALESCE(u.display_name, u.username) AS author
+       FROM incident_updates iu
+       LEFT JOIN users u ON u.id = iu.created_by
+       WHERE iu.incident_id = ANY($1::uuid[])
+       ORDER BY iu.created_at DESC`,
+      [incidentIds]
+    );
+    for (const u of updRows) {
+      if (!incidentUpdatesMap[u.incident_id]) incidentUpdatesMap[u.incident_id] = [];
+      incidentUpdatesMap[u.incident_id].push(u);
+    }
+  }
+  const incidents = incidentRows.map(i => ({
+    ...i,
+    updates: incidentUpdatesMap[i.id] || [],
+  }));
+
+  // Active and upcoming blackout periods (end_date treated as inclusive end-of-day)
+  const blackout_periods = await getMany(
+    `SELECT id, name, description, start_date, end_date
+     FROM blackout_periods
+     WHERE end_date >= NOW()::date
+     ORDER BY start_date ASC
+     LIMIT 20`
+  ).catch(() => []);
 
   // In-progress maintenance (currently running)
   const in_progress_maintenance = await getMany(
     `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
-            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.description
+            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.description,
+            mw.created_at, mw.approved_at
      FROM maintenance_windows mw
      WHERE mw.status = 'in_progress'
-     ORDER BY mw.actual_start DESC NULLS LAST LIMIT 10`
+     ORDER BY mw.actual_start DESC NULLS LAST LIMIT 100`
   );
 
   // Upcoming maintenance (scheduled, not yet started)
   const upcoming_maintenance = await getMany(
     `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
-            mw.scheduled_start, mw.scheduled_end, mw.description
+            mw.scheduled_start, mw.scheduled_end, mw.description,
+            mw.created_at, mw.approved_at
      FROM maintenance_windows mw
      WHERE mw.status = 'scheduled'
        AND mw.scheduled_start > NOW() - INTERVAL '1 hour'
-     ORDER BY mw.scheduled_start ASC LIMIT 20`
+     ORDER BY mw.scheduled_start ASC LIMIT 100`
   );
 
   // Recently completed maintenance (last 7 days)
   const recent_maintenance = await getMany(
     `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
-            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.actual_end, mw.notes, mw.description
+            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.actual_end, mw.notes, mw.description,
+            mw.created_at, mw.approved_at
      FROM maintenance_windows mw
      WHERE mw.status = 'completed'
        AND mw.actual_end > NOW() - INTERVAL '7 days'
-     ORDER BY mw.actual_end DESC LIMIT 10`
+     ORDER BY mw.actual_end DESC LIMIT 100`
   );
 
   // For each maintenance (in_progress + upcoming + recent), get involved users count
@@ -107,6 +141,42 @@ router.get('/', async (req, res) => {
     return list.map(m => ({ ...m, involved_users: involvedMap[m.id] || [] }));
   }
 
+  // Subscriber counts per maintenance
+  const subCountRows = allMaintIds.length > 0
+    ? await getMany(
+        `SELECT maintenance_id, COUNT(*) AS cnt FROM maintenance_status_subscribers
+         WHERE maintenance_id = ANY($1::uuid[]) GROUP BY maintenance_id`,
+        [allMaintIds]
+      ).catch(() => [])
+    : [];
+  const subCountMap = {};
+  for (const r of subCountRows) subCountMap[r.maintenance_id] = parseInt(r.cnt);
+
+  // Check if current user is subscribed (if authenticated)
+  let userSubSet = new Set();
+  const authHeader = req.headers['authorization'];
+  if (authHeader && allMaintIds.length > 0) {
+    try {
+      const jwt = require('jsonwebtoken');
+      const token = authHeader.replace('Bearer ', '');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'changeme-insecure-default');
+      const myRows = await getMany(
+        `SELECT maintenance_id FROM maintenance_status_subscribers
+         WHERE user_id=$1 AND maintenance_id = ANY($2::uuid[])`,
+        [decoded.sub || decoded.id, allMaintIds]
+      ).catch(() => []);
+      for (const r of myRows) userSubSet.add(r.maintenance_id);
+    } catch { /* token invalid or expired — ignore */ }
+  }
+
+  function attachMeta(list) {
+    return attachUsers(list).map(m => ({
+      ...m,
+      subscriber_count: subCountMap[m.id] || 0,
+      is_subscribed: userSubSet.has(m.id),
+    }));
+  }
+
   const maintenance = await getMany(
     `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
             mw.scheduled_start, mw.scheduled_end, mw.description
@@ -132,16 +202,42 @@ router.get('/', async (req, res) => {
 
   res.json({
     app_name: general.app_name || 'GB Maintenance',
+    app_brand_image_url: general.app_brand_image_url || '',
     overall_status: overallStatus,
+    blackout_periods,
     services,
     active_incidents: incidents,
-    in_progress_maintenance: attachUsers(in_progress_maintenance),
-    upcoming_maintenance: attachUsers(upcoming_maintenance),
-    recent_maintenance: attachUsers(recent_maintenance),
+    in_progress_maintenance: attachMeta(in_progress_maintenance),
+    upcoming_maintenance: attachMeta(upcoming_maintenance),
+    recent_maintenance: attachMeta(recent_maintenance),
     // Legacy field kept for backward compat
     maintenance_summary: maintenance,
     last_updated: new Date().toISOString(),
   });
+});
+
+// ─── POST /api/status/maintenance/:id/subscribe ──────────────────────────────
+router.post('/maintenance/:id/subscribe', requireAuth, async (req, res) => {
+  const mw = await getOne('SELECT id FROM maintenance_windows WHERE id=$1', [req.params.id]);
+  if (!mw) return res.status(404).json({ error: 'Maintenance not found' });
+  try {
+    await query(
+      `INSERT INTO maintenance_status_subscribers (maintenance_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [req.params.id, req.user.id]
+    );
+    res.json({ subscribed: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── DELETE /api/status/maintenance/:id/subscribe ────────────────────────────
+router.delete('/maintenance/:id/subscribe', requireAuth, async (req, res) => {
+  await query(
+    `DELETE FROM maintenance_status_subscribers WHERE maintenance_id=$1 AND user_id=$2`,
+    [req.params.id, req.user.id]
+  );
+  res.json({ subscribed: false });
 });
 
 // ─── GET /api/status/services/:slug ──────────────────────────────────────────
