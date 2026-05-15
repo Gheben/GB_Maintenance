@@ -283,4 +283,11 @@ export const uploadsApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
+  uploadSupplierDocument: (file) => {
+    const data = new FormData()
+    data.append('file', file)
+    return api.post('/uploads/supplier-document', data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
 }

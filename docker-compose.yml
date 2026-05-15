@@ -15,7 +15,7 @@ services:
   # Creates host folders before services start (Synology-compatible)
   init-dirs:
     image: alpine
-    command: sh -c "mkdir -p /host/data/postgres /host/logs"
+    command: sh -c "mkdir -p /host/data/postgres /host/logs /host/uploads"
     volumes:
       - type: bind
         source: .
@@ -66,6 +66,7 @@ services:
       - LOG_FILE=/app/logs/app.log
     volumes:
       - ./logs:/app/logs
+      - ./uploads:/app/uploads
     networks:
       - gbmaintenance-net
     expose:

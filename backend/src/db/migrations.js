@@ -755,6 +755,85 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS approval_requested_at TIMESTAMPTZ`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_approval_token_hash ON licenses(approval_token_hash)`);
     }
+  },
+  {
+    version: 17,
+    name: 'license_notification_templates',
+    up: async (client) => {
+      const templates = [
+        {
+          event_type: 'license_approval_requested',
+          name: 'License Approval Requested',
+          subject_template: '[APPROVAL REQUIRED] {{license_name}}',
+          body_html_template: `<h2>License Approval Request</h2>
+<p>A license approval request is waiting for your action.</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">License</td><td style="padding:8px;border:1px solid #e5e7eb">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Supplier</td><td style="padding:8px;border:1px solid #e5e7eb">{{supplier_company}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Expiry date</td><td style="padding:8px;border:1px solid #e5e7eb">{{expiry_date}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Link expires at</td><td style="padding:8px;border:1px solid #e5e7eb">{{expires_at}}</td></tr>
+</table>
+<p style="margin-top:16px"><a href="{{approval_url}}" style="background:#1d4ed8;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>
+<p style="font-size:12px;color:#64748b">If the button does not work, open: {{approval_url}}</p>`
+        },
+        {
+          event_type: 'license_approved',
+          name: 'License Approved',
+          subject_template: '[APPROVED] {{license_name}}',
+          body_html_template: `<h2 style="color:#16a34a">License Approved</h2>
+<p>The license has been approved.</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">License</td><td style="padding:8px;border:1px solid #e5e7eb">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Supplier</td><td style="padding:8px;border:1px solid #e5e7eb">{{supplier_company}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Status</td><td style="padding:8px;border:1px solid #e5e7eb">{{approval_status}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Approved by</td><td style="padding:8px;border:1px solid #e5e7eb">{{acted_by}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Approved at</td><td style="padding:8px;border:1px solid #e5e7eb">{{approved_at}}</td></tr>
+</table>
+<p style="margin-top:16px"><a href="{{app_url}}/licenses" style="background:#16a34a;color:#fff;padding:8px 14px;border-radius:4px;text-decoration:none">Open Licenses</a></p>`
+        },
+        {
+          event_type: 'license_rejected',
+          name: 'License Rejected',
+          subject_template: '[REJECTED] {{license_name}}',
+          body_html_template: `<h2 style="color:#dc2626">License Rejected</h2>
+<p>The license has been rejected.</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">License</td><td style="padding:8px;border:1px solid #e5e7eb">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Supplier</td><td style="padding:8px;border:1px solid #e5e7eb">{{supplier_company}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Status</td><td style="padding:8px;border:1px solid #e5e7eb">{{approval_status}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Rejected by</td><td style="padding:8px;border:1px solid #e5e7eb">{{acted_by}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Rejected at</td><td style="padding:8px;border:1px solid #e5e7eb">{{rejected_at}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Reason</td><td style="padding:8px;border:1px solid #e5e7eb">{{rejection_reason}}</td></tr>
+</table>
+<p style="margin-top:16px"><a href="{{app_url}}/licenses" style="background:#dc2626;color:#fff;padding:8px 14px;border-radius:4px;text-decoration:none">Open Licenses</a></p>`
+        },
+      ];
+
+      for (const t of templates) {
+        await client.query(
+          `INSERT INTO notification_templates (name, event_type, subject_template, body_html_template)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (event_type) DO NOTHING`,
+          [t.name, t.event_type, t.subject_template, t.body_html_template]
+        );
+      }
+    }
+  },
+  {
+    version: 18,
+    name: 'supplier_contract_and_website',
+    up: async (client) => {
+      await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS website VARCHAR(500)`);
+      await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contract_reference VARCHAR(200)`);
+      await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contract_start_date DATE`);
+      await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contract_end_date DATE`);
+      await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS availability_hours VARCHAR(200)`);
+      await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS emergency_phone VARCHAR(60)`);
+      await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS emergency_email VARCHAR(200)`);
+      await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS sla_resolution_hours INTEGER`);
+      await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contract_notes TEXT`);
+      await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contract_documents JSONB NOT NULL DEFAULT '[]'::jsonb`);
+    }
   }
 ];
 

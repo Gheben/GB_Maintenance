@@ -24,6 +24,11 @@ import {
   Upload,
   UserRound,
   XCircle,
+  FileText,
+  Globe,
+  Phone,
+  Mail,
+  Clock,
 } from 'lucide-react'
 
 const SIDE_ICON_COMPONENTS = {
@@ -80,6 +85,16 @@ const emptySupplierForm = {
   email: '',
   vat_number: '',
   notes: '',
+  website: '',
+  contract_reference: '',
+  contract_start_date: '',
+  contract_end_date: '',
+  availability_hours: '',
+  emergency_phone: '',
+  emergency_email: '',
+  sla_resolution_hours: '',
+  contract_notes: '',
+  contract_documents: [],
 }
 
 const templateDefaults = {
@@ -204,6 +219,163 @@ function SupplierForm({ value, onChange }) {
         <label className="block text-sm font-medium mb-1">Notes</label>
         <textarea className="input min-h-[90px]" value={value.notes} onChange={e => set('notes', e.target.value)} />
       </div>
+    </div>
+  )
+}
+
+function SupplierFavicon({ url }) {
+  const [failed, setFailed] = useState(false)
+  if (!url || failed) return null
+  let origin = url
+  try { origin = new URL(url.startsWith('http') ? url : `https://${url}`).origin } catch { return null }
+  return (
+    <img
+      src={`${origin}/favicon.ico`}
+      alt=""
+      width={16}
+      height={16}
+      className="inline-block w-4 h-4 object-contain rounded-sm"
+      onError={() => setFailed(true)}
+    />
+  )
+}
+
+function SupplierFormTabbed({ value, onChange, onUploadDoc }) {
+  const [activeTab, setActiveTab] = useState('general')
+  const set = (k, v) => onChange(f => ({ ...f, [k]: v }))
+
+  return (
+    <div>
+      {/* Tab nav */}
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-4">
+        {[['general', 'General', Building2], ['contract', 'Contract', FileText]].map(([k, l, Icon]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setActiveTab(k)}
+            className={`px-3.5 py-1.5 text-sm font-medium inline-flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${
+              activeTab === k
+                ? 'border-brand-600 text-brand-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}
+          >
+            <Icon size={14} />{l}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'general' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">First name *</label>
+              <input className="input" required value={value.first_name} onChange={e => set('first_name', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Last name *</label>
+              <input className="input" required value={value.last_name} onChange={e => set('last_name', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Company *</label>
+              <input className="input" required value={value.company} onChange={e => set('company', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Nationality</label>
+              <input className="input" value={value.nationality} onChange={e => set('nationality', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Phone</label>
+              <input className="input" value={value.phone} onChange={e => set('phone', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Mobile</label>
+              <input className="input" value={value.mobile} onChange={e => set('mobile', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">VAT number</label>
+              <input className="input" value={value.vat_number} onChange={e => set('vat_number', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Email *</label>
+              <input className="input" type="email" required value={value.email} onChange={e => set('email', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Website</label>
+              <input className="input" type="url" placeholder="https://example.com" value={value.website} onChange={e => set('website', e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Notes</label>
+            <textarea className="input min-h-[90px]" value={value.notes} onChange={e => set('notes', e.target.value)} />
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'contract' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Contract reference</label>
+              <input className="input" placeholder="CTR-2024-001" value={value.contract_reference} onChange={e => set('contract_reference', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Start date</label>
+              <input className="input" type="date" value={value.contract_start_date} onChange={e => set('contract_start_date', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">End date</label>
+              <input className="input" type="date" value={value.contract_end_date} onChange={e => set('contract_end_date', e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1 inline-flex items-center gap-1"><Clock size={13} />Availability hours</label>
+              <input className="input" placeholder="Mon–Fri 9:00–18:00" value={value.availability_hours} onChange={e => set('availability_hours', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">SLA resolution (hours)</label>
+              <input className="input" type="number" min="0" placeholder="e.g. 8" value={value.sla_resolution_hours} onChange={e => set('sla_resolution_hours', e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1 inline-flex items-center gap-1"><Phone size={13} />Emergency phone</label>
+              <input className="input" value={value.emergency_phone} onChange={e => set('emergency_phone', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1 inline-flex items-center gap-1"><Mail size={13} />Emergency email</label>
+              <input className="input" type="email" value={value.emergency_email} onChange={e => set('emergency_email', e.target.value)} />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Contract notes</label>
+            <textarea className="input min-h-[80px]" value={value.contract_notes} onChange={e => set('contract_notes', e.target.value)} />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Contract documents</label>
+            <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-sm">
+              <Upload size={14} />Upload document(s)
+              <input type="file" className="hidden" multiple onChange={e => onUploadDoc && onUploadDoc(e.target.files)} />
+            </label>
+            <div className="mt-2 space-y-1">
+              {(value.contract_documents || []).map((d, i) => (
+                <div key={`${d.url || 'doc'}-${i}`} className="flex items-center justify-between gap-2 text-xs border border-gray-200 dark:border-gray-700 rounded px-2 py-1.5">
+                  <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline truncate">{d.name || d.url}</a>
+                  <button type="button" className="text-red-500 hover:underline shrink-0" onClick={() => onChange(f => ({ ...f, contract_documents: (f.contract_documents || []).filter((_, idx) => idx !== i) }))}>Remove</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -691,6 +863,16 @@ export default function Licenses() {
       email: row.email || '',
       vat_number: row.vat_number || '',
       notes: row.notes || '',
+      website: row.website || '',
+      contract_reference: row.contract_reference || '',
+      contract_start_date: row.contract_start_date ? String(row.contract_start_date).slice(0, 10) : '',
+      contract_end_date: row.contract_end_date ? String(row.contract_end_date).slice(0, 10) : '',
+      availability_hours: row.availability_hours || '',
+      emergency_phone: row.emergency_phone || '',
+      emergency_email: row.emergency_email || '',
+      sla_resolution_hours: row.sla_resolution_hours ?? '',
+      contract_notes: row.contract_notes || '',
+      contract_documents: Array.isArray(row.contract_documents) ? row.contract_documents : [],
     })
     setShowSupplierForm(true)
   }
@@ -721,6 +903,22 @@ export default function Licenses() {
       await suppliersApi.delete(supplierDeleteTarget.id)
       toast.success('Supplier deleted')
       setSupplierDeleteTarget(null)
+
+        const uploadSupplierDoc = async (files) => {
+          const list = Array.from(files || [])
+          if (list.length === 0) return
+          try {
+            const uploaded = []
+            for (const f of list) {
+              const r = await uploadsApi.uploadSupplierDocument(f)
+              uploaded.push(r.data)
+            }
+            setSupplierForm(prev => ({ ...prev, contract_documents: [...(prev.contract_documents || []), ...uploaded] }))
+            toast.success(`${uploaded.length} file(s) uploaded`)
+          } catch (err) {
+            toast.error(err.response?.data?.error || 'Upload error')
+          }
+        }
       await loadSuppliers()
       suppliersApi.list({ page: 1, limit: 100 }).then(r => setSupplierLookup(r.data?.data || [])).catch(() => {})
     } catch (err) {
@@ -920,7 +1118,7 @@ export default function Licenses() {
               <div className="overflow-x-auto">
                 <table className="min-w-[980px] w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
-                    <tr>{['First name', 'Last name', 'Company', 'Email', 'Phone', 'Mobile', 'VAT', 'Actions'].map(h => (
+                    <tr>{['First name', 'Last name', 'Company', 'Website', 'Email', 'Phone', 'Mobile', 'VAT', 'Actions'].map(h => (
                       <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
                     ))}</tr>
                   </thead>
@@ -930,6 +1128,15 @@ export default function Licenses() {
                         <td className="px-4 py-3">{s.first_name}</td>
                         <td className="px-4 py-3">{s.last_name}</td>
                         <td className="px-4 py-3">{s.company}</td>
+                        <td className="px-4 py-3 text-gray-500">{s.email}</td>
+                        <td className="px-4 py-3 text-gray-500">
+                          {s.website ? (
+                            <a href={s.website.startsWith('http') ? s.website : `https://${s.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-brand-600 hover:underline">
+                              <SupplierFavicon url={s.website} />
+                              <Globe size={13} className="text-gray-400" />
+                            </a>
+                          ) : '—'}
+                        </td>
                         <td className="px-4 py-3 text-gray-500">{s.email}</td>
                         <td className="px-4 py-3 text-gray-500">{s.phone || '—'}</td>
                         <td className="px-4 py-3 text-gray-500">{s.mobile || '—'}</td>
@@ -942,7 +1149,7 @@ export default function Licenses() {
                         </td>
                       </tr>
                     ))}
-                    {suppliers.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-gray-500">No suppliers</td></tr>}
+                    {suppliers.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-gray-500">No suppliers</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -1161,7 +1368,7 @@ export default function Licenses() {
       {showSupplierForm && (
         <Modal title={editingSupplier ? `Edit supplier: ${editingSupplier.company}` : 'New supplier'} onClose={() => setShowSupplierForm(false)} size="lg">
           <form onSubmit={saveSupplier} className="space-y-4">
-            <SupplierForm value={supplierForm} onChange={setSupplierForm} />
+            <SupplierFormTabbed value={supplierForm} onChange={setSupplierForm} onUploadDoc={uploadSupplierDoc} />
             <div className="flex justify-end gap-3">
               <button type="button" className="btn-secondary" onClick={() => setShowSupplierForm(false)}>Cancel</button>
               <button type="submit" className="btn-primary">Save</button>
