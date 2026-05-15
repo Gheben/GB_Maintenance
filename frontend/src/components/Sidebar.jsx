@@ -8,6 +8,34 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { settingsApi } from '../api'
 
+const DEFAULT_BRANDING = { app_name: 'GB Maintenance', app_brand_image_url: '' }
+let brandingMemoryCache = null
+let brandingFetchedOnce = false
+
+function getCachedBranding() {
+  try {
+    const raw = localStorage.getItem('public_branding_cache')
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    return {
+      app_name: String(parsed.app_name || DEFAULT_BRANDING.app_name),
+      app_brand_image_url: String(parsed.app_brand_image_url || ''),
+    }
+  } catch {
+    return null
+  }
+}
+
+function setBrandingCache(nextBranding) {
+  brandingMemoryCache = nextBranding
+  try {
+    localStorage.setItem('public_branding_cache', JSON.stringify(nextBranding))
+  } catch {
+    // Ignore storage quota errors.
+  }
+}
+
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', perm: 'dashboard' },
   { to: '/assets', icon: Package, label: 'Assets', perm: 'assets' },
@@ -31,7 +59,7 @@ const NAV = [
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const { user, logout, hasPermission } = useAuth()
   const navigate = useNavigate()
-  const [branding, setBranding] = useState({ app_name: 'GB Maintenance', app_brand_image_url: '' })
+  const [branding, setBranding] = useState(() => brandingMemoryCache || getCachedBranding() || DEFAULT_BRANDING)
 
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
@@ -44,22 +72,35 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   }, [])
 
   useEffect(() => {
-    settingsApi.publicBranding()
-      .then(r => {
-        const b = r.data || {}
-        setBranding({
-          app_name: b.app_name || 'GB Maintenance',
-          app_brand_image_url: b.app_brand_image_url || '',
+    const cached = brandingMemoryCache || getCachedBranding()
+    if (cached) {
+      brandingMemoryCache = cached
+      setBranding(cached)
+    }
+
+    if (!brandingFetchedOnce) {
+      brandingFetchedOnce = true
+      settingsApi.publicBranding()
+        .then(r => {
+          const b = r.data || {}
+          const nextBranding = {
+            app_name: b.app_name || DEFAULT_BRANDING.app_name,
+            app_brand_image_url: b.app_brand_image_url || '',
+          }
+          setBranding(nextBranding)
+          setBrandingCache(nextBranding)
         })
-      })
-      .catch(() => {})
+        .catch(() => {})
+    }
 
     const onBrandingUpdate = (ev) => {
       const b = ev?.detail || {}
-      setBranding({
-        app_name: b.app_name || 'GB Maintenance',
+      const nextBranding = {
+        app_name: b.app_name || DEFAULT_BRANDING.app_name,
         app_brand_image_url: b.app_brand_image_url || '',
-      })
+      }
+      setBranding(nextBranding)
+      setBrandingCache(nextBranding)
     }
 
     window.addEventListener('app-branding-updated', onBrandingUpdate)

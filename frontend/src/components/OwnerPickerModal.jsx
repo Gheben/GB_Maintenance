@@ -223,8 +223,8 @@ export function OwnerPickerModal({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {tab === 'users' && <button type="button" className="btn-secondary" onClick={() => setShowCreateUser(true)}>+ New user</button>}
-          {tab === 'groups' && <button type="button" className="btn-secondary" onClick={() => setShowCreateGroup(true)}>+ New group</button>}
+          {tab === 'users' && <button type="button" className="btn-secondary" onClick={() => setShowCreateUser(true)}>+ New User</button>}
+          {tab === 'groups' && <button type="button" className="btn-secondary" onClick={() => setShowCreateGroup(true)}>+ New Group</button>}
         </div>
 
         {selected.length > 0 && (

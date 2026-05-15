@@ -1459,7 +1459,7 @@ export default function Licenses() {
                 onSearch={searchOwnerLocalOrLdap}
                 onChange={(items) => setLicenseForm(f => ({ ...f, owner_contacts: items }))}
                 createActions={[
-                  { label: '+ New user', onClick: () => openQuickCreateUserFor('owner_contacts') },
+                  { label: '+ New User', onClick: () => openQuickCreateUserFor('owner_contacts') },
                 ]}
               />
               <ContactPicker
@@ -1471,8 +1471,8 @@ export default function Licenses() {
                 onSearch={(q) => searchMaintOrApprover(q, setMaintSearching, setMaintResults)}
                 onChange={(items) => setLicenseForm(f => ({ ...f, maintainer_contacts: items }))}
                 createActions={[
-                  { label: '+ New supplier', onClick: openCreateSupplierFromPicker },
-                  { label: '+ New user', onClick: () => openQuickCreateUserFor('maintainer_contacts') },
+                  { label: '+ New Supplier', onClick: openCreateSupplierFromPicker },
+                  { label: '+ New User', onClick: () => openQuickCreateUserFor('maintainer_contacts') },
                 ]}
               />
               <ContactPicker
@@ -1484,8 +1484,8 @@ export default function Licenses() {
                 onSearch={(q) => searchMaintOrApprover(q, setApproverSearching, setApproverResults)}
                 onChange={(items) => setLicenseForm(f => ({ ...f, approver_contacts: items }))}
                 createActions={[
-                  { label: '+ New supplier', onClick: openCreateSupplierFromPicker },
-                  { label: '+ New user', onClick: () => openQuickCreateUserFor('approver_contacts') },
+                  { label: '+ New Supplier', onClick: openCreateSupplierFromPicker },
+                  { label: '+ New User', onClick: () => openQuickCreateUserFor('approver_contacts') },
                 ]}
               />
             </div>
@@ -1640,7 +1640,7 @@ export default function Licenses() {
                 className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50"
                 onClick={openCreateSupplierFromPicker}
               >
-                + New supplier
+                + New Supplier
               </button>
               <button
                 type="button"
