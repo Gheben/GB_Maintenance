@@ -158,17 +158,38 @@ function PermissionsEditor({ value, onChange, disabled, lockedKeys = new Set() }
   )
 }
 
+function isLocalGroup(group) {
+  if (!group || typeof group !== 'object') return false
+
+  const type = String(group.type || '').trim().toLowerCase()
+  if (type) {
+    if (type.includes('ldap')) return false
+    if (type.includes('local')) return true
+  }
+
+  const authType = String(group.auth_type || '').trim().toLowerCase()
+  if (authType) return authType === 'local'
+
+  const mappingCount = Number(group.ldap_mapping_count)
+  if (Number.isFinite(mappingCount)) return mappingCount === 0
+
+  const ldapDn = String(group.ldap_group_dn || group.dn || '').trim()
+  if (ldapDn) return false
+
+  return true
+}
+
 function LocalGroupPicker({ groups, value, onChange, required, roleOptions, roleProfiles }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [pickerGroups, setPickerGroups] = useState(groups || [])
   const [showCreateGroup, setShowCreateGroup] = useState(false)
-  const localGroups = pickerGroups.filter(group => !group.ldap_mapping_count || group.ldap_mapping_count === 0)
+  const localGroups = pickerGroups.filter(isLocalGroup)
   const selected = localGroups.find(group => group.id === value)
   const filtered = q.trim() ? localGroups.filter(group => String(group.name || '').toLowerCase().includes(q.trim().toLowerCase())) : localGroups
 
   useEffect(() => {
-    setPickerGroups(groups || [])
+    setPickerGroups((groups || []).filter(isLocalGroup))
   }, [groups])
 
   return (

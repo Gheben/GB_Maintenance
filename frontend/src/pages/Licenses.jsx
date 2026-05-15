@@ -63,8 +63,10 @@ const emptyLicenseForm = {
   owner_contacts: [],
   maintainer_contacts: [],
   approver_contacts: [],
+  activation_date: '',
+  duration_months: '12',
+  expiry_mode: 'duration',
   expiry_date: '',
-  renewal_date: '',
   reminder_days: 30,
   approval_required: true,
   approval_status: 'pending',
@@ -225,6 +227,7 @@ function toLicensePayload(form) {
   const ownerContact = primaryContactPayload(form.owner_contacts)
   const maintainerContact = primaryContactPayload(form.maintainer_contacts)
   const approverContact = primaryContactPayload(form.approver_contacts)
+  const customExpiryDate = form.expiry_mode === 'custom' ? (form.expiry_date || null) : null
 
   return {
     ...form,
@@ -235,8 +238,10 @@ function toLicensePayload(form) {
     maintainer_user_id: null,
     approver_contact: approverContact,
     approver_user_id: null,
-    expiry_date: form.expiry_date || null,
-    renewal_date: form.renewal_date || null,
+    activation_date: form.activation_date || null,
+    duration_months: form.expiry_mode === 'duration' ? Number(form.duration_months || 12) : null,
+    custom_expiry_date: customExpiryDate,
+    expiry_date: customExpiryDate,
     estimated_cost: form.estimated_cost === '' ? null : Number(form.estimated_cost),
     reminder_days: Number(form.reminder_days || 30),
     documents: Array.isArray(form.documents) ? form.documents : [],
@@ -892,8 +897,10 @@ export default function Licenses() {
         owner_contacts: extractContactList(d.owner_contact),
         maintainer_contacts: extractContactList(d.maintainer_contact),
         approver_contacts: extractContactList(d.approver_contact),
-        expiry_date: d.expiry_date ? String(d.expiry_date).slice(0, 10) : '',
-        renewal_date: d.renewal_date ? String(d.renewal_date).slice(0, 10) : '',
+        activation_date: d.activation_date ? String(d.activation_date).slice(0, 10) : '',
+        duration_months: String(d.duration_months || 12),
+        expiry_mode: d.custom_expiry_date || (!d.activation_date && d.expiry_date) ? 'custom' : 'duration',
+        expiry_date: d.custom_expiry_date ? String(d.custom_expiry_date).slice(0, 10) : (d.expiry_date ? String(d.expiry_date).slice(0, 10) : ''),
         reminder_days: d.reminder_days || 30,
         approval_required: d.approval_required !== false,
         approval_status: d.approval_status || 'pending',
@@ -1315,7 +1322,7 @@ export default function Licenses() {
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <input className="input w-full sm:w-80" placeholder="Search suppliers..." value={suppliersQ} onChange={e => { setSuppliersQ(e.target.value); setSuppliersPage(1) }} />
-              <button className="btn-primary" onClick={openCreateSupplier}><Plus size={15} />New Supplier</button>
+              <button className="btn-secondary" onClick={openCreateSupplier}><Plus size={15} />New Supplier</button>
             </div>
 
             <div className="card overflow-hidden">
@@ -1435,7 +1442,7 @@ export default function Licenses() {
                   <button type="button" className="input text-left w-full" onClick={() => setShowSupplierPicker(true)}>
                     {selectedSupplierLabel}
                   </button>
-                  <button type="button" className="text-xs text-brand-600 hover:underline" onClick={openCreateSupplier}>New supplier</button>
+                  <button type="button" className="btn-secondary text-xs px-2.5 py-1.5" onClick={openCreateSupplier}>New supplier</button>
                 </div>
               </div>
             </div>
@@ -1455,7 +1462,7 @@ export default function Licenses() {
                 onSearch={searchOwnerLocalOrLdap}
                 onChange={(items) => setLicenseForm(f => ({ ...f, owner_contacts: items }))}
                 createActions={[
-                  { label: 'New local user', onClick: () => openQuickCreateUserFor('owner_contacts') },
+                  { label: 'New user', onClick: () => openQuickCreateUserFor('owner_contacts') },
                 ]}
               />
               <ContactPicker
@@ -1467,8 +1474,8 @@ export default function Licenses() {
                 onSearch={(q) => searchMaintOrApprover(q, setMaintSearching, setMaintResults)}
                 onChange={(items) => setLicenseForm(f => ({ ...f, maintainer_contacts: items }))}
                 createActions={[
-                  { label: 'New supplier', onClick: openCreateSupplierFromPicker },
-                  { label: 'New local user', onClick: () => openQuickCreateUserFor('maintainer_contacts') },
+                  { label: '+ New supplier', onClick: openCreateSupplierFromPicker },
+                  { label: 'New user', onClick: () => openQuickCreateUserFor('maintainer_contacts') },
                 ]}
               />
               <ContactPicker
@@ -1480,20 +1487,33 @@ export default function Licenses() {
                 onSearch={(q) => searchMaintOrApprover(q, setApproverSearching, setApproverResults)}
                 onChange={(items) => setLicenseForm(f => ({ ...f, approver_contacts: items }))}
                 createActions={[
-                  { label: 'New supplier', onClick: openCreateSupplierFromPicker },
-                  { label: 'New local user', onClick: () => openQuickCreateUserFor('approver_contacts') },
+                  { label: '+ New supplier', onClick: openCreateSupplierFromPicker },
+                  { label: 'New user', onClick: () => openQuickCreateUserFor('approver_contacts') },
                 ]}
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Expiry date</label>
-                <input className="input" type="date" value={licenseForm.expiry_date} onChange={e => setLicenseForm(f => ({ ...f, expiry_date: e.target.value }))} />
+                <label className="block text-sm font-medium mb-1">Activation date</label>
+                <input className="input" type="date" value={licenseForm.activation_date} onChange={e => setLicenseForm(f => ({ ...f, activation_date: e.target.value }))} />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Renewal date</label>
-                <input className="input" type="date" value={licenseForm.renewal_date} onChange={e => setLicenseForm(f => ({ ...f, renewal_date: e.target.value }))} />
+                <label className="block text-sm font-medium mb-1">Expiry mode</label>
+                <select className="input" value={licenseForm.expiry_mode} onChange={e => setLicenseForm(f => ({ ...f, expiry_mode: e.target.value }))}>
+                  <option value="duration">Duration from activation</option>
+                  <option value="custom">Custom expiry date</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Duration months</label>
+                <select className="input" value={licenseForm.duration_months} onChange={e => setLicenseForm(f => ({ ...f, duration_months: e.target.value }))} disabled={licenseForm.expiry_mode !== 'duration'}>
+                  {[12, 24, 36, 48, 60].map(months => <option key={months} value={String(months)}>{months} months</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Custom expiry date</label>
+                <input className="input" type="date" value={licenseForm.expiry_date} onChange={e => setLicenseForm(f => ({ ...f, expiry_date: e.target.value, expiry_mode: 'custom' }))} disabled={licenseForm.expiry_mode !== 'custom'} />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Reminder days</label>
@@ -1620,7 +1640,7 @@ export default function Licenses() {
             <div className="max-h-[52vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
               <button
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm text-brand-600 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50"
                 onClick={openCreateSupplierFromPicker}
               >
                 + New supplier
