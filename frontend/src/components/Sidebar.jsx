@@ -25,7 +25,7 @@ const NAV = [
   { to: '/settings', icon: Settings, label: 'Settings', perm: 'settings' },
   { href: '/status', icon: Globe, label: 'Status Page', perm: 'status_page' },
   { divider: true },
-  { href: '/docs', icon: BookOpen, label: 'API Docs', perm: 'apikeys' },
+  { href: '/docs/', icon: BookOpen, label: 'API Docs', perm: 'apikeys' },
 ]
 
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
@@ -98,7 +98,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
       `}>
         {/* Header / Logo */}
         <div style={{ paddingTop: 'env(safe-area-inset-top)' }}
-          className={`border-b border-gray-700 flex items-center ${cl ? 'px-1 py-4 justify-between' : 'px-5 py-4 gap-3'}`}>
+          className={`border-b border-gray-700 flex items-center ${cl ? 'px-1 py-3 justify-between' : 'px-4 py-3 gap-3'}`}>
           {brandImage ? (
             <img src={brandImage} alt={appName} className="w-8 h-8 rounded-lg flex-shrink-0 object-contain bg-gray-800" />
           ) : (
@@ -127,7 +127,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
         </div>
 
         {/* Nav */}
-        <nav className={`flex-1 ${cl ? 'px-1' : 'px-3'} py-3 space-y-0.5 overflow-y-auto scrollbar-thin`}>
+        <nav className={`flex-1 ${cl ? 'px-1' : 'px-3'} py-2 space-y-0.5 overflow-y-auto scrollbar-thin`}>
           {NAV.map((item, i) => {
             if (item.divider) {
               const prevDivIdx = NAV.slice(0, i).reduce((acc, x, j) => x.divider ? j : acc, -1)
@@ -164,7 +164,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
         </nav>
 
         {/* User footer */}
-        <div className={`${cl ? 'px-1' : 'px-3'} py-3 border-t border-gray-700 space-y-1`}>
+        <div className={`${cl ? 'px-1' : 'px-3'} py-2 border-t border-gray-700 space-y-1`}>
           {user && !cl && (
             <div className="px-3 py-1.5 min-w-0">
               <p className="text-sm font-semibold text-gray-200 truncate leading-tight"
