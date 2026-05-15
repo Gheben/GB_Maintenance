@@ -1201,21 +1201,33 @@ function RolesTab() {
         <div className="card p-8 text-center text-gray-400 text-sm">No role presets defined</div>
       )}
 
-      <div className="space-y-4">
-        {presets.map(preset => (
-          <div key={preset.id} className="card p-5 space-y-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-semibold text-gray-800 dark:text-gray-100">{preset.name}</p>
-                {preset.description && <p className="text-sm text-gray-500">{preset.description}</p>}
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" onClick={() => beginEdit(preset)} title="Edit permissions"><Pencil size={15} /></button>
-                <button className="p-1.5 text-red-500 hover:bg-red-50 rounded" onClick={() => setDeleteTarget(preset)} title="Delete role"><Trash2 size={15} /></button>
-              </div>
-            </div>
-          </div>
-        ))}
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-[760px] w-full text-sm">
+            <thead className="bg-gray-50 dark:bg-gray-700/50">
+              <tr>
+                {['Role', 'Description', 'Permissions', 'Actions'].map(h => (
+                  <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {presets.map(preset => (
+                <tr key={preset.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">{preset.name}</td>
+                  <td className="px-4 py-3 text-gray-500">{preset.description || '—'}</td>
+                  <td className="px-4 py-3 text-gray-500">{Object.keys(preset.permissions || {}).length}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1 justify-end">
+                      <button className="action-icon-btn" onClick={() => beginEdit(preset)} title="Edit permissions"><Pencil size={14} /></button>
+                      <button className="action-icon-btn action-icon-btn-danger" onClick={() => setDeleteTarget(preset)} title="Delete role"><Trash2 size={14} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {editTarget && (

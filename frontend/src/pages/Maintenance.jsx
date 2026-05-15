@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
@@ -138,33 +138,25 @@ export default function Maintenance() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {loading ? <tr><td colSpan={8} className="text-center py-8 text-gray-500">Loading...</td></tr>
                 : items.map(m => {
-                  const isCompleted = m.status === 'completed'
                   const isExpanded = expandedId === m.id
                   return (
-                    <>
-                      <tr key={m.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isCompleted ? 'cursor-pointer' : ''}`}
-                        onClick={isCompleted ? () => setExpandedId(isExpanded ? null : m.id) : undefined}>
+                    <Fragment key={m.id}>
+                      <tr
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                        onClick={() => setExpandedId(isExpanded ? null : m.id)}
+                        onDoubleClick={() => navigate(`/maintenance/${m.id}`)}
+                        title="Click to expand timeline. Double click to edit"
+                      >
                         <td className="px-4 py-3 font-medium">
-                          {isCompleted ? (
-                            <span className="flex items-center gap-1">
-                              <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
-                              {m.owner_approval_required && (
-                                <span title="Owner approval workflow enabled" className="inline-flex items-center justify-center text-amber-600">
-                                  <ClipboardCheck size={13} />
-                                </span>
-                              )}
-                              <Link to={`/maintenance/${m.id}`} className="action-link text-sm" onClick={e => e.stopPropagation()}>{m.title}</Link>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1">
-                              {m.owner_approval_required && (
-                                <span title="Owner approval workflow enabled" className="inline-flex items-center justify-center text-amber-600">
-                                  <ClipboardCheck size={13} />
-                                </span>
-                              )}
-                              <Link to={`/maintenance/${m.id}`} className="action-link text-sm">{m.title}</Link>
-                            </span>
-                          )}
+                          <span className="flex items-center gap-1">
+                            <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
+                            {m.owner_approval_required && (
+                              <span title="Owner approval workflow enabled" className="inline-flex items-center justify-center text-amber-600">
+                                <ClipboardCheck size={13} />
+                              </span>
+                            )}
+                            <Link to={`/maintenance/${m.id}`} className="action-link text-sm" onClick={e => e.stopPropagation()}>{m.title}</Link>
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-gray-500">{m.type}</td>
                         <td className="px-4 py-3"><CriticalityBadge criticality={m.impact_level} /></td>
@@ -180,8 +172,8 @@ export default function Maintenance() {
                           <button onClick={e => { e.stopPropagation(); navigate(`/maintenance/${m.id}`) }} className="action-icon-btn" title="Edit"><Pencil size={14} /></button>
                         </td>
                       </tr>
-                      {isCompleted && isExpanded && (
-                        <tr key={`${m.id}-exp`} className="bg-gray-50 dark:bg-gray-800/60">
+                      {isExpanded && (
+                        <tr className="bg-gray-50 dark:bg-gray-800/60">
                           <td colSpan={8} className="px-8 py-3">
                             <div className="flex flex-wrap items-center gap-0">
                               {[
@@ -205,7 +197,7 @@ export default function Maintenance() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })}
             </tbody>
