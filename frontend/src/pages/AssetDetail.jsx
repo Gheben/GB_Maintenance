@@ -194,6 +194,7 @@ export default function AssetDetail() {
     (u.username||'').toLowerCase().includes(q) ||
     (u.email||'').toLowerCase().includes(q))
   const visibleUsers = filteredUsers.slice(0, userLimit)
+  const impactedOffices = [...new Set(assetUsers.map((u) => String(u.office || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
   const assignedTargets = Array.isArray(asset.user_targets) ? asset.user_targets : []
 
   const ownerFieldsJsx = (
@@ -439,6 +440,20 @@ export default function AssetDetail() {
         {tab === 'users' && (
           <div className="card overflow-hidden">
             <div className="p-3 border-b border-gray-100 dark:border-gray-700">
+              <div className="mb-3">
+                <p className="text-xs font-medium text-gray-500 mb-1">Offices involved ({impactedOffices.length})</p>
+                {impactedOffices.length === 0 ? (
+                  <p className="text-xs text-gray-400">No office data available</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {impactedOffices.map((office) => (
+                      <span key={office} className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                        {office}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <input className="input text-sm" placeholder="Search users..."
                 value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserLimit(25) }} />
             </div>
