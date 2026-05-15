@@ -188,7 +188,7 @@ const COUNTRY_OPTIONS = (() => {
     ? Intl.supportedValuesOf('region')
     : FALLBACK_REGION_CODES
 
-  const displayNames = new Intl.DisplayNames(['it'], { type: 'region' })
+  const displayNames = new Intl.DisplayNames(['en'], { type: 'region' })
   return [...new Set(regionCodes)]
     .filter(code => /^[A-Z]{2}$/.test(code))
     .map((code) => {
@@ -199,7 +199,7 @@ const COUNTRY_OPTIONS = (() => {
         label: `${regionCodeToFlag(code)} ${name}`.trim(),
       }
     })
-    .sort((a, b) => a.name.localeCompare(b.name, 'it'))
+    .sort((a, b) => a.name.localeCompare(b.name, 'en'))
 })()
 
 function NationalityPicker({ value, onChange }) {
