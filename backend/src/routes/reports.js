@@ -7,6 +7,32 @@ const { stringify } = require('csv-stringify/sync');
 const router = Router();
 router.use(requireAuth);
 
+const DASHBOARD_CACHE_TTL_MS = 15000;
+const dashboardCache = new Map();
+
+function parsePositiveInt(value, fallback, max = 100) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, max);
+}
+
+function getCachedDashboard(key) {
+  const hit = dashboardCache.get(key);
+  if (!hit) return null;
+  if (hit.expiresAt < Date.now()) {
+    dashboardCache.delete(key);
+    return null;
+  }
+  return hit.payload;
+}
+
+function setCachedDashboard(key, payload) {
+  dashboardCache.set(key, {
+    payload,
+    expiresAt: Date.now() + DASHBOARD_CACHE_TTL_MS,
+  });
+}
+
 // ─── GET /api/reports/maintenance ────────────────────────────────────────────
 router.get('/maintenance', async (req, res) => {
   const { from, to, asset_id, service_id, status, format = 'json' } = req.query;
@@ -117,20 +143,42 @@ router.get('/assets', async (req, res) => {
 
 // ─── GET /api/reports/dashboard ──────────────────────────────────────────────
 router.get('/dashboard', async (req, res) => {
+  const upcomingPage = parsePositiveInt(req.query.upcoming_page, 1, 10000);
+  const upcomingLimit = parsePositiveInt(req.query.upcoming_limit, 5, 100);
+  const recentPage = parsePositiveInt(req.query.recent_page, 1, 10000);
+  const recentLimit = parsePositiveInt(req.query.recent_limit, 5, 100);
+  const upcomingOffset = (upcomingPage - 1) * upcomingLimit;
+  const recentOffset = (recentPage - 1) * recentLimit;
+
+  const cacheKey = `u:${upcomingPage}:${upcomingLimit}|r:${recentPage}:${recentLimit}`;
+  const cached = getCachedDashboard(cacheKey);
+  if (cached) return res.json(cached);
+
   const [
     totalAssets, totalServices, activeMaintenance, openIncidents,
-    upcomingMaintenance, recentCompleted, assetsByStatus, assetsByCriticality,
+    upcomingMaintenanceCount, upcomingMaintenance, recentCompletedCount, recentCompleted,
+    assetsByStatus, assetsByCriticality,
     maintenanceByType, maintenanceByStatus
   ] = await Promise.all([
     getOne(`SELECT COUNT(*)::int as count FROM assets WHERE is_active=true`),
     getOne(`SELECT COUNT(*)::int as count FROM services WHERE is_active=true`),
     getOne(`SELECT COUNT(*)::int as count FROM maintenance_windows WHERE status IN ('in_progress','scheduled')`),
     getOne(`SELECT COUNT(*)::int as count FROM incidents WHERE status != 'resolved'`),
+    getOne(`SELECT COUNT(*)::int as count
+            FROM maintenance_windows
+            WHERE status IN ('scheduled','pending_approval') AND scheduled_start > NOW()`),
     getMany(`SELECT id, title, type, impact_level, scheduled_start, scheduled_end, status
-             FROM maintenance_windows WHERE status IN ('scheduled','pending_approval')
-               AND scheduled_start > NOW() ORDER BY scheduled_start ASC LIMIT 5`),
+             FROM maintenance_windows
+             WHERE status IN ('scheduled','pending_approval') AND scheduled_start > NOW()
+             ORDER BY scheduled_start ASC
+             LIMIT $1 OFFSET $2`, [upcomingLimit, upcomingOffset]),
+    getOne(`SELECT COUNT(*)::int as count
+            FROM maintenance_windows
+            WHERE status='completed'`),
     getMany(`SELECT id, title, status, actual_end FROM maintenance_windows
-             WHERE status='completed' ORDER BY actual_end DESC LIMIT 5`),
+             WHERE status='completed'
+             ORDER BY COALESCE(actual_end, scheduled_end, updated_at, created_at) DESC
+             LIMIT $1 OFFSET $2`, [recentLimit, recentOffset]),
     getMany(`SELECT status, COUNT(*)::int as count FROM assets WHERE is_active=true GROUP BY status`),
     getMany(`SELECT criticality, COUNT(*)::int as count FROM assets WHERE is_active=true GROUP BY criticality`),
     getMany(`SELECT type, COUNT(*)::int as count FROM maintenance_windows
@@ -139,20 +187,29 @@ router.get('/dashboard', async (req, res) => {
              WHERE scheduled_start > NOW() - INTERVAL '90 days' GROUP BY status`),
   ]);
 
-  res.json({
+  const payload = {
     totals: {
       assets: totalAssets.count,
       services: totalServices.count,
       active_maintenance: activeMaintenance.count,
       open_incidents: openIncidents.count,
     },
+    upcoming_maintenance_page: upcomingPage,
+    upcoming_maintenance_limit: upcomingLimit,
+    upcoming_maintenance_total: upcomingMaintenanceCount.count,
     upcoming_maintenance: upcomingMaintenance,
+    recent_completed_page: recentPage,
+    recent_completed_limit: recentLimit,
+    recent_completed_total: recentCompletedCount.count,
     recent_completed: recentCompleted,
     assets_by_status: assetsByStatus,
     assets_by_criticality: assetsByCriticality,
     maintenance_by_type: maintenanceByType,
     maintenance_by_status: maintenanceByStatus,
-  });
+  };
+
+  setCachedDashboard(cacheKey, payload);
+  res.json(payload);
 });
 
 module.exports = router;

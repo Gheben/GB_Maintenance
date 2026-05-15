@@ -208,7 +208,7 @@ export const reportsApi = {
   maintenance: (params) => api.get('/reports/maintenance', { params }),
   uptime: (params) => api.get('/reports/uptime', { params }),
   assets: () => api.get('/reports/assets'),
-  dashboard: () => api.get('/reports/dashboard'),
+  dashboard: (params) => api.get('/reports/dashboard', { params }),
 }
 
 // ─── API Keys ─────────────────────────────────────────────────────────────────

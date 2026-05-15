@@ -1140,6 +1140,57 @@ const MIGRATIONS = [
       `);
     }
   }
+  ,
+  {
+    version: 24,
+    name: 'license_activation_duration_and_reminders',
+    up: async (client) => {
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS activation_date DATE`);
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS duration_months INTEGER`);
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS custom_expiry_date DATE`);
+      await client.query(`ALTER TABLE licenses ALTER COLUMN reminder_days SET DEFAULT 30`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_activation_date ON licenses(activation_date)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_custom_expiry_date ON licenses(custom_expiry_date)`);
+
+      const templates = [
+        {
+          event_type: 'license_expiry_reminder',
+          name: 'License Expiry Reminder',
+          subject_template: '[REMINDER] {{license_name}} expires on {{expiry_date}}',
+          body_html_template: `<h2 style="color:#b45309">License Expiry Reminder</h2>
+<p>The license is approaching its expiry date.</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">License</td><td style="padding:8px;border:1px solid #e5e7eb">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Supplier</td><td style="padding:8px;border:1px solid #e5e7eb">{{supplier_company}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Activation date</td><td style="padding:8px;border:1px solid #e5e7eb">{{activation_date}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Expiry date</td><td style="padding:8px;border:1px solid #e5e7eb">{{expiry_date}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Reminder days</td><td style="padding:8px;border:1px solid #e5e7eb">{{reminder_days}}</td></tr>
+</table>
+<p style="margin-top:16px"><a href="{{app_url}}/licenses" style="background:#b45309;color:#fff;padding:8px 14px;border-radius:4px;text-decoration:none">Open Licenses</a></p>`
+        }
+      ]
+
+      for (const t of templates) {
+        await client.query(
+          `INSERT INTO notification_templates (name, event_type, subject_template, body_html_template)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (event_type) DO NOTHING`,
+          [t.name, t.event_type, t.subject_template, t.body_html_template]
+        )
+      }
+    }
+  },
+  {
+    version: 25,
+    name: 'dashboard_scaling_indexes',
+    up: async (client) => {
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_assets_active_status ON assets(is_active, status)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_assets_active_criticality ON assets(is_active, criticality)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_services_active ON services(is_active)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_maint_upcoming_dashboard ON maintenance_windows(status, scheduled_start)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_maint_recent_dashboard ON maintenance_windows(status, actual_end DESC)`);
+    }
+  }
 ];
 
 async function runMigrations(pool) {
