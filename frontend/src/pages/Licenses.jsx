@@ -30,6 +30,7 @@ import {
   Mail,
   Clock,
 } from 'lucide-react'
+import { QuickCreateUserModal } from '../components/QuickCreateModals'
 
 const SIDE_ICON_COMPONENTS = {
   'check-circle': CheckCircle2,
@@ -450,7 +451,7 @@ function SupplierFormTabbed({ value, onChange, onUploadDoc }) {
   )
 }
 
-function ContactPicker({ label, placeholder, value, onChange, onSearch, loading, results }) {
+function ContactPicker({ label, placeholder, value, onChange, onSearch, loading, results, createActions }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const selected = dedupeContacts(value)
@@ -513,6 +514,14 @@ function ContactPicker({ label, placeholder, value, onChange, onSearch, loading,
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input className="input pl-8" placeholder={placeholder} value={q} onChange={e => setQ(e.target.value)} />
             </div>
+
+            {Array.isArray(createActions) && createActions.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {createActions.map(action => (
+                  <button key={action.label} type="button" className="btn-secondary" onClick={action.onClick}>{action.label}</button>
+                ))}
+              </div>
+            )}
 
             <div className="max-h-[52vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
               {!loading && q.trim().length < 2 && <div className="px-3 py-3 text-sm text-gray-500">Type at least 2 characters.</div>}
@@ -790,6 +799,9 @@ export default function Licenses() {
   const [templateSaving, setTemplateSaving] = useState(false)
   const [templateUploading, setTemplateUploading] = useState(false)
   const [showTemplatePreview, setShowTemplatePreview] = useState(false)
+  const [showQuickCreateUser, setShowQuickCreateUser] = useState(false)
+  const [quickCreateContactTarget, setQuickCreateContactTarget] = useState('owner_contacts')
+  const [autoSelectCreatedSupplier, setAutoSelectCreatedSupplier] = useState(false)
 
   const loadLicenses = async () => {
     const r = await licensesApi.list({ page: licensesPage, limit: licensesLimit, q: licensesQ })
@@ -1028,6 +1040,13 @@ export default function Licenses() {
     setShowSupplierForm(true)
   }
 
+  const openCreateSupplierFromPicker = () => {
+    setAutoSelectCreatedSupplier(true)
+    setShowSupplierPicker(false)
+    setSupplierPickerQ('')
+    openCreateSupplier()
+  }
+
   const openEditSupplier = (row) => {
     setEditingSupplier(row)
     setSupplierForm({
@@ -1061,18 +1080,29 @@ export default function Licenses() {
       if (editingSupplier?.id) {
         await suppliersApi.update(editingSupplier.id, payload)
         toast.success('Supplier updated')
+        setAutoSelectCreatedSupplier(false)
       } else {
-        await suppliersApi.create(payload)
+        const res = await suppliersApi.create(payload)
+        if (autoSelectCreatedSupplier && res.data?.id) {
+          setLicenseForm(prev => ({ ...prev, supplier_id: res.data.id }))
+        }
         toast.success('Supplier created')
+        setAutoSelectCreatedSupplier(false)
       }
       setShowSupplierForm(false)
       await loadSuppliers()
       suppliersApi.list({ page: 1, limit: 100 }).then(r => setSupplierLookup(r.data?.data || [])).catch(() => {})
     } catch (err) {
+      setAutoSelectCreatedSupplier(false)
       const errs = err.response?.data?.errors
       const msg = errs ? errs.map(x => `${x.path}: ${x.msg}`).join(' • ') : (err.response?.data?.error || 'Error')
       toast.error(msg)
     }
+  }
+
+  const openQuickCreateUserFor = (targetField) => {
+    setQuickCreateContactTarget(targetField)
+    setShowQuickCreateUser(true)
   }
 
   const removeSupplier = async () => {
@@ -1424,6 +1454,9 @@ export default function Licenses() {
                 results={ownerResults}
                 onSearch={searchOwnerLocalOrLdap}
                 onChange={(items) => setLicenseForm(f => ({ ...f, owner_contacts: items }))}
+                createActions={[
+                  { label: 'New local user', onClick: () => openQuickCreateUserFor('owner_contacts') },
+                ]}
               />
               <ContactPicker
                 label="Maintainer (Local, LDAP or Suppliers)"
@@ -1433,6 +1466,10 @@ export default function Licenses() {
                 results={maintResults}
                 onSearch={(q) => searchMaintOrApprover(q, setMaintSearching, setMaintResults)}
                 onChange={(items) => setLicenseForm(f => ({ ...f, maintainer_contacts: items }))}
+                createActions={[
+                  { label: 'New supplier', onClick: openCreateSupplierFromPicker },
+                  { label: 'New local user', onClick: () => openQuickCreateUserFor('maintainer_contacts') },
+                ]}
               />
               <ContactPicker
                 label="Approver (Local, LDAP or Suppliers)"
@@ -1442,6 +1479,10 @@ export default function Licenses() {
                 results={approverResults}
                 onSearch={(q) => searchMaintOrApprover(q, setApproverSearching, setApproverResults)}
                 onChange={(items) => setLicenseForm(f => ({ ...f, approver_contacts: items }))}
+                createActions={[
+                  { label: 'New supplier', onClick: openCreateSupplierFromPicker },
+                  { label: 'New local user', onClick: () => openQuickCreateUserFor('approver_contacts') },
+                ]}
               />
             </div>
 
@@ -1579,6 +1620,13 @@ export default function Licenses() {
             <div className="max-h-[52vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
               <button
                 type="button"
+                className="w-full text-left px-3 py-2 text-sm text-brand-600 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                onClick={openCreateSupplierFromPicker}
+              >
+                + New supplier
+              </button>
+              <button
+                type="button"
                 className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50"
                 onClick={() => {
                   setLicenseForm(f => ({ ...f, supplier_id: '' }))
@@ -1610,6 +1658,25 @@ export default function Licenses() {
           </div>
         </Modal>
       )}
+
+      <QuickCreateUserModal
+        open={showQuickCreateUser}
+        onClose={() => setShowQuickCreateUser(false)}
+        localGroups={[]}
+        onCreated={(createdUser) => {
+          const nextContact = {
+            type: 'local_user',
+            id: createdUser.id,
+            name: createdUser.display_name || createdUser.username,
+            username: createdUser.username,
+            email: createdUser.email || '',
+          }
+          setLicenseForm(f => ({
+            ...f,
+            [quickCreateContactTarget]: dedupeContacts([...(f[quickCreateContactTarget] || []), nextContact]),
+          }))
+        }}
+      />
 
       {supplierDeleteTarget && (
         <ConfirmDialog

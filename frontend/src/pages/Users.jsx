@@ -6,6 +6,7 @@ import { Pagination } from '../components/Pagination'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { Plus, Trash2, Users as UsersIcon, X, User, Shield, CheckCircle, XCircle, Pencil, Save, ShieldCheck, Wand2, Eye, EyeOff } from 'lucide-react'
+import { QuickCreateLocalGroupModal } from '../components/QuickCreateModals'
 
 const DEFAULT_ROLES = ['admin','change_manager','operator','viewer','subscriber']
 const TABS = [
@@ -212,11 +213,17 @@ function PermissionsEditor({ value, onChange, disabled, lockedKeys = new Set() }
 function LocalGroupPicker({ groups, value, onChange, required }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const localGroups = (groups || []).filter(g => !g.ldap_mapping_count || g.ldap_mapping_count === 0)
+  const [pickerGroups, setPickerGroups] = useState(groups || [])
+  const [showCreateGroup, setShowCreateGroup] = useState(false)
+  const localGroups = pickerGroups.filter(g => !g.ldap_mapping_count || g.ldap_mapping_count === 0)
   const selected = localGroups.find(g => g.id === value)
   const filtered = q.trim()
     ? localGroups.filter(g => String(g.name || '').toLowerCase().includes(q.trim().toLowerCase()))
     : localGroups
+
+  useEffect(() => {
+    setPickerGroups(groups || [])
+  }, [groups])
 
   return (
     <div>
@@ -231,6 +238,9 @@ function LocalGroupPicker({ groups, value, onChange, required }) {
           <div className="space-y-3">
             <div className="relative">
               <input className="input" placeholder="Search group..." value={q} onChange={e => setQ(e.target.value)} />
+            </div>
+            <div className="flex justify-start">
+              <button type="button" className="btn-secondary" onClick={() => setShowCreateGroup(true)}>New local group</button>
             </div>
             <div className="max-h-[50vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
               {filtered.map(g => (
@@ -252,6 +262,18 @@ function LocalGroupPicker({ groups, value, onChange, required }) {
             <div className="flex justify-end">
               <button type="button" className="btn-secondary" onClick={() => { setOpen(false); setQ('') }}>Close</button>
             </div>
+
+            <QuickCreateLocalGroupModal
+              open={showCreateGroup}
+              onClose={() => setShowCreateGroup(false)}
+              onCreated={(createdGroup) => {
+                setPickerGroups(prev => [...prev, createdGroup])
+                onChange(createdGroup.id)
+                setShowCreateGroup(false)
+                setOpen(false)
+                setQ('')
+              }}
+            />
           </div>
         </Modal>
       )}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Modal } from './Modal'
 import { Search, User, Users, X } from 'lucide-react'
 import { settingsApi } from '../api'
+import { QuickCreateLocalGroupModal, QuickCreateUserModal } from './QuickCreateModals'
 
 const MAX_VISIBLE = 120
 
@@ -53,6 +54,8 @@ export function OwnerPickerModal({
   const [search, setSearch] = useState('')
   const [ldapResults, setLdapResults] = useState([])
   const [loading, setLoading] = useState(false)
+  const [showCreateUser, setShowCreateUser] = useState(false)
+  const [showCreateGroup, setShowCreateGroup] = useState(false)
 
   const selected = useMemo(() => {
     const list = Array.isArray(value) ? value.map(normalizeOwner).filter(Boolean) : []
@@ -209,6 +212,11 @@ export function OwnerPickerModal({
           />
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          {tab === 'users' && <button type="button" className="btn-secondary" onClick={() => setShowCreateUser(true)}>New local user</button>}
+          {tab === 'groups' && <button type="button" className="btn-secondary" onClick={() => setShowCreateGroup(true)}>New local group</button>}
+        </div>
+
         {selected.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {selected.map(owner => (
@@ -253,6 +261,25 @@ export function OwnerPickerModal({
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>Done</button>
         </div>
+
+        <QuickCreateUserModal
+          open={showCreateUser}
+          onClose={() => setShowCreateUser(false)}
+          localGroups={localGroups}
+          onCreated={(createdUser) => {
+            const normalized = normalizeOwner({ type: 'user', id: createdUser.id, name: createdUser.display_name || createdUser.username, email: createdUser.email, source: 'local' })
+            if (normalized) onChange([...(selected || []), normalized])
+          }}
+        />
+
+        <QuickCreateLocalGroupModal
+          open={showCreateGroup}
+          onClose={() => setShowCreateGroup(false)}
+          onCreated={(createdGroup) => {
+            const normalized = normalizeOwner({ type: 'local_group', id: createdGroup.id, name: createdGroup.name, source: 'local' })
+            if (normalized) onChange([...(selected || []), normalized])
+          }}
+        />
       </div>
     </Modal>
   ) : null
