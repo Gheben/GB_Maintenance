@@ -357,22 +357,23 @@ router.get('/', async (req, res) => {
     `SELECT mw.*,
        u1.display_name as created_by_name,
        u2.display_name as approved_by_name,
-       (
-         SELECT COUNT(DISTINCT x.asset_id)::int
-         FROM (
-           SELECT ma.asset_id
-           FROM maintenance_assets ma
-           WHERE ma.maintenance_id=mw.id
-           UNION
-           SELECT sa.asset_id
-           FROM maintenance_services ms
-           JOIN service_assets sa ON sa.service_id=ms.service_id
-           WHERE ms.maintenance_id=mw.id
-         ) x
-       ) as asset_count
+       COALESCE(scope.asset_count, 0) as asset_count
      FROM maintenance_windows mw
      LEFT JOIN users u1 ON u1.id=mw.created_by
      LEFT JOIN users u2 ON u2.id=mw.approved_by
+     LEFT JOIN LATERAL (
+       SELECT COUNT(DISTINCT x.asset_id)::int AS asset_count
+       FROM (
+         SELECT ma.asset_id
+         FROM maintenance_assets ma
+         WHERE ma.maintenance_id=mw.id
+         UNION
+         SELECT sa.asset_id
+         FROM maintenance_services ms
+         JOIN service_assets sa ON sa.service_id=ms.service_id
+         WHERE ms.maintenance_id=mw.id
+       ) x
+     ) scope ON TRUE
      ${where} ORDER BY mw.scheduled_start DESC LIMIT $${i++} OFFSET $${i}`,
     [...params, parseInt(limit), offset]
   );

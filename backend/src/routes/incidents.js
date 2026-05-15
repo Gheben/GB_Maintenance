@@ -34,8 +34,14 @@ router.get('/', async (req, res) => {
 
   const rows = await getMany(
     `SELECT i.*, u.display_name as created_by_name,
-       (SELECT COUNT(*)::int FROM incident_assets ia WHERE ia.incident_id=i.id) as asset_count
-     FROM incidents i LEFT JOIN users u ON u.id=i.created_by
+       COALESCE(ia.asset_count, 0) as asset_count
+     FROM incidents i
+     LEFT JOIN users u ON u.id=i.created_by
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS asset_count
+       FROM incident_assets ia
+       WHERE ia.incident_id=i.id
+     ) ia ON TRUE
      ${where} ORDER BY i.started_at DESC LIMIT $${i++} OFFSET $${i}`,
     [...params, parseInt(limit), offset]
   );
