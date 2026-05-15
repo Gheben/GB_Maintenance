@@ -107,7 +107,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
           {!cl && (
             <div className="min-w-0 flex-1 flex flex-col">
               <span className="font-bold text-sm tracking-wide leading-tight block truncate">{appName}</span>
-              <span className="text-xs text-gray-400 leading-tight truncate">by GB Maintenance</span>
+              <span className="text-xs text-gray-400 leading-tight truncate">Maintenance Tool</span>
             </div>
           )}
           {/* Mobile: close button */}

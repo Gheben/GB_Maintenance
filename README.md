@@ -331,3 +331,21 @@ GB_Maintenance/
 ## 📜 License
 
 Internal use — © Ballarini
+
+---
+
+## 👨‍💻 Author
+
+**Guido Ballarini**
+
+- 💼 LinkedIn: [Guido Ballarini](https://www.linkedin.com/in/guido-ballarini/)
+- ☕ Buy Me a Coffee: [guidoballau](https://buymeacoffee.com/guidoballau)
+
+---
+
+## 💶 Support the project
+
+If you find this project useful, buy me a coffee! ☕
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-guidoballau-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/guidoballau)
+[![PayPal](https://img.shields.io/badge/PayPal-Donate-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/donate/?hosted_button_id=8RF28JBPLYASN)
