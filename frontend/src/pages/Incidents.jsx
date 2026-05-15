@@ -5,7 +5,8 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
 import { Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
-import { incidentsApi } from '../api'
+import { ItemPicker } from '../components/ItemPicker'
+import { incidentsApi, assetsApi, servicesApi } from '../api'
 import { Plus, RefreshCw, Pencil } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -15,28 +16,44 @@ export default function Incidents() {
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(25)
   const [filterStatus, setFilterStatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [form, setForm] = useState({ title: '', severity: 'high', description: '' })
+  const [allAssets, setAllAssets] = useState([])
+  const [allServices, setAllServices] = useState([])
+  const [createAssetIds, setCreateAssetIds] = useState([])
+  const [createServiceIds, setCreateServiceIds] = useState([])
+  const [editAssetIds, setEditAssetIds] = useState([])
+  const [editServiceIds, setEditServiceIds] = useState([])
 
   const load = useCallback(() => {
     setLoading(true)
-    incidentsApi.list({ status: filterStatus, page, limit: 20 })
+    incidentsApi.list({ status: filterStatus, page, limit })
       .then(r => { setItems(r.data.data); setTotal(r.data.total) })
       .finally(() => setLoading(false))
-  }, [filterStatus, page])
+  }, [filterStatus, page, limit])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (showCreate || editTarget) {
+      assetsApi.list({ limit: 500 }).then(r => setAllAssets(Array.isArray(r.data) ? r.data : (r.data.data || []))).catch(() => {})
+      servicesApi.list({ limit: 500 }).then(r => setAllServices(Array.isArray(r.data) ? r.data : (r.data.data || []))).catch(() => {})
+    }
+  }, [showCreate, editTarget])
 
   const handleCreate = async (e) => {
     e.preventDefault()
     try {
-      await incidentsApi.create(form)
+      await incidentsApi.create({ ...form, asset_ids: createAssetIds, service_ids: createServiceIds })
       toast.success('Incident created')
       setShowCreate(false)
       setForm({ title: '', severity: 'high', description: '' })
+      setCreateAssetIds([])
+      setCreateServiceIds([])
       load()
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
@@ -44,12 +61,14 @@ export default function Incidents() {
   const openEdit = (i) => {
     setEditTarget(i)
     setForm({ title: i.title, severity: i.severity, description: i.description || '' })
+    setEditAssetIds(i.assets?.map(a => a.id) || [])
+    setEditServiceIds(i.services?.map(s => s.id) || [])
   }
 
   const handleEdit = async (e) => {
     e.preventDefault()
     try {
-      await incidentsApi.update(editTarget.id, form)
+      await incidentsApi.update(editTarget.id, { ...form, asset_ids: editAssetIds, service_ids: editServiceIds })
       toast.success('Incident updated')
       setEditTarget(null)
       load()
@@ -97,7 +116,7 @@ export default function Incidents() {
             </tbody>
           </table>
           </div>
-          <div className="p-4"><Pagination page={page} limit={20} total={total} onChange={setPage} /></div>
+          <div className="p-4"><Pagination page={page} limit={limit} total={total} onChange={setPage} onLimitChange={setLimit} /></div>
         </div>
       </div>
 
@@ -118,6 +137,26 @@ export default function Incidents() {
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
+            <ItemPicker
+              label="Affected Assets"
+              allItems={allAssets}
+              selectedIds={createAssetIds}
+              onToggle={id => setCreateAssetIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])}
+              badgeKey="category"
+              filterKey="category"
+              useModal
+              maxResults={120}
+            />
+            <ItemPicker
+              label="Affected Services"
+              allItems={allServices}
+              selectedIds={createServiceIds}
+              onToggle={id => setCreateServiceIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])}
+              badgeKey="criticality"
+              filterKey="criticality"
+              useModal
+              maxResults={120}
+            />
             <div className="flex justify-end gap-3">
               <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
               <button type="submit" className="btn-primary">Create</button>
@@ -143,6 +182,26 @@ export default function Incidents() {
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
+            <ItemPicker
+              label="Affected Assets"
+              allItems={allAssets}
+              selectedIds={editAssetIds}
+              onToggle={id => setEditAssetIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])}
+              badgeKey="category"
+              filterKey="category"
+              useModal
+              maxResults={120}
+            />
+            <ItemPicker
+              label="Affected Services"
+              allItems={allServices}
+              selectedIds={editServiceIds}
+              onToggle={id => setEditServiceIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])}
+              badgeKey="criticality"
+              filterKey="criticality"
+              useModal
+              maxResults={120}
+            />
             <div className="flex justify-end gap-3">
               <button type="button" className="btn-secondary" onClick={() => setEditTarget(null)}>Cancel</button>
               <button type="submit" className="btn-primary">Save</button>

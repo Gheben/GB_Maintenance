@@ -5,8 +5,9 @@ import { settingsApi } from '../api'
 
 const MAX_VISIBLE = 120
 
-function sourceLabel(type) {
-  if (type === 'ldap_user' || type === 'ldap_group') return 'LDAP'
+function sourceLabel(owner) {
+  if (String(owner?.source || '').toLowerCase() === 'ldap') return 'LDAP'
+  if (owner?.type === 'ldap_user' || owner?.type === 'ldap_group') return 'LDAP'
   return 'Local'
 }
 
@@ -35,6 +36,7 @@ function normalizeOwner(owner) {
     dn: dn || undefined,
     name: owner.name ? String(owner.name).trim() : '',
     email: owner.email ? String(owner.email).trim() : '',
+    source: owner.source ? String(owner.source).trim().toLowerCase() : undefined,
   }
 }
 
@@ -93,6 +95,7 @@ export function OwnerPickerModal({
             dn: u.dn,
             name: u.name || u.username || u.email || u.dn,
             email: u.email || '',
+            source: 'ldap',
           })))
         } else {
           const r = await settingsApi.searchLdapGroups(q)
@@ -103,6 +106,7 @@ export function OwnerPickerModal({
             dn: g.dn,
             name: g.name || g.dn,
             email: '',
+            source: 'ldap',
           })))
         }
       } catch {
@@ -127,7 +131,13 @@ export function OwnerPickerModal({
             || String(u.username || '').toLowerCase().includes(q)
             || String(u.email || '').toLowerCase().includes(q)
         })
-        .map(u => ({ type: 'user', id: u.id, name: u.display_name || u.username || 'User', email: u.email || '' }))
+        .map(u => ({
+          type: 'user',
+          id: u.id,
+          name: u.display_name || u.username || 'User',
+          email: u.email || '',
+          source: String(u.auth_type || '').toLowerCase() === 'ldap' ? 'ldap' : 'local',
+        }))
     }
 
     return (localGroups || [])
@@ -143,6 +153,7 @@ export function OwnerPickerModal({
           dn: g.ldap_group_dn || undefined,
           name: g.name || 'Group',
           email: '',
+          source: isLdapGroup ? 'ldap' : 'local',
         }
       })
   }, [tab, search, users, localGroups])
@@ -225,8 +236,8 @@ export function OwnerPickerModal({
                     {owner.email && <span className="block truncate text-xs text-gray-400">{owner.email}</span>}
                   </span>
                   <span className="text-xs text-gray-500 hidden sm:inline">{typeLabel(owner.type)}</span>
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${sourceLabel(owner.type) === 'LDAP' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                    {sourceLabel(owner.type)}
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${sourceLabel(owner) === 'LDAP' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {sourceLabel(owner)}
                   </span>
                 </label>
               )

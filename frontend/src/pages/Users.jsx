@@ -1097,7 +1097,7 @@ function GroupsTab({ roleOptions, roleProfiles }) {
               </div>
               {ldapCreateForm.ldapGroup?.dn && (
                 <div className="mt-2 p-2 rounded bg-blue-50 dark:bg-blue-900/20 text-xs">
-                  <span className="font-medium text-blue-800 dark:text-blue-200">Selezionato:</span>
+                  <span className="font-medium text-blue-800 dark:text-blue-200">Selected:</span>
                   <span className="block text-blue-700 dark:text-blue-300 font-mono truncate">{ldapCreateForm.ldapGroup.dn}</span>
                 </div>
               )}
