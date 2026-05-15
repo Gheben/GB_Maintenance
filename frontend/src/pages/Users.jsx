@@ -893,13 +893,13 @@ function GroupsTab({ roleOptions, roleProfiles }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                {['Name','Description','Type','Role','Members','']
+                {['Name','Description','Type','Role','']
                   .map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {pagedGroups.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-8 text-gray-500">No groups</td></tr>
+                <tr><td colSpan={5} className="text-center py-8 text-gray-500">No groups</td></tr>
               )}
               {pagedGroups.map(g => (
                 <tr key={g.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onDoubleClick={() => openDetail(g.id)} title="Double click for details">
@@ -911,19 +911,6 @@ function GroupsTab({ roleOptions, roleProfiles }) {
                   <td className="px-4 py-3 text-gray-500">{g.description || <span className="text-gray-300">—</span>}</td>
                   <td className="px-4 py-3"><AuthBadge authType={g.type} /></td>
                   <td className="px-4 py-3"><RoleBadge role={g.role || 'viewer'} /></td>
-                  {g.type === 'local' ? (
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
-                        {g.member_count ?? '—'}
-                      </span>
-                    </td>
-                  ) : (
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-sky-100 text-sky-700">
-                        {mappingsByGroup(g.id).length}
-                      </span>
-                    </td>
-                  )}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
                       <button className="action-icon-btn" onClick={e => { e.stopPropagation(); openDetail(g.id, true) }} title="Edit"><Pencil size={14} /></button>

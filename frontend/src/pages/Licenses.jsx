@@ -1438,12 +1438,9 @@ export default function Licenses() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Supplier</label>
-                <div className="space-y-2">
-                  <button type="button" className="input text-left w-full" onClick={() => setShowSupplierPicker(true)}>
-                    {selectedSupplierLabel}
-                  </button>
-                  <button type="button" className="btn-secondary text-xs px-2.5 py-1.5" onClick={openCreateSupplier}>New supplier</button>
-                </div>
+                <button type="button" className="input text-left w-full" onClick={() => setShowSupplierPicker(true)}>
+                  {selectedSupplierLabel}
+                </button>
               </div>
             </div>
 
