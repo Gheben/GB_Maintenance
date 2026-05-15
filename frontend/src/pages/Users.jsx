@@ -346,9 +346,13 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
           <label className="block text-sm font-medium mb-1">New password</label>
           <div className="flex items-center gap-2">
             <input className="input" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave empty to keep current password" />
-            <button type="button" className="btn-secondary whitespace-nowrap" onClick={() => setShowPassword(v => !v)}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setShowPassword(v => !v)}
+              title={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}>
               {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-              {showPassword ? 'Hide' : 'Show'}
             </button>
             <button type="button" className="btn-secondary whitespace-nowrap" onClick={handleGeneratePassword}>
               <Wand2 size={14} />
@@ -361,9 +365,13 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
           <label className="block text-sm font-medium mb-1">Confirm new password</label>
           <div className="flex items-center gap-2">
             <input className="input" type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Repeat new password" />
-            <button type="button" className="btn-secondary whitespace-nowrap" onClick={() => setShowConfirmPassword(v => !v)}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setShowConfirmPassword(v => !v)}
+              title={showConfirmPassword ? 'Hide password' : 'Show password'}
+              aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}>
               {showConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-              {showConfirmPassword ? 'Hide' : 'Show'}
             </button>
           </div>
         </div>
@@ -573,9 +581,13 @@ function UsersTab({ roleOptions, roleProfiles }) {
             <div><label className="block text-sm font-medium mb-1">Password *</label>
               <div className="flex items-center gap-2">
                 <input className="input" type={showCreatePassword ? 'text' : 'password'} required value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
-                <button type="button" className="btn-secondary whitespace-nowrap" onClick={() => setShowCreatePassword(v => !v)}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowCreatePassword(v => !v)}
+                  title={showCreatePassword ? 'Hide password' : 'Show password'}
+                  aria-label={showCreatePassword ? 'Hide password' : 'Show password'}>
                   {showCreatePassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                  {showCreatePassword ? 'Hide' : 'Show'}
                 </button>
                 <button type="button" className="btn-secondary whitespace-nowrap" onClick={handleGenerateCreatePassword}>
                   <Wand2 size={14} />
@@ -587,9 +599,13 @@ function UsersTab({ roleOptions, roleProfiles }) {
             <div><label className="block text-sm font-medium mb-1">Confirm password *</label>
               <div className="flex items-center gap-2">
                 <input className="input" type={showCreateConfirmPassword ? 'text' : 'password'} required value={form.confirm_password} onChange={e => setForm(f => ({ ...f, confirm_password: e.target.value }))} />
-                <button type="button" className="btn-secondary whitespace-nowrap" onClick={() => setShowCreateConfirmPassword(v => !v)}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowCreateConfirmPassword(v => !v)}
+                  title={showCreateConfirmPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showCreateConfirmPassword ? 'Hide password' : 'Show password'}>
                   {showCreateConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                  {showCreateConfirmPassword ? 'Hide' : 'Show'}
                 </button>
               </div>
             </div>
