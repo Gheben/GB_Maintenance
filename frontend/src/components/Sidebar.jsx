@@ -23,7 +23,7 @@ const NAV = [
   { to: '/blackout', icon: Ban, label: 'Blackout', perm: 'maintenance' },
   { to: '/audit', icon: ScrollText, label: 'Audit Log', perm: 'audit' },
   { to: '/settings', icon: Settings, label: 'Settings', perm: 'settings' },
-  { to: '/status', icon: Globe, label: 'Status Page', perm: 'status_page' },
+  { href: '/status', icon: Globe, label: 'Status Page', perm: 'status_page' },
   { divider: true },
   { href: '/docs', icon: BookOpen, label: 'API Docs', perm: 'apikeys' },
 ]

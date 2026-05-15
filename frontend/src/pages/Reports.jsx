@@ -61,12 +61,14 @@ export default function Reports() {
 
         {tab === 'maintenance' && (
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-3 items-end">
-              <div><label className="block text-xs font-medium mb-1">From</label><input type="datetime-local" className="input" value={from} onChange={e => setFrom(e.target.value)} /></div>
-              <div><label className="block text-xs font-medium mb-1">To</label><input type="datetime-local" className="input" value={to} onChange={e => setTo(e.target.value)} /></div>
-              <button className="btn-primary" onClick={load}>Refresh</button>
-              <button className="btn-secondary" onClick={downloadCsv}><Download size={14} />CSV</button>
-              <button className="btn-secondary" onClick={downloadPdf}><Download size={14} />PDF</button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+              <div className="min-w-0"><label className="block text-xs font-medium mb-1">From</label><input type="datetime-local" className="input w-full" value={from} onChange={e => setFrom(e.target.value)} /></div>
+              <div className="min-w-0"><label className="block text-xs font-medium mb-1">To</label><input type="datetime-local" className="input w-full" value={to} onChange={e => setTo(e.target.value)} /></div>
+              <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-1 xl:justify-end">
+                <button className="btn-primary" onClick={load}>Refresh</button>
+                <button className="btn-secondary" onClick={downloadCsv}><Download size={14} />CSV</button>
+                <button className="btn-secondary" onClick={downloadPdf}><Download size={14} />PDF</button>
+              </div>
             </div>
 
             {/* Chart: avg duration by type */}

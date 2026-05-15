@@ -100,7 +100,7 @@ async function seedSuperAdmin() {
 // ─── Local Login ──────────────────────────────────────────────────────────────
 async function loginLocal(username, password) {
   const user = await getOne(
-    `SELECT * FROM users WHERE username = $1 AND auth_type = 'local' AND is_active = true`,
+    `SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND auth_type = 'local' AND is_active = true`,
     [username]
   );
   if (!user) return null;

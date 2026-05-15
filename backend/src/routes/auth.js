@@ -45,7 +45,7 @@ router.post('/login', loginLimiter, [
     } else {
       // Auto mode: if a local user exists, use local auth; otherwise fallback to LDAP (if enabled).
       const localUser = await getOne(
-        `SELECT id FROM users WHERE username=$1 AND auth_type='local' AND is_active=true LIMIT 1`,
+        `SELECT id FROM users WHERE LOWER(username)=LOWER($1) AND auth_type='local' AND is_active=true LIMIT 1`,
         [username]
       );
       if (localUser) {
