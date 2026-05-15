@@ -22,6 +22,8 @@ async function getAllowedRoles() {
 
 // ─── GET /api/groups ──────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
+  const includeLdapMembers = ['1', 'true', 'yes', 'on'].includes(String(req.query.include_ldap_members || '').toLowerCase());
+
   const groups = await getMany(
     `SELECT lg.*, COUNT(DISTINCT ugm.user_id)::int as local_member_count,
             COUNT(DISTINCT lgm.id)::int as ldap_mapping_count,
@@ -35,18 +37,23 @@ router.get('/', async (req, res) => {
      GROUP BY lg.id ORDER BY lg.name`
   );
 
-  const enriched = await Promise.all(groups.map(async (group) => {
-    let ldapMemberCount = 0;
-    try {
-      ldapMemberCount = await ldapService.countUsersInGroups(group.ldap_group_dns || []);
-    } catch (_) {
-      ldapMemberCount = 0;
-    }
-    return {
+  const enriched = includeLdapMembers
+    ? await Promise.all(groups.map(async (group) => {
+      let ldapMemberCount = 0;
+      try {
+        ldapMemberCount = await ldapService.countUsersInGroups(group.ldap_group_dns || []);
+      } catch (_) {
+        ldapMemberCount = 0;
+      }
+      return {
+        ...group,
+        member_count: Number(group.local_member_count || 0) + Number(ldapMemberCount || 0),
+      };
+    }))
+    : groups.map((group) => ({
       ...group,
-      member_count: Number(group.local_member_count || 0) + Number(ldapMemberCount || 0),
-    };
-  }));
+      member_count: Number(group.local_member_count || 0),
+    }));
 
   res.json(enriched);
 });
