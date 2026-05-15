@@ -22,6 +22,7 @@ export default function AssetDetail() {
   const [probes, setProbes] = useState([])
   const [maintenance, setMaintenance] = useState([])
   const [assetUsers, setAssetUsers] = useState([])
+  const [selectedOffice, setSelectedOffice] = useState('')
   const [userSearch, setUserSearch] = useState('')
   const [userLimit, setUserLimit] = useState(25)
   const [tab, setTab] = useState('info')
@@ -189,10 +190,14 @@ export default function AssetDetail() {
     a.name.toLowerCase().includes(depSearch.toLowerCase()) && !existingDepIds.has(a.id)
   )
   const q = userSearch.toLowerCase()
-  const filteredUsers = assetUsers.filter(u => !q ||
-    (u.display_name||'').toLowerCase().includes(q) ||
-    (u.username||'').toLowerCase().includes(q) ||
-    (u.email||'').toLowerCase().includes(q))
+  const filteredUsers = assetUsers.filter((u) => {
+    const matchesSearch = !q ||
+      (u.display_name||'').toLowerCase().includes(q) ||
+      (u.username||'').toLowerCase().includes(q) ||
+      (u.email||'').toLowerCase().includes(q)
+    const matchesOffice = !selectedOffice || String(u.office || '').trim() === selectedOffice
+    return matchesSearch && matchesOffice
+  })
   const visibleUsers = filteredUsers.slice(0, userLimit)
   const impactedOffices = [...new Set(assetUsers.map((u) => String(u.office || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
   const assignedTargets = Array.isArray(asset.user_targets) ? asset.user_targets : []
@@ -446,10 +451,22 @@ export default function AssetDetail() {
                   <p className="text-xs text-gray-400">No office data available</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedOffice(''); setUserLimit(25) }}
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs border ${selectedOffice === '' ? 'bg-brand-100 text-brand-700 border-brand-200' : 'bg-white text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'}`}
+                    >
+                      All offices
+                    </button>
                     {impactedOffices.map((office) => (
-                      <span key={office} className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                      <button
+                        type="button"
+                        key={office}
+                        onClick={() => { setSelectedOffice(office); setUserLimit(25) }}
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${selectedOffice === office ? 'bg-indigo-200 text-indigo-900 dark:bg-indigo-700/60 dark:text-indigo-100' : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'}`}
+                      >
                         {office}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 )}

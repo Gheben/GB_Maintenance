@@ -11,6 +11,7 @@ const EMPTY_FORM = { name: '', start_date: '', end_date: '', description: '', se
 
 export default function BlackoutPeriods() {
   const [periods, setPeriods] = useState([])
+  const [officeFilter, setOfficeFilter] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -100,6 +101,11 @@ export default function BlackoutPeriods() {
     </form>
   )
 
+  const allOffices = [...new Set(periods.flatMap((p) => (Array.isArray(p.offices_impacted) ? p.offices_impacted : [])).map((o) => String(o || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  const visiblePeriods = officeFilter
+    ? periods.filter((p) => Array.isArray(p.offices_impacted) && p.offices_impacted.includes(officeFilter))
+    : periods
+
   return (
     <Layout title="Blackout Periods">
       <div className="space-y-4">
@@ -107,8 +113,33 @@ export default function BlackoutPeriods() {
           <button className="btn-primary" onClick={() => { setForm(EMPTY_FORM); setShowCreate(true) }}><Plus size={15} />New Period</button>
         </div>
 
+        {allOffices.length > 0 && (
+          <div className="card p-3">
+            <p className="text-xs font-medium text-gray-500 mb-2">Offices impacted filter</p>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setOfficeFilter('')}
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs border ${officeFilter === '' ? 'bg-brand-100 text-brand-700 border-brand-200' : 'bg-white text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'}`}
+              >
+                All offices
+              </button>
+              {allOffices.map((office) => (
+                <button
+                  type="button"
+                  key={office}
+                  onClick={() => setOfficeFilter(office)}
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${officeFilter === office ? 'bg-indigo-200 text-indigo-900 dark:bg-indigo-700/60 dark:text-indigo-100' : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'}`}
+                >
+                  {office}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
-          {periods.map(p => (
+          {visiblePeriods.map(p => (
             <div key={p.id} className="card p-4 cursor-pointer" onDoubleClick={() => openEdit(p)} title="Double click to edit">
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
@@ -140,9 +171,14 @@ export default function BlackoutPeriods() {
                     {Array.isArray(p.offices_impacted) && p.offices_impacted.length > 0 && (
                       <div className="mt-1 flex flex-wrap gap-1">
                         {p.offices_impacted.map((office) => (
-                          <span key={office} className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                          <button
+                            type="button"
+                            key={office}
+                            onClick={(e) => { e.stopPropagation(); setOfficeFilter(office) }}
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${officeFilter === office ? 'bg-indigo-200 text-indigo-900 dark:bg-indigo-700/60 dark:text-indigo-100' : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'}`}
+                          >
                             {office}
-                          </span>
+                          </button>
                         ))}
                       </div>
                     )}
@@ -155,7 +191,7 @@ export default function BlackoutPeriods() {
               </div>
             </div>
           ))}
-          {periods.length === 0 && <p className="text-center text-gray-500 py-8">No blackout periods</p>}
+          {visiblePeriods.length === 0 && <p className="text-center text-gray-500 py-8">No blackout periods for current office filter</p>}
         </div>
       </div>
 
