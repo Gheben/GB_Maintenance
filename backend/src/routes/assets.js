@@ -192,11 +192,22 @@ router.get('/:id/maintenance', async (req, res) => {
 router.get('/:id/users', async (req, res) => {
   const rows = await getMany(
     `SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
-     FROM service_subscribers ss
-     JOIN service_assets sa ON sa.service_id = ss.service_id
-     LEFT JOIN users u ON u.id = ss.user_id
-     WHERE sa.asset_id = $1 AND u.id IS NOT NULL
-     ORDER BY u.display_name`,
+     FROM assets a
+     JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ut ON true
+     JOIN users u ON (
+       (ut->>'type' = 'user' AND (ut->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ut->>'id')::uuid)
+       OR (
+         ut->>'type' = 'local_group'
+         AND (ut->>'id') ~* '^[0-9a-f-]{36}$'
+         AND EXISTS (
+           SELECT 1 FROM user_group_members ugm
+           WHERE ugm.group_id = (ut->>'id')::uuid
+             AND ugm.user_id = u.id
+         )
+       )
+     )
+     WHERE a.id = $1 AND u.is_active = true
+     ORDER BY COALESCE(u.display_name, u.username)`,
     [req.params.id]
   );
   res.json(rows);

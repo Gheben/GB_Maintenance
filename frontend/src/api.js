@@ -104,6 +104,7 @@ export const servicesApi = {
   addDependency: (id, depId) => api.post(`/services/${id}/dependencies`, { depends_on_id: depId }),
   removeDependency: (id, depId) => api.delete(`/services/${id}/dependencies/${depId}`),
   maintenance: (id) => api.get(`/services/${id}/maintenance`),
+  users: (id) => api.get(`/services/${id}/users`),
   licenses: (id) => api.get(`/services/${id}/licenses`),
   updateLicenses: (id, licenseIds) => api.put(`/services/${id}/licenses`, { license_ids: licenseIds }),
 }

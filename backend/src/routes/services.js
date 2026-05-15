@@ -314,6 +314,31 @@ router.get('/:id/maintenance', async (req, res) => {
   res.json(rows);
 });
 
+// ─── GET /api/services/:id/users ────────────────────────────────────────────
+router.get('/:id/users', async (req, res) => {
+  const rows = await getMany(
+    `SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
+     FROM services s
+     JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ut ON true
+     JOIN users u ON (
+       (ut->>'type' = 'user' AND (ut->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ut->>'id')::uuid)
+       OR (
+         ut->>'type' = 'local_group'
+         AND (ut->>'id') ~* '^[0-9a-f-]{36}$'
+         AND EXISTS (
+           SELECT 1 FROM user_group_members ugm
+           WHERE ugm.group_id = (ut->>'id')::uuid
+             AND ugm.user_id = u.id
+         )
+       )
+     )
+     WHERE s.id = $1 AND u.is_active = true
+     ORDER BY COALESCE(u.display_name, u.username)`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
 // ─── POST /api/services/:id/dependencies ─────────────────────────────────────
 router.post('/:id/dependencies', requireOperator, [
   body('depends_on_id').isUUID(),

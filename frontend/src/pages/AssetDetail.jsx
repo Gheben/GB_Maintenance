@@ -540,7 +540,7 @@ export default function AssetDetail() {
                 value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserLimit(25) }} />
             </div>
             {filteredUsers.length === 0 ? (
-              <p className="text-gray-500 text-sm p-5 text-center">No users subscribed to services using this asset.</p>
+              <p className="text-gray-500 text-sm p-5 text-center">No software users assigned to this asset.</p>
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">

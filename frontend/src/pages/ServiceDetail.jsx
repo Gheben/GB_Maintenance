@@ -28,6 +28,7 @@ export default function ServiceDetail() {
   const [addingDep, setAddingDep] = useState(false)
   const [userSearch, setUserSearch] = useState('')
   const [userLimit, setUserLimit] = useState(25)
+  const [serviceUsers, setServiceUsers] = useState([])
   
   // Owner states
   const [ownerUsers, setOwnerUsers] = useState([])
@@ -58,6 +59,9 @@ export default function ServiceDetail() {
     }
     if (tab === 'licenses') {
       servicesApi.licenses(id).then(r => setLicenseRows(Array.isArray(r.data) ? r.data : [])).catch(() => setLicenseRows([]))
+    }
+    if (tab === 'users') {
+      servicesApi.users(id).then(r => setServiceUsers(Array.isArray(r.data) ? r.data : [])).catch(() => setServiceUsers([]))
     }
   }, [tab, id])
 
@@ -223,12 +227,11 @@ export default function ServiceDetail() {
     s.name.toLowerCase().includes(depSearch.toLowerCase()) && !existingDepIds.has(s.id)
   )
   const qU = userSearch.toLowerCase()
-  const subs = service.subscribers || []
-  const filteredSubs = subs.filter(u => !qU ||
+  const filteredUsers = serviceUsers.filter(u => !qU ||
     (u.display_name||'').toLowerCase().includes(qU) ||
     (u.username||'').toLowerCase().includes(qU) ||
     (u.email||'').toLowerCase().includes(qU))
-  const visibleSubs = filteredSubs.slice(0, userLimit)
+  const visibleUsers = filteredUsers.slice(0, userLimit)
 
   return (
     <Layout title={service.name}>
@@ -520,32 +523,30 @@ export default function ServiceDetail() {
               <input className="input text-sm" placeholder="Search users..."
                 value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserLimit(25) }} />
             </div>
-            {filteredSubs.length === 0 ? (
-              <p className="text-gray-500 text-sm p-5 text-center">No users subscribed to this service.</p>
+            {filteredUsers.length === 0 ? (
+              <p className="text-gray-500 text-sm p-5 text-center">No software users assigned to this service.</p>
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>{['Display Name','Username','Email','Notifications','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                  <tr>{['Display Name','Username','Email','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {visibleSubs.map(u => (
+                  {visibleUsers.map(u => (
                     <tr key={u.id}>
                       <td className="px-4 py-2 font-medium">{u.display_name || u.username || u.email}</td>
                       <td className="px-4 py-2 text-gray-500">{u.username || '—'}</td>
                       <td className="px-4 py-2 text-gray-500">{u.email || '—'}</td>
-                      <td className="px-4 py-2 text-xs text-gray-500">
-                        {[u.notify_maintenance && 'Maintenance', u.notify_incidents && 'Incidents', u.notify_recovery && 'Recovery'].filter(Boolean).join(', ') || '—'}
-                      </td>
-                      <td className="px-4 py-2">{u.user_id ? <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-500">registered</span> : <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-700">email</span>}</td>
+                      <td className="px-4 py-2 text-gray-500">{u.role || '—'}</td>
+                      <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-bold ${u.auth_type === 'ldap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{u.auth_type || 'local'}</span></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
-            {filteredSubs.length > userLimit && (
+            {filteredUsers.length > userLimit && (
               <div className="p-3 text-center border-t border-gray-100">
                 <button className="text-sm text-brand-600 hover:underline" onClick={() => setUserLimit(l => l + 25)}>
-                  Show {filteredSubs.length - userLimit} more
+                  Show {filteredUsers.length - userLimit} more
                 </button>
               </div>
             )}
