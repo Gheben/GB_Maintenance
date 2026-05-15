@@ -183,6 +183,27 @@ function regionCodeToFlag(code) {
   return String.fromCodePoint(...code.split('').map(ch => base + ch.charCodeAt(0)))
 }
 
+function CountryFlag({ code, name, className = 'w-5 h-4' }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const normalized = String(code || '').toLowerCase()
+  const emoji = regionCodeToFlag(String(code || '').toUpperCase())
+
+  if (!/^[a-z]{2}$/.test(normalized) || imgFailed) {
+    return <span className="inline-flex items-center justify-center text-base leading-none" title={name}>{emoji || '🏳️'}</span>
+  }
+
+  return (
+    <img
+      src={`https://flagcdn.com/24x18/${normalized}.png`}
+      alt={name ? `${name} flag` : 'Country flag'}
+      className={`inline-block object-cover rounded-sm border border-gray-200 dark:border-gray-700 ${className}`}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setImgFailed(true)}
+    />
+  )
+}
+
 const COUNTRY_OPTIONS = (() => {
   let regionCodes = FALLBACK_REGION_CODES
   if (typeof Intl.supportedValuesOf === 'function') {
@@ -211,22 +232,105 @@ const COUNTRY_OPTIONS = (() => {
 })()
 
 function NationalityPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const selectedOption = useMemo(
+    () => COUNTRY_OPTIONS.find(option => option.name === value),
+    [value]
+  )
+
   const customOption = useMemo(() => {
     const current = String(value || '').trim()
     if (!current) return null
     const found = COUNTRY_OPTIONS.some(option => option.name === current)
     if (found) return null
-    return { name: current, label: `🏳️ ${current}` }
+    return { name: current, label: current }
   }, [value])
 
+  const filteredOptions = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return COUNTRY_OPTIONS
+    return COUNTRY_OPTIONS.filter(option => option.name.toLowerCase().includes(q) || option.code.toLowerCase().includes(q))
+  }, [query])
+
+  const selectNationality = (name) => {
+    onChange(name)
+    setOpen(false)
+    setQuery('')
+  }
+
   return (
-    <select className="input" value={value || ''} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Select nationality</option>
-      {customOption ? <option value={customOption.name}>{customOption.label}</option> : null}
-      {COUNTRY_OPTIONS.map(option => (
-        <option key={option.code} value={option.name}>{option.label}</option>
-      ))}
-    </select>
+    <>
+      <button
+        type="button"
+        className="input w-full text-left flex items-center justify-between gap-2"
+        onClick={() => setOpen(true)}
+      >
+        <span className="min-w-0 flex items-center gap-2">
+          {selectedOption ? <CountryFlag code={selectedOption.code} name={selectedOption.name} /> : null}
+          {customOption && !selectedOption ? <span className="text-base leading-none">🏳️</span> : null}
+          <span className={`truncate ${value ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}`}>
+            {value || 'Select nationality'}
+          </span>
+        </span>
+        <span className="text-xs text-gray-400">Select</span>
+      </button>
+
+      {open && (
+        <Modal title="Select nationality" onClose={() => { setOpen(false); setQuery('') }} size="md">
+          <div className="space-y-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="input w-full pl-8"
+                placeholder="Search country..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg max-h-[55vh] overflow-y-auto">
+              <button
+                type="button"
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700/40 ${!value ? 'bg-brand-50/60 dark:bg-brand-900/20' : ''}`}
+                onClick={() => selectNationality('')}
+              >
+                No nationality
+              </button>
+
+              {customOption ? (
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700/40 flex items-center gap-2"
+                  onClick={() => selectNationality(customOption.name)}
+                >
+                  <span className="text-base leading-none">🏳️</span>
+                  <span className="truncate">{customOption.label}</span>
+                </button>
+              ) : null}
+
+              {filteredOptions.map(option => (
+                <button
+                  key={option.code}
+                  type="button"
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700/40 flex items-center gap-2 ${value === option.name ? 'bg-brand-50/60 dark:bg-brand-900/20' : ''}`}
+                  onClick={() => selectNationality(option.name)}
+                >
+                  <CountryFlag code={option.code} name={option.name} />
+                  <span className="truncate">{option.name}</span>
+                </button>
+              ))}
+
+              {filteredOptions.length === 0 ? (
+                <div className="px-3 py-4 text-sm text-gray-500">No countries found.</div>
+              ) : null}
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   )
 }
 
