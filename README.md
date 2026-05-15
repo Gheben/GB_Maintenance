@@ -210,9 +210,11 @@ Passwords hashed with bcrypt (cost 12). Managed from **User management**.
 Configurable from the UI → **User management → LDAP / Active Directory**:
 - Bind with a service account
 - User search via customizable filter (default: `sAMAccountName`)
+- AD `Office` attribute is imported and stored in user profile (`users.office`)
 - Nested group resolution (AD `LDAP_MATCHING_RULE_IN_CHAIN` or standard BFS)
 - DN group → role/permission mapping
 - Automatic user sync on each LDAP login
+- LDAP user cache table is refreshed on LDAP searches/login sync for faster repeated lookups
 
 ### SSO (Authentik / NetScaler / Nginx)
 Set `SSO_HEADER_ENABLED=true` and configure the header name (default: `X-Remote-User`). The proxy authenticates the user and forwards their username in the configured header. The backend reads it, resolves via LDAP (if configured), and issues a JWT without requiring a password.
@@ -239,6 +241,9 @@ Full hardware/software inventory with:
 
 ### Services
 IT services with owner, SLA, status, and linked assets.
+
+### Users
+User records support an optional **Office** field for local and LDAP users.
 
 ### Licenses
 Software licenses with:

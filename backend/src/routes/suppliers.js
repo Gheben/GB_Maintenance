@@ -85,10 +85,6 @@ router.post('/', requireAdmin, [
 
   const result = await query(
     `INSERT INTO suppliers (
-      first_name, last_name, company, nationality, phone, mobile, email, vat_number, notes, is_active, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
-    RETURNING id`,
-    `INSERT INTO suppliers (
       first_name, last_name, company, nationality, phone, mobile, email, vat_number, notes, is_active,
       website, contract_reference, contract_start_date, contract_end_date, availability_hours,
       emergency_phone, emergency_email, sla_resolution_hours, contract_notes, contract_documents,

@@ -1198,6 +1198,37 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS user_targets JSONB NOT NULL DEFAULT '[]'::jsonb`);
       await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS user_targets JSONB NOT NULL DEFAULT '[]'::jsonb`);
     }
+  },
+  {
+    version: 27,
+    name: 'users_office_and_ldap_users_cache',
+    up: async (client) => {
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS office VARCHAR(200)`);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ldap_users_cache (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          dn TEXT UNIQUE,
+          username VARCHAR(200) UNIQUE,
+          upn VARCHAR(300),
+          display_name VARCHAR(300),
+          email VARCHAR(300),
+          office VARCHAR(200),
+          source_payload JSONB DEFAULT '{}'::jsonb,
+          synced_at TIMESTAMPTZ DEFAULT NOW(),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ldap_cache_username ON ldap_users_cache(username)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ldap_cache_display_name ON ldap_users_cache(display_name)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ldap_cache_email ON ldap_users_cache(email)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ldap_cache_office ON ldap_users_cache(office)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ldap_cache_synced_at ON ldap_users_cache(synced_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_expiry_name ON licenses(expiry_date, name)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_supplier_id ON licenses(supplier_id)`);
+    }
   }
 ];
 

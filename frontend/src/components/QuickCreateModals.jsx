@@ -257,14 +257,14 @@ export function QuickCreateUserModal({ open, onClose, onCreated, localGroups = [
   const [pickerGroups, setPickerGroups] = useState(localGroups || [])
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [form, setForm] = useState({ username: '', display_name: '', email: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' })
+  const [form, setForm] = useState({ username: '', display_name: '', email: '', office: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' })
 
   useEffect(() => {
     if (!open) return
     setShowPassword(false)
     setShowConfirmPassword(false)
     setPickerGroups(localGroups || [])
-    setForm({ username: '', display_name: '', email: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' })
+    setForm({ username: '', display_name: '', email: '', office: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' })
 
     Promise.all([
       initialRoleOptions?.length && initialRoleProfiles ? Promise.resolve({ data: [] }) : settingsApi.getRolePresets().catch(() => ({ data: [] })),
@@ -312,6 +312,7 @@ export function QuickCreateUserModal({ open, onClose, onCreated, localGroups = [
         username: form.username.trim(),
         display_name: form.display_name.trim(),
         email: form.email.trim(),
+        office: form.office?.trim() || '',
         auth_type: 'local',
       })
       onClose()
@@ -340,6 +341,10 @@ export function QuickCreateUserModal({ open, onClose, onCreated, localGroups = [
         <div>
           <label className="block text-sm font-medium mb-1">Email *</label>
           <input className="input" type="email" required value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Office</label>
+          <input className="input" value={form.office} onChange={e => setForm(f => ({ ...f, office: e.target.value }))} placeholder="Optional" />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Password *</label>

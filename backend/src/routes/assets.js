@@ -191,23 +191,27 @@ router.get('/:id/maintenance', async (req, res) => {
 // ─── GET /api/assets/:id/users ───────────────────────────────────────────────
 router.get('/:id/users', async (req, res) => {
   const rows = await getMany(
-    `SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
-     FROM assets a
-     JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ut ON true
-     JOIN users u ON (
-       (ut->>'type' = 'user' AND (ut->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ut->>'id')::uuid)
-       OR (
-         ut->>'type' = 'local_group'
-         AND (ut->>'id') ~* '^[0-9a-f-]{36}$'
-         AND EXISTS (
-           SELECT 1 FROM user_group_members ugm
-           WHERE ugm.group_id = (ut->>'id')::uuid
-             AND ugm.user_id = u.id
+    `WITH resolved_users AS (
+       SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       FROM assets a
+       JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ut ON true
+       JOIN users u ON (
+         (ut->>'type' = 'user' AND (ut->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ut->>'id')::uuid)
+         OR (
+           ut->>'type' = 'local_group'
+           AND (ut->>'id') ~* '^[0-9a-f-]{36}$'
+           AND EXISTS (
+             SELECT 1 FROM user_group_members ugm
+             WHERE ugm.group_id = (ut->>'id')::uuid
+               AND ugm.user_id = u.id
+           )
          )
        )
+       WHERE a.id = $1 AND u.is_active = true
      )
-     WHERE a.id = $1 AND u.is_active = true
-     ORDER BY u.display_name NULLS LAST, u.username`,
+     SELECT id, username, display_name, email, office, role, auth_type
+     FROM resolved_users
+     ORDER BY display_name NULLS LAST, username`,
     [req.params.id]
   );
   res.json(rows);

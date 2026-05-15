@@ -464,7 +464,7 @@ export default function AssetDetail() {
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>{['Display Name','Username','Email','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                  <tr>{['Display Name','Username','Email','Office','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {visibleUsers.map(u => (
@@ -472,6 +472,7 @@ export default function AssetDetail() {
                       <td className="px-4 py-2 font-medium">{u.display_name || u.username}</td>
                       <td className="px-4 py-2 text-gray-500">{u.username}</td>
                       <td className="px-4 py-2 text-gray-500">{u.email || '—'}</td>
+                      <td className="px-4 py-2 text-gray-500">{u.office || '—'}</td>
                       <td className="px-4 py-2 text-gray-500">{u.role}</td>
                       <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-bold ${u.auth_type === 'ldap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{u.auth_type || 'local'}</span></td>
                     </tr>

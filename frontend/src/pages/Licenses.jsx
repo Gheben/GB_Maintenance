@@ -780,6 +780,8 @@ export default function Licenses() {
   const [assets, setAssets] = useState([])
   const [services, setServices] = useState([])
   const [localUsers, setLocalUsers] = useState([])
+  const [formLookupsLoaded, setFormLookupsLoaded] = useState(false)
+  const [loadingFormLookups, setLoadingFormLookups] = useState(false)
 
   const [showLicenseForm, setShowLicenseForm] = useState(false)
   const [editingLicense, setEditingLicense] = useState(null)
@@ -844,14 +846,24 @@ export default function Licenses() {
   }, [tab])
 
   useEffect(() => {
-    assetsApi.list({ limit: 300 }).then(r => setAssets(Array.isArray(r.data) ? r.data : (r.data.data || []))).catch(() => {})
-    servicesApi.list({ limit: 300 }).then(r => setServices(Array.isArray(r.data) ? r.data : (r.data.data || []))).catch(() => {})
-    usersApi.list({ limit: 500 }).then(r => {
-      const list = Array.isArray(r.data) ? r.data : (r.data.data || [])
-      setLocalUsers(list)
-    }).catch(() => {})
-    suppliersApi.list({ page: 1, limit: 100 }).then(r => setSupplierLookup(r.data?.data || [])).catch(() => {})
-  }, [])
+    if (!showLicenseForm || formLookupsLoaded || loadingFormLookups) return
+
+    setLoadingFormLookups(true)
+    Promise.all([
+      assetsApi.list({ limit: 300 }).catch(() => ({ data: [] })),
+      servicesApi.list({ limit: 300 }).catch(() => ({ data: [] })),
+      usersApi.list({ limit: 500 }).catch(() => ({ data: [] })),
+      suppliersApi.list({ page: 1, limit: 200 }).catch(() => ({ data: { data: [] } })),
+    ])
+      .then(([assetsRes, servicesRes, usersRes, suppliersRes]) => {
+        setAssets(Array.isArray(assetsRes.data) ? assetsRes.data : (assetsRes.data?.data || []))
+        setServices(Array.isArray(servicesRes.data) ? servicesRes.data : (servicesRes.data?.data || []))
+        setLocalUsers(Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.data || []))
+        setSupplierLookup(suppliersRes.data?.data || [])
+        setFormLookupsLoaded(true)
+      })
+      .finally(() => setLoadingFormLookups(false))
+  }, [showLicenseForm, formLookupsLoaded, loadingFormLookups])
 
   const supplierOptions = useMemo(() => supplierLookup.map(s => ({ id: s.id, label: `${s.company} - ${s.first_name} ${s.last_name}` })), [supplierLookup])
   const selectedSupplierLabel = useMemo(() => {
@@ -1490,7 +1502,7 @@ export default function Licenses() {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Activation date</label>
                 <input className="input" type="date" value={licenseForm.activation_date} onChange={e => setLicenseForm(f => ({ ...f, activation_date: e.target.value }))} />
@@ -1502,16 +1514,19 @@ export default function Licenses() {
                   <option value="custom">Custom expiry date</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Duration months</label>
-                <select className="input" value={licenseForm.duration_months} onChange={e => setLicenseForm(f => ({ ...f, duration_months: e.target.value }))} disabled={licenseForm.expiry_mode !== 'duration'}>
-                  {[12, 24, 36, 48, 60].map(months => <option key={months} value={String(months)}>{months} months</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Custom expiry date</label>
-                <input className="input" type="date" value={licenseForm.expiry_date} onChange={e => setLicenseForm(f => ({ ...f, expiry_date: e.target.value, expiry_mode: 'custom' }))} disabled={licenseForm.expiry_mode !== 'custom'} />
-              </div>
+              {licenseForm.expiry_mode === 'duration' ? (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Duration months</label>
+                  <select className="input" value={licenseForm.duration_months} onChange={e => setLicenseForm(f => ({ ...f, duration_months: e.target.value }))}>
+                    {[12, 24, 36, 48, 60].map(months => <option key={months} value={String(months)}>{months} months</option>)}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Custom expiry date</label>
+                  <input className="input" type="date" value={licenseForm.expiry_date} onChange={e => setLicenseForm(f => ({ ...f, expiry_date: e.target.value }))} />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium mb-1">Reminder days</label>
                 <input className="input" type="number" min="1" max="365" value={licenseForm.reminder_days} onChange={e => setLicenseForm(f => ({ ...f, reminder_days: e.target.value }))} />

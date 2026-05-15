@@ -324,6 +324,7 @@ function UserDetailModal({ user: u, onClose, onEdit }) {
             }
           </div>
           {u.email && <p className="text-sm text-gray-500">{u.email}</p>}
+          {u.office && <p className="text-sm text-gray-500">Office: {u.office}</p>}
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Permissions</p>
             {hasFullAccess ? (
@@ -366,6 +367,7 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
   const [username, setUsername] = useState(u.username || '')
   const [displayName, setDisplayName] = useState(u.display_name || '')
   const [email, setEmail] = useState(u.email || '')
+  const [office, setOffice] = useState(u.office || '')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -402,6 +404,7 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
         username: username.trim(),
         display_name: displayName.trim(),
         email: email.trim(),
+        office: office.trim() || null,
         ...(password ? { password } : {}),
         role,
         permissions: (role === 'admin' || role === 'superadmin') ? {} : permissions,
@@ -437,6 +440,10 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
         <div>
           <label className="block text-sm font-medium mb-1">Email *</label>
           <input className="input" type="email" required value={email} onChange={e => setEmail(e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Office</label>
+          <input className="input" value={office} onChange={e => setOffice(e.target.value)} placeholder="Optional" />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">New password</label>
@@ -516,7 +523,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
   const [localGroups, setLocalGroups] = useState([])
   const [showCreatePassword, setShowCreatePassword] = useState(false)
   const [showCreateConfirmPassword, setShowCreateConfirmPassword] = useState(false)
-  const [form, setForm] = useState({ username: '', display_name: '', email: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' })
+  const [form, setForm] = useState({ username: '', display_name: '', email: '', office: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' })
 
   useEffect(() => {
     setForm(f => ({ ...f, permissions: mergeWithRoleBaseline(f.role, f.permissions, roleProfiles) }))
@@ -550,7 +557,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
       delete payload.confirm_password
       if (form.role === 'admin') payload.permissions = {}
       await usersApi.create(payload); toast.success('User created'); setShowCreate(false)
-      setForm({ username: '', display_name: '', email: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' }); load()
+      setForm({ username: '', display_name: '', email: '', office: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' }); load()
     }
     catch (err) { toast.error(err.response?.data?.errors?.[0]?.msg || err.response?.data?.error || 'Error') }
   }
@@ -597,7 +604,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
           <div className="overflow-x-auto">
           <table className="min-w-[640px] w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
-            <tr>{['Username','Display name','Email','Auth','Role','Active','Last login','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+            <tr>{['Username','Display name','Email','Office','Auth','Role','Active','Last login','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
             {filtered.map(u => (
@@ -614,6 +621,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
                 </td>
                 <td className="px-4 py-3">{u.display_name}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{u.email}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs">{u.office || '—'}</td>
                 <td className="px-4 py-3"><AuthBadge authType={u.auth_type} /></td>
                 <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
                 <td className="px-4 py-3 text-xs">
@@ -633,7 +641,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-gray-500">No users</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-gray-500">No users</td></tr>}
           </tbody>
         </table>
         </div>

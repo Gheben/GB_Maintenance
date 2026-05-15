@@ -296,10 +296,9 @@ export default function ServiceDetail() {
         ) : (
           <div className="card p-6">
             <div className="flex flex-wrap items-center gap-3 mb-3">
-              <StatusBadge status={service.current_status} />
+              <StatusBadge status={service.status || service.current_status} />
               <CriticalityBadge criticality={service.criticality} />
               {service.system_name && <span className="badge bg-indigo-100 text-indigo-700">{service.system_name}</span>}
-              {service.slug && <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{service.slug}</span>}
             </div>
             {service.description && <p className="text-gray-600 dark:text-gray-300 mb-3">{service.description}</p>}
             <div className="flex flex-wrap gap-6 text-sm text-gray-600 dark:text-gray-400">
@@ -458,7 +457,7 @@ export default function ServiceDetail() {
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>{['Display Name','Username','Email','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                  <tr>{['Display Name','Username','Email','Office','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {visibleUsers.map(u => (
@@ -466,6 +465,7 @@ export default function ServiceDetail() {
                       <td className="px-4 py-2 font-medium">{u.display_name || u.username || u.email}</td>
                       <td className="px-4 py-2 text-gray-500">{u.username || '—'}</td>
                       <td className="px-4 py-2 text-gray-500">{u.email || '—'}</td>
+                      <td className="px-4 py-2 text-gray-500">{u.office || '—'}</td>
                       <td className="px-4 py-2 text-gray-500">{u.role || '—'}</td>
                       <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-bold ${u.auth_type === 'ldap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{u.auth_type || 'local'}</span></td>
                     </tr>

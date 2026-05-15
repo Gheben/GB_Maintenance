@@ -7,7 +7,7 @@ import { Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { ItemPicker } from '../components/ItemPicker'
 import { maintenanceApi, maintenanceTypesApi, assetsApi, servicesApi, blackoutApi } from '../api'
-import { Plus, RefreshCw, Pencil, ChevronDown, ChevronRight as ChevronRight2, CheckCircle2, Ban, AlertTriangle, ClipboardCheck } from 'lucide-react'
+import { Plus, RefreshCw, Pencil, ChevronDown, ChevronRight as ChevronRight2, CheckCircle2, Ban, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
 
 const IMPACTS = ['critical','high','medium','low']
@@ -150,11 +150,6 @@ export default function Maintenance() {
                         <td className="px-4 py-3 font-medium">
                           <span className="flex items-center gap-1">
                             <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
-                            {m.owner_approval_required && (
-                              <span title="Owner approval workflow enabled" className="inline-flex items-center justify-center text-amber-600">
-                                <ClipboardCheck size={13} />
-                              </span>
-                            )}
                             <span
                               className="text-sm text-gray-800 dark:text-gray-100"
                               title="Click to expand timeline"

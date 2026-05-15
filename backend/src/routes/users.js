@@ -61,6 +61,7 @@ router.post('/', requireAdmin, [
   body('role').isString().trim().isLength({ min: 1, max: 100 }),
   body('display_name').optional().isString().trim(),
   body('email').optional().isEmail(),
+  body('office').optional({ nullable: true }).isString().trim().isLength({ max: 200 }),
   body('permissions').optional().isObject(),
   body('group_id').optional().isUUID(),
 ], async (req, res) => {
@@ -80,6 +81,7 @@ router.post('/', requireAdmin, [
       {
         display_name: req.body.display_name,
         email: req.body.email,
+        office: req.body.office,
         permissions: req.body.permissions
       }
     );
@@ -104,6 +106,7 @@ router.put('/:id', requireAdmin, [
   body('username').optional().isString().trim().isLength({ min: 3, max: 100 }),
   body('display_name').optional().isString().trim(),
   body('email').optional().isEmail(),
+  body('office').optional({ nullable: true }).isString().trim().isLength({ max: 200 }),
   body('role').optional().isString().trim().isLength({ min: 1, max: 100 }),
   body('permissions').optional().isObject(),
   body('is_active').optional().isBoolean(),

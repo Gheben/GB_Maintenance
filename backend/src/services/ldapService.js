@@ -35,6 +35,12 @@ function normalizePhone(raw) {
   return String(raw || '').replace(/[\s\-().]/g, '');
 }
 
+function normalizeOffice(raw) {
+  if (Array.isArray(raw)) return String(raw[0] || '').trim() || null;
+  const value = String(raw || '').trim();
+  return value || null;
+}
+
 function _escapeLdap(value) {
   const s = String(value || '');
   if (ldap && typeof ldap.escape === 'function') return ldap.escape(s);
@@ -90,6 +96,107 @@ function _bindPassword(cfg) {
     throw new Error('LDAP: impossibile decifrare la password del service account. Reinserire in Impostazioni → LDAP.');
   }
   return dec || raw;
+}
+
+async function _upsertCachedLdapUsers(users = []) {
+  if (!Array.isArray(users) || users.length === 0) return;
+
+  for (const user of users) {
+    const dn = String(user?.dn || '').trim() || null;
+    const username = String(user?.username || '').trim().toLowerCase() || null;
+    const upn = String(user?.upn || '').trim() || null;
+    const displayName = String(user?.name || user?.display_name || '').trim() || null;
+    const email = String(user?.email || '').trim() || null;
+    const office = normalizeOffice(user?.office);
+
+    if (!dn && !username) continue;
+
+    const payload = {
+      dn,
+      username,
+      upn,
+      display_name: displayName,
+      email,
+      office,
+      source: 'ldap',
+    };
+
+    if (dn) {
+      await query(
+        `INSERT INTO ldap_users_cache (dn, username, upn, display_name, email, office, source_payload, synced_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
+         ON CONFLICT (dn) DO UPDATE
+         SET username=EXCLUDED.username,
+             upn=EXCLUDED.upn,
+             display_name=EXCLUDED.display_name,
+             email=EXCLUDED.email,
+             office=EXCLUDED.office,
+             source_payload=EXCLUDED.source_payload,
+             synced_at=NOW(),
+             updated_at=NOW()`,
+        [dn, username, upn, displayName, email, office, JSON.stringify(payload)]
+      );
+    } else {
+      await query(
+        `INSERT INTO ldap_users_cache (dn, username, upn, display_name, email, office, source_payload, synced_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW(), NOW())
+         ON CONFLICT (username) DO UPDATE
+         SET dn=EXCLUDED.dn,
+             upn=EXCLUDED.upn,
+             display_name=EXCLUDED.display_name,
+             email=EXCLUDED.email,
+             office=EXCLUDED.office,
+             source_payload=EXCLUDED.source_payload,
+             synced_at=NOW(),
+             updated_at=NOW()`,
+        [dn, username, upn, displayName, email, office, JSON.stringify(payload)]
+      );
+    }
+  }
+}
+
+async function _searchCachedUsers(q) {
+  const cleaned = String(q || '').trim().toLowerCase();
+  if (!cleaned) {
+    const rows = await query(
+      `SELECT dn, username, upn, display_name, email, office
+       FROM ldap_users_cache
+       ORDER BY synced_at DESC, display_name NULLS LAST
+       LIMIT 50`
+    );
+    return rows.rows.map(r => ({
+      dn: r.dn,
+      username: r.username || '',
+      upn: r.upn || '',
+      name: r.display_name || r.username || r.email || r.dn,
+      email: r.email || '',
+      office: r.office || null,
+    }));
+  }
+
+  const like = `%${cleaned}%`;
+  const rows = await query(
+    `SELECT dn, username, upn, display_name, email, office
+     FROM ldap_users_cache
+     WHERE LOWER(COALESCE(username, '')) LIKE $1
+        OR LOWER(COALESCE(upn, '')) LIKE $1
+        OR LOWER(COALESCE(display_name, '')) LIKE $1
+        OR LOWER(COALESCE(email, '')) LIKE $1
+        OR LOWER(COALESCE(office, '')) LIKE $1
+        OR LOWER(COALESCE(dn, '')) LIKE $1
+     ORDER BY synced_at DESC, display_name NULLS LAST
+     LIMIT 50`,
+    [like]
+  );
+
+  return rows.rows.map(r => ({
+    dn: r.dn,
+    username: r.username || '',
+    upn: r.upn || '',
+    name: r.display_name || r.username || r.email || r.dn,
+    email: r.email || '',
+    office: r.office || null,
+  }));
 }
 
 // ─── Client factory ───────────────────────────────────────────────────────────
@@ -181,7 +288,7 @@ async function authenticateUser(username, password) {
     const entries = await _search(serviceClient, searchBase, {
       filter,
       scope: 'sub',
-      attributes: ['dn', 'cn', 'displayName', 'mail', 'memberOf', 'telephoneNumber', 'sAMAccountName', 'userPrincipalName']
+      attributes: ['dn', 'cn', 'displayName', 'mail', 'memberOf', 'telephoneNumber', 'sAMAccountName', 'userPrincipalName', 'office', 'physicalDeliveryOfficeName']
     });
 
     if (!entries || entries.length === 0) return null;
@@ -215,7 +322,19 @@ async function authenticateUser(username, password) {
     // 3. Upsert user in local DB
     const email = entry.mail || null;
     const displayName = entry.displayName || entry.cn || username;
+    const office = normalizeOffice(entry.office || entry.physicalDeliveryOfficeName);
     const memberOf = Array.isArray(entry.memberOf) ? entry.memberOf : (entry.memberOf ? [entry.memberOf] : []);
+
+    await _upsertCachedLdapUsers([{
+      dn: entry.dn,
+      username: searchUsername,
+      upn: entry.userPrincipalName || null,
+      name: displayName,
+      email,
+      office,
+    }]).catch((err) => {
+      logger.warn('LDAP cache upsert failed during authentication:', err.message);
+    });
 
     // Access control: if LDAP mappings exist, user must belong to at least one mapped LDAP group.
     // Also checks nested/transitive group membership via LDAP_MATCHING_RULE_IN_CHAIN.
@@ -230,21 +349,21 @@ async function authenticateUser(username, password) {
     const role = await _resolveRoleFromGroups(memberOf, serviceClient, cfg, entry.dn) || 'viewer';
     const permissions = JSON.stringify(ROLE_DEFAULTS[role] || {});
 
-      const existing = await getOne("SELECT id FROM users WHERE username=$1 AND auth_type='ldap'", [searchUsername]);
+    const existing = await getOne("SELECT id FROM users WHERE username=$1 AND auth_type='ldap'", [searchUsername]);
     if (existing) {
       await query(
-        `UPDATE users SET display_name=$1, email=$2, role=$3, permissions=$4, last_login_at=NOW(), updated_at=NOW(), is_active=true
-         WHERE id=$5`,
-        [displayName, email, role, permissions, existing.id]
+        `UPDATE users SET display_name=$1, email=$2, office=$3, role=$4, permissions=$5, last_login_at=NOW(), updated_at=NOW(), is_active=true
+         WHERE id=$6`,
+        [displayName, email, office, role, permissions, existing.id]
       );
       return await getOne('SELECT * FROM users WHERE id=$1', [existing.id]);
     } else {
       const colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6'];
       const color = colors[Math.floor(Math.random() * colors.length)];
       const result = await query(
-        `INSERT INTO users (username, display_name, email, role, auth_type, permissions, avatar_color, last_login_at)
-         VALUES ($1, $2, $3, $4, 'ldap', $5, $6, NOW()) RETURNING id`,
-        [searchUsername, displayName, email, role, permissions, color]
+        `INSERT INTO users (username, display_name, email, office, role, auth_type, permissions, avatar_color, last_login_at)
+         VALUES ($1, $2, $3, $4, $5, 'ldap', $6, $7, NOW()) RETURNING id`,
+        [searchUsername, displayName, email, office, role, permissions, color]
       );
       return await getOne('SELECT * FROM users WHERE id=$1', [result.rows[0].id]);
     }
@@ -368,7 +487,15 @@ module.exports = { getLdapSettings, saveLdapSettings, authenticateUser, testLdap
 async function searchUsers(q) {
   const cfg = await getLdapSettings();
   if (!cfg || !cfg.enabled) return [];
-  if (!ldap) return [];
+
+  let cachedUsers = [];
+  try {
+    cachedUsers = await _searchCachedUsers(q || '');
+  } catch (err) {
+    logger.warn('LDAP cached user search failed:', err.message);
+  }
+
+  if (!ldap) return cachedUsers;
 
   const client = _createClient(cfg);
   try {
@@ -382,19 +509,36 @@ async function searchUsers(q) {
     const entries = await _search(client, searchBase, {
       filter,
       scope: 'sub',
-      attributes: ['dn', 'cn', 'displayName', 'mail', 'sAMAccountName', 'userPrincipalName'],
+      attributes: ['dn', 'cn', 'displayName', 'mail', 'sAMAccountName', 'userPrincipalName', 'office', 'physicalDeliveryOfficeName'],
       sizeLimit: 50,
     });
-    return entries.map(e => ({
+
+    const liveUsers = entries.map(e => ({
       dn: e.dn,
       username: e.sAMAccountName || '',
       upn: e.userPrincipalName || '',
       name: e.displayName || e.cn || e.sAMAccountName || e.dn,
       email: e.mail || '',
+      office: normalizeOffice(e.office || e.physicalDeliveryOfficeName),
     }));
+
+    await _upsertCachedLdapUsers(liveUsers).catch((err) => {
+      logger.warn('LDAP cache upsert failed during search:', err.message);
+    });
+
+    const merged = new Map();
+    for (const u of [...cachedUsers, ...liveUsers]) {
+      const key = String(u?.dn || '').trim().toLowerCase()
+        || String(u?.username || '').trim().toLowerCase()
+        || String(u?.upn || '').trim().toLowerCase();
+      if (!key) continue;
+      merged.set(key, u);
+    }
+
+    return [...merged.values()].slice(0, 50);
   } catch (err) {
     logger.warn('LDAP user search failed:', err.message);
-    return [];
+    return cachedUsers;
   } finally {
     client.destroy();
   }

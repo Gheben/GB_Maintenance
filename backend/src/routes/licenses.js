@@ -163,6 +163,23 @@ function getContactEmail(contact) {
   return emails.length > 0 ? emails[0] : null;
 }
 
+function addMonths(baseDate, months) {
+  const date = new Date(baseDate.getTime())
+  const targetDay = date.getDate()
+  date.setMonth(date.getMonth() + months)
+  if (date.getDate() !== targetDay) date.setDate(0)
+  return date
+}
+
+function computeLicenseExpiry({ activation_date, duration_months, custom_expiry_date, expiry_date }) {
+  if (custom_expiry_date) return custom_expiry_date
+  if (expiry_date) return expiry_date
+  if (!activation_date) return null
+  const months = Number(duration_months || 0)
+  if (!Number.isFinite(months) || months <= 0) return null
+  return addMonths(new Date(activation_date), months).toISOString().slice(0, 10)
+}
+
 function buildLicenseTemplateVars(license, extraVars = {}) {
   return {
     license_id: license.id,
@@ -170,6 +187,8 @@ function buildLicenseTemplateVars(license, extraVars = {}) {
     license_description: license.description || '-',
     supplier_company: license.supplier_company || '-',
     approval_status: license.approval_status || '-',
+    activation_date: license.activation_date ? String(license.activation_date).slice(0, 10) : '-',
+    duration_months: license.duration_months || '-',
     expiry_date: license.expiry_date ? String(license.expiry_date).slice(0, 10) : '-',
     renewal_date: license.renewal_date ? String(license.renewal_date).slice(0, 10) : '-',
     ...extraVars,
@@ -178,7 +197,7 @@ function buildLicenseTemplateVars(license, extraVars = {}) {
 
 async function getLicenseNotificationContext(licenseId) {
   return getOne(
-    `SELECT l.id, l.name, l.description, l.approval_status, l.expiry_date, l.renewal_date,
+    `SELECT l.id, l.name, l.description, l.approval_status, l.activation_date, l.duration_months, l.expiry_date, l.renewal_date,
             l.owner_contact, l.maintainer_contact, l.approver_contact,
             s.company AS supplier_company,
             uo.email AS owner_user_email,
@@ -458,7 +477,7 @@ async function syncLinks(licenseId, assetIds = [], serviceIds = []) {
 
 router.get('/', [
   qv('page').optional().isInt({ min: 1 }),
-  qv('limit').optional().isInt({ min: 1, max: 100 }),
+  qv('limit').optional().isInt({ min: 1, max: 500 }),
   qv('q').optional().isString(),
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -558,8 +577,10 @@ router.post('/', requireAdmin, [
   body('supplier').optional().isString(),
   body('maintainer_user_id').optional({ nullable: true }).isUUID(),
   body('approver_user_id').optional({ nullable: true }).isUUID(),
+  body('activation_date').optional({ nullable: true }).isISO8601(),
+  body('duration_months').optional({ nullable: true }).isInt({ min: 1, max: 120 }),
+  body('custom_expiry_date').optional({ nullable: true }).isISO8601(),
   body('expiry_date').optional({ nullable: true }).isISO8601(),
-  body('renewal_date').optional({ nullable: true }).isISO8601(),
   body('reminder_days').optional().isInt({ min: 1, max: 365 }),
   body('approval_required').optional().isBoolean(),
   body('approval_status').optional().isIn(['pending', 'approved', 'rejected']),
@@ -580,9 +601,9 @@ router.post('/', requireAdmin, [
   const result = await query(
     `INSERT INTO licenses (
       name, description, owner_user_id, owner_contact, supplier_id, supplier, maintainer_user_id, maintainer_contact, approver_user_id, approver_contact,
-      expiry_date, renewal_date, reminder_days, approval_required, approval_status,
+      activation_date, duration_months, custom_expiry_date, expiry_date, reminder_days, approval_required, approval_status,
       estimated_cost, currency, notes, documents, created_by, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW())
     RETURNING id`,
     [
       req.body.name,
@@ -595,8 +616,10 @@ router.post('/', requireAdmin, [
       req.body.maintainer_contact ? JSON.stringify(req.body.maintainer_contact) : null,
       req.body.approver_user_id || null,
       req.body.approver_contact ? JSON.stringify(req.body.approver_contact) : null,
-      req.body.expiry_date || null,
-      req.body.renewal_date || null,
+      req.body.activation_date || null,
+      req.body.duration_months || null,
+      req.body.custom_expiry_date || null,
+      computeLicenseExpiry(req.body),
       req.body.reminder_days || 30,
       req.body.approval_required !== undefined ? req.body.approval_required : true,
       req.body.approval_status || 'pending',
@@ -625,8 +648,10 @@ router.put('/:id', requireAdmin, [
   body('supplier').optional().isString(),
   body('maintainer_user_id').optional({ nullable: true }).isUUID(),
   body('approver_user_id').optional({ nullable: true }).isUUID(),
+  body('activation_date').optional({ nullable: true }).isISO8601(),
+  body('duration_months').optional({ nullable: true }).isInt({ min: 1, max: 120 }),
+  body('custom_expiry_date').optional({ nullable: true }).isISO8601(),
   body('expiry_date').optional({ nullable: true }).isISO8601(),
-  body('renewal_date').optional({ nullable: true }).isISO8601(),
   body('reminder_days').optional().isInt({ min: 1, max: 365 }),
   body('approval_required').optional().isBoolean(),
   body('approval_status').optional().isIn(['pending', 'approved', 'rejected']),
@@ -654,7 +679,7 @@ router.put('/:id', requireAdmin, [
 
   const allowed = [
     'name', 'description', 'owner_user_id', 'supplier_id', 'supplier', 'maintainer_user_id', 'approver_user_id',
-    'expiry_date', 'renewal_date', 'reminder_days', 'approval_required', 'approval_status',
+    'activation_date', 'duration_months', 'custom_expiry_date', 'expiry_date', 'reminder_days', 'approval_required', 'approval_status',
     'estimated_cost', 'currency', 'notes'
   ];
 
@@ -665,6 +690,15 @@ router.put('/:id', requireAdmin, [
   if (req.body.maintainer_contact !== undefined) setField('maintainer_contact', req.body.maintainer_contact ? JSON.stringify(req.body.maintainer_contact) : null);
   if (req.body.approver_contact !== undefined) setField('approver_contact', req.body.approver_contact ? JSON.stringify(req.body.approver_contact) : null);
   if (req.body.documents !== undefined) setField('documents', JSON.stringify(normalizeDocuments(req.body.documents)));
+  if (req.body.activation_date !== undefined || req.body.duration_months !== undefined || req.body.custom_expiry_date !== undefined) {
+    const nextExpiry = computeLicenseExpiry({
+      activation_date: req.body.activation_date !== undefined ? req.body.activation_date : (await getOne('SELECT activation_date FROM licenses WHERE id=$1', [req.params.id]))?.activation_date,
+      duration_months: req.body.duration_months !== undefined ? req.body.duration_months : (await getOne('SELECT duration_months FROM licenses WHERE id=$1', [req.params.id]))?.duration_months,
+      custom_expiry_date: req.body.custom_expiry_date !== undefined ? req.body.custom_expiry_date : (await getOne('SELECT custom_expiry_date FROM licenses WHERE id=$1', [req.params.id]))?.custom_expiry_date,
+      expiry_date: req.body.expiry_date !== undefined ? req.body.expiry_date : (await getOne('SELECT expiry_date FROM licenses WHERE id=$1', [req.params.id]))?.expiry_date,
+    });
+    if (nextExpiry !== null) setField('expiry_date', nextExpiry);
+  }
 
   if (fields.length > 0) {
     fields.push(`updated_at=NOW()`);

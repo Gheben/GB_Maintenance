@@ -146,7 +146,7 @@ async function loginLocal(username, password) {
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 async function getAllUsers() {
   const users = await getMany(
-    `SELECT id, username, display_name, email, role, auth_type, permissions,
+    `SELECT id, username, display_name, email, office, role, auth_type, permissions,
             totp_enabled, totp_verified, is_active, last_login_at,
             failed_login_count, locked_until, avatar_color, created_at, updated_at
      FROM users ORDER BY username`
@@ -156,7 +156,7 @@ async function getAllUsers() {
 
 async function getUserById(id) {
   const user = await getOne(
-    `SELECT id, username, display_name, email, role, auth_type, permissions,
+    `SELECT id, username, display_name, email, office, role, auth_type, permissions,
             totp_enabled, totp_verified, is_active, last_login_at, avatar_color,
             password_changed_at, created_at, updated_at
      FROM users WHERE id=$1`,
@@ -177,9 +177,9 @@ async function createUser(username, password, role, opts = {}) {
   const color = colors[Math.floor(Math.random() * colors.length)];
 
   const result = await query(
-    `INSERT INTO users (username, display_name, email, password_hash, role, auth_type, permissions, avatar_color)
-     VALUES ($1, $2, $3, $4, $5, 'local', $6, $7) RETURNING id`,
-    [username, opts.display_name || username, opts.email || null, hash, role, JSON.stringify(perms), color]
+    `INSERT INTO users (username, display_name, email, office, password_hash, role, auth_type, permissions, avatar_color)
+     VALUES ($1, $2, $3, $4, $5, 'local', $6, $7, $8) RETURNING id`,
+    [username, opts.display_name || username, opts.email || null, opts.office || null, hash, role, JSON.stringify(perms), color]
   );
   return result.rows[0].id;
 }
@@ -192,6 +192,7 @@ async function updateUser(id, fields) {
   if (fields.username !== undefined)     { sets.push(`username=$${idx++}`); vals.push(fields.username); }
   if (fields.display_name !== undefined) { sets.push(`display_name=$${idx++}`); vals.push(fields.display_name); }
   if (fields.email !== undefined)        { sets.push(`email=$${idx++}`); vals.push(fields.email); }
+  if (fields.office !== undefined)       { sets.push(`office=$${idx++}`); vals.push(fields.office === '' ? null : fields.office); }
   if (fields.role !== undefined)         { sets.push(`role=$${idx++}`); vals.push(fields.role); }
   if (fields.permissions !== undefined)  { sets.push(`permissions=$${idx++}`); vals.push(JSON.stringify(fields.permissions)); }
   if (fields.is_active !== undefined)    { sets.push(`is_active=$${idx++}`); vals.push(fields.is_active); }
