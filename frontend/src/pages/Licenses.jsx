@@ -160,6 +160,12 @@ function dedupeContacts(list) {
   return out
 }
 
+function approvalStatusMeta(status) {
+  if (status === 'approved') return { label: 'Approved', cls: 'bg-green-100 text-green-700' }
+  if (status === 'rejected') return { label: 'Rejected', cls: 'bg-red-100 text-red-700' }
+  return { label: 'Pending', cls: 'bg-amber-100 text-amber-700' }
+}
+
 function extractContactList(value) {
   if (!value || typeof value !== 'object') return []
   if (Array.isArray(value)) return dedupeContacts(value)
@@ -488,7 +494,6 @@ function ContactPicker({ label, placeholder, value, onChange, onSearch, loading,
             </div>
 
             <div className="max-h-[52vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
-              {loading && <div className="px-3 py-2 text-xs text-gray-500">Searching...</div>}
               {!loading && q.trim().length < 2 && <div className="px-3 py-3 text-sm text-gray-500">Type at least 2 characters.</div>}
               {!loading && q.trim().length >= 2 && (!Array.isArray(results) || results.length === 0) && <div className="px-3 py-3 text-sm text-gray-500">No results found.</div>}
               {(results || []).map((r, idx) => {
@@ -750,6 +755,8 @@ export default function Licenses() {
   const [editingSupplier, setEditingSupplier] = useState(null)
   const [supplierDeleteTarget, setSupplierDeleteTarget] = useState(null)
   const [supplierForm, setSupplierForm] = useState(emptySupplierForm)
+  const [showSupplierPicker, setShowSupplierPicker] = useState(false)
+  const [supplierPickerQ, setSupplierPickerQ] = useState('')
 
   const [ownerResults, setOwnerResults] = useState([])
   const [ownerSearching, setOwnerSearching] = useState(false)
@@ -809,6 +816,15 @@ export default function Licenses() {
   }, [])
 
   const supplierOptions = useMemo(() => supplierLookup.map(s => ({ id: s.id, label: `${s.company} - ${s.first_name} ${s.last_name}` })), [supplierLookup])
+  const selectedSupplierLabel = useMemo(() => {
+    const found = supplierOptions.find(s => s.id === licenseForm.supplier_id)
+    return found?.label || 'No supplier selected'
+  }, [supplierOptions, licenseForm.supplier_id])
+  const filteredSupplierOptions = useMemo(() => {
+    const q = supplierPickerQ.trim().toLowerCase()
+    if (!q) return supplierOptions
+    return supplierOptions.filter(s => s.label.toLowerCase().includes(q))
+  }, [supplierOptions, supplierPickerQ])
 
   const filteredAssets = useMemo(() => {
     const q = assetQ.trim().toLowerCase()
@@ -1043,26 +1059,26 @@ export default function Licenses() {
       await suppliersApi.delete(supplierDeleteTarget.id)
       toast.success('Supplier deleted')
       setSupplierDeleteTarget(null)
-
-        const uploadSupplierDoc = async (files) => {
-          const list = Array.from(files || [])
-          if (list.length === 0) return
-          try {
-            const uploaded = []
-            for (const f of list) {
-              const r = await uploadsApi.uploadSupplierDocument(f)
-              uploaded.push(r.data)
-            }
-            setSupplierForm(prev => ({ ...prev, contract_documents: [...(prev.contract_documents || []), ...uploaded] }))
-            toast.success(`${uploaded.length} file(s) uploaded`)
-          } catch (err) {
-            toast.error(err.response?.data?.error || 'Upload error')
-          }
-        }
       await loadSuppliers()
       suppliersApi.list({ page: 1, limit: 100 }).then(r => setSupplierLookup(r.data?.data || [])).catch(() => {})
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error')
+    }
+  }
+
+  const uploadSupplierDoc = async (files) => {
+    const list = Array.from(files || [])
+    if (list.length === 0) return
+    try {
+      const uploaded = []
+      for (const f of list) {
+        const r = await uploadsApi.uploadSupplierDocument(f)
+        uploaded.push(r.data)
+      }
+      setSupplierForm(prev => ({ ...prev, contract_documents: [...(prev.contract_documents || []), ...uploaded] }))
+      toast.success(`${uploaded.length} file(s) uploaded`)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Upload error')
     }
   }
 
@@ -1359,10 +1375,12 @@ export default function Licenses() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Supplier</label>
-                <select className="input" value={licenseForm.supplier_id} onChange={e => setLicenseForm(f => ({ ...f, supplier_id: e.target.value }))}>
-                  <option value="">— Select supplier —</option>
-                  {supplierOptions.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
+                <div className="space-y-2">
+                  <button type="button" className="input text-left w-full" onClick={() => setShowSupplierPicker(true)}>
+                    {selectedSupplierLabel}
+                  </button>
+                  <button type="button" className="text-xs text-brand-600 hover:underline" onClick={openCreateSupplier}>New supplier</button>
+                </div>
               </div>
             </div>
 
@@ -1416,11 +1434,11 @@ export default function Licenses() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Approval status</label>
-                <select className="input" value={licenseForm.approval_status} onChange={e => setLicenseForm(f => ({ ...f, approval_status: e.target.value }))}>
-                  <option value="pending">pending</option>
-                  <option value="approved">approved</option>
-                  <option value="rejected">rejected</option>
-                </select>
+                <div className="input flex items-center">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${approvalStatusMeta(licenseForm.approval_status).cls}`}>
+                    {approvalStatusMeta(licenseForm.approval_status).label}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1517,6 +1535,53 @@ export default function Licenses() {
               <button type="submit" className="btn-primary">Save</button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {showSupplierPicker && (
+        <Modal title="Select Supplier" onClose={() => { setShowSupplierPicker(false); setSupplierPickerQ('') }} size="lg">
+          <div className="space-y-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="input pl-8"
+                placeholder="Search suppliers..."
+                value={supplierPickerQ}
+                onChange={e => setSupplierPickerQ(e.target.value)}
+              />
+            </div>
+            <div className="max-h-[52vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+              <button
+                type="button"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                onClick={() => {
+                  setLicenseForm(f => ({ ...f, supplier_id: '' }))
+                  setShowSupplierPicker(false)
+                  setSupplierPickerQ('')
+                }}
+              >
+                No supplier
+              </button>
+              {filteredSupplierOptions.map(s => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 ${licenseForm.supplier_id === s.id ? 'bg-brand-50 text-brand-700' : ''}`}
+                  onClick={() => {
+                    setLicenseForm(f => ({ ...f, supplier_id: s.id }))
+                    setShowSupplierPicker(false)
+                    setSupplierPickerQ('')
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+              {filteredSupplierOptions.length === 0 && <div className="px-3 py-3 text-sm text-gray-500">No suppliers found.</div>}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary" onClick={() => { setShowSupplierPicker(false); setSupplierPickerQ('') }}>Close</button>
+            </div>
+          </div>
         </Modal>
       )}
 
