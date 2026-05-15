@@ -664,7 +664,7 @@ export default function Licenses() {
 
   const [showLicenseForm, setShowLicenseForm] = useState(false)
   const [editingLicense, setEditingLicense] = useState(null)
-  const [licenseDeleteTarget, setLicenseDeleteTarget] = useState(null)
+  const [licenseActionConfirm, setLicenseActionConfirm] = useState(null)
   const [licenseForm, setLicenseForm] = useState(emptyLicenseForm)
 
   const [showSupplierForm, setShowSupplierForm] = useState(false)
@@ -803,18 +803,6 @@ export default function Licenses() {
     }
   }
 
-  const removeLicense = async () => {
-    if (!licenseDeleteTarget) return
-    try {
-      await licensesApi.delete(licenseDeleteTarget.id)
-      toast.success('License deleted')
-      setLicenseDeleteTarget(null)
-      await loadLicenses()
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Error')
-    }
-  }
-
   const approve = async (id) => {
     try {
       await licensesApi.approve(id)
@@ -842,6 +830,78 @@ export default function Licenses() {
       await loadLicenses()
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error sending approval email')
+    }
+  }
+
+  const openLicenseActionConfirm = (type, target) => {
+    const id = target?.id
+    const name = target?.name || 'this license'
+    if (!id) return
+
+    if (type === 'request-approval') {
+      setLicenseActionConfirm({
+        title: 'Send approval request',
+        message: `Send approval request for "${name}"?`,
+        confirmLabel: 'Send',
+        danger: false,
+        action: async () => {
+          await requestApproval(id)
+        },
+      })
+      return
+    }
+
+    if (type === 'approve') {
+      setLicenseActionConfirm({
+        title: 'Approve license',
+        message: `Approve "${name}"?`,
+        confirmLabel: 'Approve',
+        danger: false,
+        action: async () => {
+          await approve(id)
+        },
+      })
+      return
+    }
+
+    if (type === 'reject') {
+      setLicenseActionConfirm({
+        title: 'Reject license',
+        message: `Reject "${name}"?`,
+        confirmLabel: 'Reject',
+        danger: true,
+        action: async () => {
+          await reject(id)
+        },
+      })
+      return
+    }
+
+    if (type === 'delete') {
+      setLicenseActionConfirm({
+        title: 'Delete license',
+        message: `Delete "${name}"?`,
+        confirmLabel: 'Delete',
+        danger: true,
+        action: async () => {
+          await licensesApi.delete(id)
+          toast.success('License deleted')
+          setShowLicenseForm(false)
+          setEditingLicense(null)
+          await loadLicenses()
+        },
+      })
+    }
+  }
+
+  const confirmLicenseAction = async () => {
+    if (!licenseActionConfirm?.action) return
+    try {
+      await licenseActionConfirm.action()
+    } catch {
+      // Individual action handlers already show toast errors.
+    } finally {
+      setLicenseActionConfirm(null)
     }
   }
 
@@ -1069,13 +1129,13 @@ export default function Licenses() {
               <div className="overflow-x-auto">
                 <table className="min-w-[980px] w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
-                    <tr>{['Name', 'Supplier', 'Owner', 'Approver', 'Expiry', 'Status', 'Scope', 'Actions'].map(h => (
+                    <tr>{['Name', 'Supplier', 'Owner', 'Approver', 'Expiry', 'Status', 'Scope', 'Open'].map(h => (
                       <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
                     ))}</tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                     {licenses.map(l => (
-                      <tr key={l.id}>
+                      <tr key={l.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onDoubleClick={() => openEditLicense(l)} title="Double click for details">
                         <td className="px-4 py-3 font-medium">{l.name}</td>
                         <td className="px-4 py-3 text-gray-500">{l.supplier_company || l.supplier || '—'}</td>
                         <td className="px-4 py-3 text-gray-500">{l.owner_name || formatContact(l.owner_contact)}</td>
@@ -1090,10 +1150,6 @@ export default function Licenses() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 justify-end">
                             <button className="action-icon-btn" onClick={() => openEditLicense(l)} title="Edit"><Pencil size={14} /></button>
-                            <button className="action-text-btn" onClick={() => requestApproval(l.id)} title="Request approval email">Send approval</button>
-                            <button className="action-icon-btn action-icon-btn-success" onClick={() => approve(l.id)} title="Approve"><CheckCircle2 size={14} /></button>
-                            <button className="action-icon-btn action-icon-btn-warn" onClick={() => reject(l.id)} title="Reject"><XCircle size={14} /></button>
-                            <button className="action-icon-btn action-icon-btn-danger" onClick={() => setLicenseDeleteTarget(l)} title="Delete"><Trash2 size={14} /></button>
                           </div>
                         </td>
                       </tr>
@@ -1206,6 +1262,16 @@ export default function Licenses() {
       {showLicenseForm && (
         <Modal title={editingLicense ? `Edit license: ${editingLicense.name}` : 'New license'} onClose={() => setShowLicenseForm(false)} size="xl">
           <form onSubmit={saveLicense} className="space-y-4">
+            {editingLicense?.id && (
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 px-3 py-2.5 flex flex-wrap gap-2 items-center">
+                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 mr-1">License actions</span>
+                <button type="button" className="action-text-btn" onClick={() => openLicenseActionConfirm('request-approval', editingLicense)} title="Request approval email">Send approval</button>
+                <button type="button" className="action-icon-btn action-icon-btn-success" onClick={() => openLicenseActionConfirm('approve', editingLicense)} title="Approve"><CheckCircle2 size={14} /></button>
+                <button type="button" className="action-icon-btn action-icon-btn-warn" onClick={() => openLicenseActionConfirm('reject', editingLicense)} title="Reject"><XCircle size={14} /></button>
+                <button type="button" className="action-icon-btn action-icon-btn-danger" onClick={() => openLicenseActionConfirm('delete', editingLicense)} title="Delete"><Trash2 size={14} /></button>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Name *</label>
@@ -1377,17 +1443,6 @@ export default function Licenses() {
         </Modal>
       )}
 
-      {licenseDeleteTarget && (
-        <ConfirmDialog
-          title="Delete license"
-          message={`Delete "${licenseDeleteTarget.name}"?`}
-          danger
-          confirmLabel="Delete"
-          onConfirm={removeLicense}
-          onCancel={() => setLicenseDeleteTarget(null)}
-        />
-      )}
-
       {supplierDeleteTarget && (
         <ConfirmDialog
           title="Delete supplier"
@@ -1396,6 +1451,17 @@ export default function Licenses() {
           confirmLabel="Delete"
           onConfirm={removeSupplier}
           onCancel={() => setSupplierDeleteTarget(null)}
+        />
+      )}
+
+      {licenseActionConfirm && (
+        <ConfirmDialog
+          title={licenseActionConfirm.title}
+          message={licenseActionConfirm.message}
+          danger={!!licenseActionConfirm.danger}
+          confirmLabel={licenseActionConfirm.confirmLabel || 'Confirm'}
+          onConfirm={confirmLicenseAction}
+          onCancel={() => setLicenseActionConfirm(null)}
         />
       )}
     </Layout>
