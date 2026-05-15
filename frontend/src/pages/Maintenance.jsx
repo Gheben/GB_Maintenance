@@ -246,6 +246,7 @@ export default function Maintenance() {
 
             <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-4 bg-gray-50 dark:bg-gray-800/50">
               <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Assets and Services</p>
+              <p className="text-xs text-gray-500">Correlated assets/services are auto-included from existing service-asset mappings.</p>
               <ItemPicker
                 label="Assets"
                 allItems={allAssets}
@@ -269,19 +270,6 @@ export default function Maintenance() {
             <div>
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-            </div>
-            <div className="rounded-lg border border-amber-200 bg-amber-50/70 dark:bg-amber-900/20 px-3 py-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
-                <input
-                  type="checkbox"
-                  checked={!!form.owner_approval_required}
-                  onChange={e => setForm(f => ({ ...f, owner_approval_required: e.target.checked }))}
-                />
-                Requires owner approval workflow
-              </label>
-              <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                Owners of linked assets/services will receive notification and email to approve, reject, or propose a new date.
-              </p>
             </div>
             <div className="flex justify-end gap-3">
               <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>

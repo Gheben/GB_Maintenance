@@ -54,6 +54,57 @@ async function userCanAccessMaintenance(user, maintenanceId) {
   return !!accessible;
 }
 
+async function expandMaintenanceLinks(assetIds = [], serviceIds = []) {
+  const assetSet = new Set((Array.isArray(assetIds) ? assetIds : []).filter(Boolean));
+  const serviceSet = new Set((Array.isArray(serviceIds) ? serviceIds : []).filter(Boolean));
+
+  if (assetSet.size === 0 && serviceSet.size === 0) {
+    return { asset_ids: [], service_ids: [] };
+  }
+
+  let changed = true;
+  let safety = 0;
+  while (changed && safety < 6) {
+    safety += 1;
+    changed = false;
+
+    if (assetSet.size > 0) {
+      const rows = await getMany(
+        `SELECT DISTINCT sa.service_id
+         FROM service_assets sa
+         WHERE sa.asset_id = ANY($1::uuid[])`,
+        [Array.from(assetSet)]
+      );
+      for (const r of rows) {
+        if (r.service_id && !serviceSet.has(r.service_id)) {
+          serviceSet.add(r.service_id);
+          changed = true;
+        }
+      }
+    }
+
+    if (serviceSet.size > 0) {
+      const rows = await getMany(
+        `SELECT DISTINCT sa.asset_id
+         FROM service_assets sa
+         WHERE sa.service_id = ANY($1::uuid[])`,
+        [Array.from(serviceSet)]
+      );
+      for (const r of rows) {
+        if (r.asset_id && !assetSet.has(r.asset_id)) {
+          assetSet.add(r.asset_id);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  return {
+    asset_ids: Array.from(assetSet),
+    service_ids: Array.from(serviceSet),
+  };
+}
+
 async function resolveMaintenanceOwnerApprovalTargets(maintenanceId) {
   return getMany(
     `SELECT DISTINCT t.owner_user_id, t.owner_email, t.owner_name, t.owner_source_type, t.owner_source_id, t.owner_source_name
@@ -247,7 +298,19 @@ router.get('/', async (req, res) => {
     `SELECT mw.*,
        u1.display_name as created_by_name,
        u2.display_name as approved_by_name,
-       (SELECT COUNT(*)::int FROM maintenance_assets ma WHERE ma.maintenance_id=mw.id) as asset_count
+       (
+         SELECT COUNT(DISTINCT x.asset_id)::int
+         FROM (
+           SELECT ma.asset_id
+           FROM maintenance_assets ma
+           WHERE ma.maintenance_id=mw.id
+           UNION
+           SELECT sa.asset_id
+           FROM maintenance_services ms
+           JOIN service_assets sa ON sa.service_id=ms.service_id
+           WHERE ms.maintenance_id=mw.id
+         ) x
+       ) as asset_count
      FROM maintenance_windows mw
      LEFT JOIN users u1 ON u1.id=mw.created_by
      LEFT JOIN users u2 ON u2.id=mw.approved_by
@@ -336,7 +399,21 @@ router.get('/:id', async (req, res) => {
     );
   }
 
-  res.json({ ...maint, assets, services: directServices, affectedServices: assetDerivedServices });
+  // Also derive affected assets via direct service links
+  const serviceIds = directServices.map(s => s.id);
+  let serviceDerivedAssets = [];
+  if (serviceIds.length > 0) {
+    serviceDerivedAssets = await getMany(
+      `SELECT DISTINCT a.id, a.name, a.category, a.status, a.criticality
+       FROM assets a
+       JOIN service_assets sa ON sa.asset_id=a.id
+       WHERE sa.service_id=ANY($1::uuid[])
+         AND a.id NOT IN (SELECT asset_id FROM maintenance_assets WHERE maintenance_id=$2)`,
+      [serviceIds, req.params.id]
+    );
+  }
+
+  res.json({ ...maint, assets, services: directServices, affectedServices: assetDerivedServices, affectedAssets: serviceDerivedAssets });
 });
 
 // ─── GET /api/maintenance/:id/approval-status ───────────────────────────────
@@ -430,18 +507,13 @@ router.post('/', requireOperator, [
   );
   const id = result.rows[0].id;
 
-  // Link assets
-  if (Array.isArray(req.body.asset_ids)) {
-    for (const aid of req.body.asset_ids) {
-      await query(`INSERT INTO maintenance_assets (maintenance_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, aid]);
-    }
+  // Auto-include correlated entities through service_assets mapping.
+  const expandedLinks = await expandMaintenanceLinks(req.body.asset_ids || [], req.body.service_ids || []);
+  for (const aid of expandedLinks.asset_ids) {
+    await query(`INSERT INTO maintenance_assets (maintenance_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, aid]);
   }
-
-  // Link services directly
-  if (Array.isArray(req.body.service_ids)) {
-    for (const sid of req.body.service_ids) {
-      await query(`INSERT INTO maintenance_services (maintenance_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, sid]);
-    }
+  for (const sid of expandedLinks.service_ids) {
+    await query(`INSERT INTO maintenance_services (maintenance_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, sid]);
   }
 
   await auditService.log(req.user.id, req.user.username, 'maintenance:create', 'maintenance', id, req.body.title, req.ip, req.get('user-agent'));
@@ -681,18 +753,21 @@ router.put('/:id', requireOperator, async (req, res) => {
     if (req.body[f] !== undefined) { sets.push(`${f}=$${i++}`); vals.push(req.body[f]); }
   }
 
-  // Update linked assets
-  if (Array.isArray(req.body.asset_ids)) {
+  // Update linked assets/services with bidirectional correlation expansion.
+  if (Array.isArray(req.body.asset_ids) || Array.isArray(req.body.service_ids)) {
+    const currentAssetRows = await getMany('SELECT asset_id FROM maintenance_assets WHERE maintenance_id=$1', [req.params.id]);
+    const currentServiceRows = await getMany('SELECT service_id FROM maintenance_services WHERE maintenance_id=$1', [req.params.id]);
+    const nextAssetIds = Array.isArray(req.body.asset_ids) ? req.body.asset_ids : currentAssetRows.map(r => r.asset_id);
+    const nextServiceIds = Array.isArray(req.body.service_ids) ? req.body.service_ids : currentServiceRows.map(r => r.service_id);
+    const expandedLinks = await expandMaintenanceLinks(nextAssetIds, nextServiceIds);
+
     await query('DELETE FROM maintenance_assets WHERE maintenance_id=$1', [req.params.id]);
-    for (const aid of req.body.asset_ids) {
+    await query('DELETE FROM maintenance_services WHERE maintenance_id=$1', [req.params.id]);
+
+    for (const aid of expandedLinks.asset_ids) {
       await query(`INSERT INTO maintenance_assets (maintenance_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, aid]);
     }
-  }
-
-  // Update linked services
-  if (Array.isArray(req.body.service_ids)) {
-    await query('DELETE FROM maintenance_services WHERE maintenance_id=$1', [req.params.id]);
-    for (const sid of req.body.service_ids) {
+    for (const sid of expandedLinks.service_ids) {
       await query(`INSERT INTO maintenance_services (maintenance_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, sid]);
     }
   }

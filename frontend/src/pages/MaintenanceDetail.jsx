@@ -296,6 +296,7 @@ export default function MaintenanceDetail() {
 
             <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-4">
               <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Assets and Services</h4>
+              <p className="text-xs text-gray-500">Correlated assets/services are auto-included from current service-asset mappings.</p>
               <ItemPicker
                 label={`Assets (${editForm.asset_ids.length} selected)`}
                 allItems={allAssets}
@@ -360,6 +361,22 @@ export default function MaintenanceDetail() {
                 </Link>
               ))}
             </div>
+            {mw.affectedAssets?.length > 0 && (
+              <>
+                <p className="text-xs text-gray-500 mt-4 mb-2 uppercase tracking-wide">Derived from services</p>
+                <div className="space-y-2">
+                  {mw.affectedAssets.map(a => (
+                    <Link key={a.id} to={`/assets/${a.id}`} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <span className="text-sm">{a.name}</span>
+                      <div className="flex gap-2">
+                        <CriticalityBadge criticality={a.criticality} />
+                        <StatusBadge status={a.status} />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Services */}
