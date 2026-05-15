@@ -25,6 +25,9 @@ export default function Calendar() {
   const [current, setCurrent] = useState(new Date())
   const [events, setEvents] = useState([])
   const navigate = useNavigate()
+  const [dragStartDay, setDragStartDay] = useState(null)
+  const [dragEndDay, setDragEndDay] = useState(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false)
@@ -34,7 +37,7 @@ export default function Calendar() {
   const [form, setForm] = useState({
     title: '', type: 'planned', impact_level: 'medium', description: '',
     scheduled_start: '', scheduled_end: '',
-    asset_ids: [], service_ids: []
+    asset_ids: [], service_ids: [], owner_approval_required: false,
   })
 
   const loadEvents = () => {
@@ -44,6 +47,16 @@ export default function Calendar() {
   }
 
   useEffect(() => { loadEvents() }, [current])
+  useEffect(() => {
+    const stopDrag = () => {
+      setIsDragging(false)
+      setDragStartDay(null)
+      setDragEndDay(null)
+    }
+    window.addEventListener('mouseup', stopDrag)
+    return () => window.removeEventListener('mouseup', stopDrag)
+  }, [])
+
   useEffect(() => {
     if (showCreate) {
       assetsApi.list({ limit: 500 }).then(r => setAllAssets(Array.isArray(r.data) ? r.data : (r.data.data || [])))
@@ -57,7 +70,21 @@ export default function Calendar() {
       title: '', type: 'planned', impact_level: 'medium', description: '',
       scheduled_start: `${dateStr}T09:00`,
       scheduled_end: `${dateStr}T18:00`,
-      asset_ids: [], service_ids: []
+      asset_ids: [], service_ids: [], owner_approval_required: false,
+    })
+    setShowCreate(true)
+  }
+
+  const openCreateRange = (startDay, endDay) => {
+    const start = startDay <= endDay ? startDay : endDay
+    const end = startDay <= endDay ? endDay : startDay
+    const startStr = format(start, 'yyyy-MM-dd')
+    const endStr = format(end, 'yyyy-MM-dd')
+    setForm({
+      title: '', type: 'planned', impact_level: 'medium', description: '',
+      scheduled_start: `${startStr}T00:00`,
+      scheduled_end: `${endStr}T00:00`,
+      asset_ids: [], service_ids: [], owner_approval_required: false,
     })
     setShowCreate(true)
   }
@@ -100,6 +127,16 @@ export default function Calendar() {
   })
 
   const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const dayOnly = (d) => new Date(format(d, 'yyyy-MM-dd'))
+  const isDayInDragRange = (day) => {
+    if (!dragStartDay || !dragEndDay) return false
+    const start = dayOnly(dragStartDay)
+    const end = dayOnly(dragEndDay)
+    const min = start <= end ? start : end
+    const max = start <= end ? end : start
+    const currentDay = dayOnly(day)
+    return currentDay >= min && currentDay <= max
+  }
 
   return (
     <Layout title="Maintenance Calendar">
@@ -147,8 +184,30 @@ export default function Calendar() {
               return (
                 <div
                   key={day.toISOString()}
-                  className={`min-h-[100px] p-1.5 cursor-pointer group relative ${!isSameMonth(day, current) ? 'bg-gray-50 dark:bg-gray-800/50' : ''} ${isToday(day) ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/20'}`}
-                  onClick={() => openCreate(day)}
+                  className={`min-h-[100px] p-1.5 cursor-pointer group relative select-none ${!isSameMonth(day, current) ? 'bg-gray-50 dark:bg-gray-800/50' : ''} ${isToday(day) ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/20'} ${isDayInDragRange(day) ? 'ring-1 ring-brand-400 bg-brand-50/70 dark:bg-brand-900/10' : ''}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    setIsDragging(true)
+                    setDragStartDay(day)
+                    setDragEndDay(day)
+                  }}
+                  onMouseEnter={() => {
+                    if (isDragging) setDragEndDay(day)
+                  }}
+                  onMouseUp={(e) => {
+                    e.preventDefault()
+                    if (!dragStartDay) {
+                      openCreate(day)
+                      return
+                    }
+                    const start = dayOnly(dragStartDay)
+                    const end = dayOnly(day)
+                    if (start.getTime() === end.getTime()) openCreate(day)
+                    else openCreateRange(dragStartDay, day)
+                    setIsDragging(false)
+                    setDragStartDay(null)
+                    setDragEndDay(null)
+                  }}
                 >
                   <div className="flex items-center justify-between mb-0.5">
                     <span className={`inline-block w-6 h-6 text-center text-sm leading-6 rounded-full ${isToday(day) ? 'bg-brand-600 text-white font-bold' : 'text-gray-700 dark:text-gray-300'}`}>
@@ -172,7 +231,7 @@ export default function Calendar() {
         </div>
 
         {/* Legend */}
-        <div className="flex flex-wrap gap-3 text-xs">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 text-[11px] leading-tight">
           {Object.entries(STATUS_COLORS).map(([s, cls]) => (
             <span key={s} className={`px-2 py-0.5 rounded ${cls}`}>{s.replace('_', ' ')}</span>
           ))}
@@ -226,7 +285,9 @@ export default function Calendar() {
                 allItems={allAssets}
                 selectedIds={form.asset_ids}
                 onToggle={toggleAsset}
-                badgeKey="criticality"
+                badgeKey="category"
+                useModal
+                filterKey="category"
               />
               <ItemPicker
                 label={`Services (${form.service_ids.length} selected)`}
@@ -234,6 +295,8 @@ export default function Calendar() {
                 selectedIds={form.service_ids}
                 onToggle={toggleService}
                 badgeKey="criticality"
+                useModal
+                filterKey="criticality"
               />
             </div>
 
@@ -244,6 +307,17 @@ export default function Calendar() {
           </form>
         </Modal>
       )}
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50/70 dark:bg-amber-900/20 px-3 py-2">
+              <label className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
+                <input
+                  type="checkbox"
+                  checked={!!form.owner_approval_required}
+                  onChange={e => setForm(f => ({ ...f, owner_approval_required: e.target.checked }))}
+                />
+                Requires owner approval workflow
+              </label>
+            </div>
     </Layout>
   )
 }

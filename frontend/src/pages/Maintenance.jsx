@@ -219,7 +219,7 @@ export default function Maintenance() {
               <label className="block text-sm font-medium mb-1">Title *</label>
               <input className="input" required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Type</label>
                 <select className="input" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
@@ -233,7 +233,7 @@ export default function Maintenance() {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Start *</label>
                 <input className="input" type="datetime-local" required value={form.scheduled_start} onChange={e => setForm(f => ({ ...f, scheduled_start: e.target.value }))} />
