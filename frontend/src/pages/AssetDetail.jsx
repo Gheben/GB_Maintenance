@@ -206,25 +206,6 @@ export default function AssetDetail() {
   const saveEdit = async () => {
     if (!editForm.name.trim()) { toast.error('Name is required'); return }
 
-    const ownerTarget = (() => {
-      if (editForm.owner_type === 'user' && editForm.owner_id) {
-        const u = ownerUsers.find(x => x.id === editForm.owner_id)
-        return { type: 'user', id: editForm.owner_id, name: u?.display_name || u?.username || 'User', email: u?.email || '' }
-      }
-      if (editForm.owner_type === 'local_group' && editForm.owner_group_id) {
-        const g = localGroups.find(x => x.id === editForm.owner_group_id)
-        return { type: 'local_group', id: editForm.owner_group_id, name: g?.name || 'Group' }
-      }
-      if (editForm.owner_type === 'ldap_user' && editForm.owner_ldap_dn) {
-        return { type: 'ldap_user', dn: editForm.owner_ldap_dn, name: editForm.owner_ldap_name || editForm.owner_ldap_dn }
-      }
-      if (editForm.owner_type === 'ldap_group' && editForm.owner_ldap_dn) {
-        return { type: 'ldap_group', dn: editForm.owner_ldap_dn, name: editForm.owner_ldap_name || editForm.owner_ldap_dn }
-      }
-      return null
-    })()
-    if (!ownerTarget) { toast.error('Owner is required'); return }
-
     setSaving(true)
     try {
       await assetsApi.update(id, {
@@ -237,7 +218,6 @@ export default function AssetDetail() {
         owner_group_id: editForm.owner_type === 'local_group' ? (editForm.owner_group_id || null) : null,
         owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(editForm.owner_type) ? (editForm.owner_ldap_dn || null) : null,
         owner_ldap_name: ['ldap_user', 'ldap_group'].includes(editForm.owner_type) ? (editForm.owner_ldap_name || null) : null,
-        owner_targets: [ownerTarget],
       })
       toast.success('Asset updated')
       setEditMode(false)
@@ -323,7 +303,7 @@ export default function AssetDetail() {
               <textarea className="input" rows={3} value={editForm.description} onChange={e => setEditForm(f => ({...f, description: e.target.value}))} />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">Utilizzatore</label>
+              <label className="block text-sm font-medium mb-2">Owner</label>
               <div className="flex gap-1 mb-2 flex-wrap">
                 {[
                   { key: 'user', label: 'User', icon: <User size={11} /> },
@@ -426,7 +406,7 @@ export default function AssetDetail() {
             {(asset.owner_label || asset.owner_name) && (
               <div className="mt-3 flex items-center gap-2 text-sm">
                 <User size={14} className="text-gray-400" />
-                <span className="font-medium text-gray-700 dark:text-gray-300">Utilizzatore:</span>
+                <span className="font-medium text-gray-700 dark:text-gray-300">Owner:</span>
                 <span>{asset.owner_label || asset.owner_name}</span>
               </div>
             )}

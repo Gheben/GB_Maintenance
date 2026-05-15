@@ -86,7 +86,8 @@ router.get('/', async (req, res) => {
            WHEN 'ldap_group'  THEN a.owner_ldap_name
            ELSE u.display_name
          END, '') as owner_label,
-       COALESCE(jsonb_array_length(a.owner_targets), 0)::int as owner_count
+       COALESCE(jsonb_array_length(a.owner_targets), 0)::int as owner_count,
+       COALESCE(jsonb_array_length(a.user_targets), 0)::int as user_count
      FROM assets a
      LEFT JOIN users u ON u.id=a.owner_id
      LEFT JOIN local_groups lg ON lg.id=a.owner_group_id
@@ -253,6 +254,7 @@ router.post('/', requireOperator, [
   body('owner_ldap_dn').optional({ nullable: true }).isString(),
   body('owner_ldap_name').optional({ nullable: true }).isString().trim(),
   body('owner_targets').optional().isArray(),
+  body('user_targets').optional().isArray(),
   body('probe_enabled').optional().isBoolean(),
   body('probe_type').optional().isIn(['http','https','tcp']),
   body('probe_url').optional().isString(),
@@ -268,6 +270,7 @@ router.post('/', requireOperator, [
   try {
     const slug = _slugify(req.body.name) + '-' + Date.now().toString(36);
     const ownerTargets = normalizeOwnerTargets(req.body.owner_targets);
+    const userTargets = normalizeOwnerTargets(req.body.user_targets);
     const ownerFields = ownerTargets.length > 0
       ? primaryOwnerFieldsFromTargets(ownerTargets)
       : {
@@ -283,9 +286,9 @@ router.post('/', requireOperator, [
     }
     const result = await query(
       `INSERT INTO assets (name, slug, category, criticality, description, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name,
-         owner_targets, probe_enabled, probe_type, probe_url, probe_interval_seconds, probe_timeout_seconds,
+         owner_targets, user_targets, probe_enabled, probe_type, probe_url, probe_interval_seconds, probe_timeout_seconds,
          expected_status_code, tags, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
       [
         req.body.name, slug,
         req.body.category, req.body.criticality || 'medium',
@@ -296,6 +299,7 @@ router.post('/', requireOperator, [
         ownerFields.owner_ldap_dn,
         ownerFields.owner_ldap_name,
         JSON.stringify(ownerTargets),
+        JSON.stringify(userTargets),
         req.body.probe_enabled || false, req.body.probe_type || null,
         req.body.probe_url || null, req.body.probe_interval_seconds || 300,
         req.body.probe_timeout_seconds || 10, req.body.expected_status_code || 200,
@@ -326,7 +330,7 @@ router.put('/:id', requireOperator, async (req, res) => {
 
   const allowed = ['name','category','criticality','description','owner_id','owner_type',
     'owner_group_id','owner_ldap_dn','owner_ldap_name','probe_enabled',
-    'owner_targets','probe_type','probe_url','probe_interval_seconds','probe_timeout_seconds',
+    'owner_targets','user_targets','probe_type','probe_url','probe_interval_seconds','probe_timeout_seconds',
     'expected_status_code','tags','metadata','is_active'];
   const sets = []; const vals = []; let i = 1;
   const ownerManagedFields = new Set(['owner_id', 'owner_type', 'owner_group_id', 'owner_ldap_dn', 'owner_ldap_name']);
@@ -334,7 +338,7 @@ router.put('/:id', requireOperator, async (req, res) => {
     if (req.body.owner_targets !== undefined && ownerManagedFields.has(field)) continue;
     if (req.body[field] !== undefined) {
       sets.push(`${field}=$${i++}`);
-      if (['tags','metadata','owner_targets'].includes(field)) vals.push(JSON.stringify(req.body[field]));
+      if (['tags','metadata','owner_targets','user_targets'].includes(field)) vals.push(JSON.stringify(req.body[field]));
       else vals.push(req.body[field]);
     }
   }
@@ -355,6 +359,17 @@ router.put('/:id', requireOperator, async (req, res) => {
     const hasOwner = currentTargets.length > 0 || !!(asset.owner_id || asset.owner_group_id || asset.owner_ldap_dn);
     if (!hasOwner) {
       return res.status(400).json({ error: 'At least one owner is required' });
+    }
+  }
+
+  if (req.body.user_targets !== undefined) {
+    const userTargets = normalizeOwnerTargets(req.body.user_targets);
+    const idx = sets.findIndex((s) => s.startsWith('user_targets='));
+    if (idx >= 0) {
+      vals[idx] = JSON.stringify(userTargets);
+    } else {
+      sets.push(`user_targets=$${i++}`);
+      vals.push(JSON.stringify(userTargets));
     }
   }
   if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });

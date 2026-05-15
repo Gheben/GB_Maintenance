@@ -1190,6 +1190,14 @@ const MIGRATIONS = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_maint_upcoming_dashboard ON maintenance_windows(status, scheduled_start)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_maint_recent_dashboard ON maintenance_windows(status, actual_end DESC)`);
     }
+  },
+  {
+    version: 26,
+    name: 'assets_services_user_targets',
+    up: async (client) => {
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS user_targets JSONB NOT NULL DEFAULT '[]'::jsonb`);
+      await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS user_targets JSONB NOT NULL DEFAULT '[]'::jsonb`);
+    }
   }
 ];
 

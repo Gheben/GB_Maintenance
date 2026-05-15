@@ -84,6 +84,7 @@ router.get('/', async (req, res) => {
          END
        , '') as owner_label,
        COALESCE(jsonb_array_length(s.owner_targets), 0)::int as owner_count,
+       COALESCE(jsonb_array_length(s.user_targets), 0)::int as user_count,
        (SELECT COUNT(*)::int FROM service_subscribers ss WHERE ss.service_id=s.id) as subscriber_count,
        (SELECT COUNT(*)::int FROM service_assets sa WHERE sa.service_id=s.id) as asset_count
      FROM services s
@@ -172,6 +173,7 @@ router.post('/', requireOperator, [
   body('owner_ldap_dn').optional({ nullable: true }).isString(),
   body('owner_ldap_name').optional({ nullable: true }).isString().trim(),
   body('owner_targets').optional().isArray(),
+  body('user_targets').optional().isArray(),
   body('system_name').optional().isString().trim(),
   body('sla_uptime_percent').optional().isFloat({ min: 0, max: 100 }),
   body('is_public').optional().isBoolean(),
@@ -182,6 +184,7 @@ router.post('/', requireOperator, [
   try {
     const slug = _slugify(req.body.name) + '-' + Date.now().toString(36);
     const ownerTargets = normalizeOwnerTargets(req.body.owner_targets);
+    const userTargets = normalizeOwnerTargets(req.body.user_targets);
     const ownerFields = ownerTargets.length > 0
       ? primaryOwnerFieldsFromTargets(ownerTargets)
       : {
@@ -196,8 +199,8 @@ router.post('/', requireOperator, [
       return res.status(400).json({ error: 'At least one owner is required' });
     }
     const result = await query(
-      `INSERT INTO services (name, slug, description, criticality, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name, owner_targets, system_name, sla_uptime_percent, is_public)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      `INSERT INTO services (name, slug, description, criticality, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name, owner_targets, user_targets, system_name, sla_uptime_percent, is_public)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
       [req.body.name, slug, req.body.description||null, req.body.criticality||'medium',
        ownerFields.owner_id,
        ownerFields.owner_type,
@@ -205,6 +208,7 @@ router.post('/', requireOperator, [
       ownerFields.owner_ldap_dn,
       ownerFields.owner_ldap_name,
       JSON.stringify(ownerTargets),
+      JSON.stringify(userTargets),
        req.body.system_name||null, req.body.sla_uptime_percent||99.9, req.body.is_public||false]
     );
     const id = result.rows[0].id;
@@ -227,12 +231,12 @@ router.put('/:id', requireOperator, async (req, res) => {
   );
   if (!service) return res.status(404).json({ error: 'Servizio non trovato' });
 
-  const allowed = ['name','description','criticality','owner_id','owner_type','owner_group_id','owner_ldap_dn','owner_ldap_name','owner_targets','system_name','sla_uptime_percent','is_public','is_active'];
+  const allowed = ['name','description','criticality','owner_id','owner_type','owner_group_id','owner_ldap_dn','owner_ldap_name','owner_targets','user_targets','system_name','sla_uptime_percent','is_public','is_active'];
   const sets=[]; const vals=[]; let i=1;
   for (const f of allowed) {
     if (req.body[f] !== undefined) {
       sets.push(`${f}=$${i++}`);
-      vals.push(f === 'owner_targets' ? JSON.stringify(req.body[f]) : req.body[f]);
+      vals.push(['owner_targets','user_targets'].includes(f) ? JSON.stringify(req.body[f]) : req.body[f]);
     }
   }
 
@@ -252,6 +256,17 @@ router.put('/:id', requireOperator, async (req, res) => {
     const hasOwner = currentTargets.length > 0 || !!(service.owner_id || service.owner_group_id || service.owner_ldap_dn);
     if (!hasOwner) {
       return res.status(400).json({ error: 'At least one owner is required' });
+    }
+  }
+
+  if (req.body.user_targets !== undefined) {
+    const userTargets = normalizeOwnerTargets(req.body.user_targets);
+    const idx = sets.findIndex((s) => s.startsWith('user_targets='));
+    if (idx >= 0) {
+      vals[idx] = JSON.stringify(userTargets);
+    } else {
+      sets.push(`user_targets=$${i++}`);
+      vals.push(JSON.stringify(userTargets));
     }
   }
   if (sets.length===0) return res.status(400).json({ error: 'Nessun campo' });

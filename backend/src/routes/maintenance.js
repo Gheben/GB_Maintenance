@@ -48,7 +48,7 @@ async function userCanAccessMaintenance(user, maintenanceId) {
         SELECT 1
         FROM maintenance_assets ma
         JOIN assets a ON a.id=ma.asset_id
-        JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
         WHERE ma.maintenance_id=mw.id
           AND (
             (ot->>'type'='user' AND ot->>'id'=$2::text)
@@ -69,7 +69,7 @@ async function userCanAccessMaintenance(user, maintenanceId) {
         SELECT 1
         FROM maintenance_services ms
         JOIN services s ON s.id=ms.service_id
-        JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
+        JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
         WHERE ms.maintenance_id=mw.id
           AND (
             (ot->>'type'='user' AND ot->>'id'=$2::text)
@@ -183,59 +183,6 @@ async function resolveMaintenanceOwnerApprovalTargets(maintenanceId) {
        JOIN users u ON u.id=ugm.user_id
        WHERE ms.maintenance_id=$1 AND s.owner_type='local_group' AND s.owner_group_id IS NOT NULL AND u.is_active=true
 
-       UNION
-
-       SELECT u.id AS owner_user_id, u.email AS owner_email, COALESCE(u.display_name, u.username) AS owner_name,
-              'asset'::text AS owner_source_type, a.id AS owner_source_id, a.name AS owner_source_name
-       FROM maintenance_assets ma
-       JOIN assets a ON a.id=ma.asset_id
-       JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
-       JOIN users u ON u.id = (ot->>'id')::uuid
-       WHERE ma.maintenance_id=$1
-         AND ot->>'type'='user'
-         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
-         AND u.is_active=true
-
-       UNION
-
-       SELECT u.id AS owner_user_id, u.email AS owner_email, COALESCE(u.display_name, u.username) AS owner_name,
-              'asset'::text AS owner_source_type, a.id AS owner_source_id, a.name AS owner_source_name
-       FROM maintenance_assets ma
-       JOIN assets a ON a.id=ma.asset_id
-       JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
-       JOIN user_group_members ugm ON ugm.group_id = (ot->>'id')::uuid
-       JOIN users u ON u.id=ugm.user_id
-       WHERE ma.maintenance_id=$1
-         AND ot->>'type'='local_group'
-         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
-         AND u.is_active=true
-
-       UNION
-
-       SELECT u.id AS owner_user_id, u.email AS owner_email, COALESCE(u.display_name, u.username) AS owner_name,
-              'service'::text AS owner_source_type, s.id AS owner_source_id, s.name AS owner_source_name
-       FROM maintenance_services ms
-       JOIN services s ON s.id=ms.service_id
-       JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
-       JOIN users u ON u.id = (ot->>'id')::uuid
-       WHERE ms.maintenance_id=$1
-         AND ot->>'type'='user'
-         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
-         AND u.is_active=true
-
-       UNION
-
-       SELECT u.id AS owner_user_id, u.email AS owner_email, COALESCE(u.display_name, u.username) AS owner_name,
-              'service'::text AS owner_source_type, s.id AS owner_source_id, s.name AS owner_source_name
-       FROM maintenance_services ms
-       JOIN services s ON s.id=ms.service_id
-       JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
-       JOIN user_group_members ugm ON ugm.group_id = (ot->>'id')::uuid
-       JOIN users u ON u.id=ugm.user_id
-       WHERE ms.maintenance_id=$1
-         AND ot->>'type'='local_group'
-         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
-         AND u.is_active=true
      ) t
      ORDER BY t.owner_name, t.owner_source_type, t.owner_source_name`,
     [maintenanceId]
@@ -375,7 +322,7 @@ router.get('/', async (req, res) => {
       UNION
       SELECT ma.maintenance_id FROM maintenance_assets ma
         INNER JOIN assets a ON a.id = ma.asset_id
-        INNER JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+        INNER JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
         WHERE (ot->>'type'='user' AND ot->>'id' = $${i}::text)
            OR (
             ot->>'type'='local_group'
@@ -388,7 +335,7 @@ router.get('/', async (req, res) => {
       UNION
       SELECT ms.maintenance_id FROM maintenance_services ms
         INNER JOIN services s ON s.id = ms.service_id
-        INNER JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
+        INNER JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
         WHERE (ot->>'type'='user' AND ot->>'id' = $${i}::text)
            OR (
             ot->>'type'='local_group'
@@ -448,7 +395,7 @@ router.get('/calendar', async (req, res) => {
       UNION
       SELECT ma.maintenance_id FROM maintenance_assets ma
         INNER JOIN assets a ON a.id = ma.asset_id
-        INNER JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+        INNER JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
         WHERE (ot->>'type'='user' AND ot->>'id' = $3::text)
            OR (
             ot->>'type'='local_group'
@@ -461,7 +408,7 @@ router.get('/calendar', async (req, res) => {
       UNION
       SELECT ms.maintenance_id FROM maintenance_services ms
         INNER JOIN services s ON s.id = ms.service_id
-        INNER JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
+        INNER JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
         WHERE (ot->>'type'='user' AND ot->>'id' = $3::text)
            OR (
             ot->>'type'='local_group'
@@ -1061,7 +1008,7 @@ router.get('/:id/users', async (req, res) => {
      SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
      FROM maintenance_assets ma
      JOIN assets a ON a.id = ma.asset_id
-     JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+    JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
      JOIN users u ON (
        (ot->>'type' = 'user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid)
        OR (
@@ -1079,7 +1026,7 @@ router.get('/:id/users', async (req, res) => {
      SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
      FROM maintenance_services ms
      JOIN services s ON s.id = ms.service_id
-     JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
+    JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
      JOIN users u ON (
        (ot->>'type' = 'user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid)
        OR (

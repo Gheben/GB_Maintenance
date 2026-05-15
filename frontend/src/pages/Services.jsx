@@ -11,7 +11,7 @@ import { servicesApi, usersApi, groupsApi, settingsApi, licensesApi } from '../a
 import { Plus, Search, RefreshCw, Pencil } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
-const BLANK_FORM = { name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, owner_targets: [], system_name: '' }
+const BLANK_FORM = { name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, owner_targets: [], user_targets: [], system_name: '' }
 
 function LicenseState({ row }) {
   const total = Number(row.license_count || 0)
@@ -50,6 +50,7 @@ export default function Services() {
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
+  const [pickerTarget, setPickerTarget] = useState('owner')
   const [users, setUsers] = useState([])
   const [localGroups, setLocalGroups] = useState([])
   const [ldapEnabled, setLdapEnabled] = useState(false)
@@ -104,6 +105,7 @@ export default function Services() {
       owner_group_id: firstOwner?.type === 'local_group' ? firstOwner.id : undefined,
       owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.dn : undefined,
       owner_ldap_name: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.name : undefined,
+      user_targets: Array.isArray(form.user_targets) ? form.user_targets : [],
       system_name: form.system_name || undefined,
     }
     try {
@@ -138,6 +140,7 @@ export default function Services() {
       name: s.name, description: s.description || '', criticality: s.criticality,
       sla_uptime_percent: s.sla_uptime_percent, is_public: s.is_public,
       owner_targets: ownerTargets,
+      user_targets: Array.isArray(s.user_targets) ? s.user_targets : [],
       system_name: s.system_name || ''
     })
     try {
@@ -171,6 +174,7 @@ export default function Services() {
       owner_group_id: firstOwner?.type === 'local_group' ? firstOwner.id : undefined,
       owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.dn : undefined,
       owner_ldap_name: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.name : undefined,
+      user_targets: Array.isArray(form.user_targets) ? form.user_targets : [],
       system_name: form.system_name || undefined,
     }
     try {
@@ -188,19 +192,43 @@ export default function Services() {
 
   const ownerFieldsJsx = (
     <div>
-      <label className="block text-sm font-medium mb-1">Utilizzatori *</label>
+      <label className="block text-sm font-medium mb-1">Owner *</label>
       <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
         <div className="text-xs text-gray-600 dark:text-gray-300">
-          {form.owner_targets?.length > 0 ? `${form.owner_targets.length} utilizzatore/i selezionati` : 'Nessun utilizzatore selezionato'}
+          {form.owner_targets?.length > 0 ? `${form.owner_targets.length} owner(s) selected` : 'No owners selected'}
         </div>
-        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => setOwnerPickerOpen(true)}>
-          Seleziona utilizzatori
+        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => { setPickerTarget('owner'); setOwnerPickerOpen(true) }}>
+          Select owner
         </button>
       </div>
       {(form.owner_targets || []).length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {form.owner_targets.map((o, idx) => (
             <span key={`${o.type}:${o.id || o.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-100 text-brand-700">
+              {o.name || o.id || o.dn}
+              <span className="opacity-70">{o.type}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  const usersFieldsJsx = (
+    <div>
+      <label className="block text-sm font-medium mb-1">Users / Groups</label>
+      <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+        <div className="text-xs text-gray-600 dark:text-gray-300">
+          {form.user_targets?.length > 0 ? `${form.user_targets.length} user/group target(s) selected` : 'No user/group targets selected'}
+        </div>
+        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => { setPickerTarget('users'); setOwnerPickerOpen(true) }}>
+          Select users/groups
+        </button>
+      </div>
+      {(form.user_targets || []).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {form.user_targets.map((o, idx) => (
+            <span key={`${o.type}:${o.id || o.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
               {o.name || o.id || o.dn}
               <span className="opacity-70">{o.type}</span>
             </span>
@@ -227,6 +255,7 @@ export default function Services() {
         </div>
         {ownerFieldsJsx}
       </div>
+      {usersFieldsJsx}
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium mb-1">Criticality</label>
@@ -354,8 +383,8 @@ export default function Services() {
       <OwnerPickerModal
         open={ownerPickerOpen}
         onClose={() => setOwnerPickerOpen(false)}
-        value={form.owner_targets || []}
-        onChange={(owners) => setForm(f => ({ ...f, owner_targets: owners }))}
+        value={pickerTarget === 'owner' ? (form.owner_targets || []) : (form.user_targets || [])}
+        onChange={(owners) => setForm(f => pickerTarget === 'owner' ? ({ ...f, owner_targets: owners }) : ({ ...f, user_targets: owners }))}
         users={users}
         localGroups={localGroups}
         ldapEnabled={ldapEnabled}

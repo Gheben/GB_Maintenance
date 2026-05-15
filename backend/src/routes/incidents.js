@@ -228,7 +228,7 @@ router.get('/:id/users', async (req, res) => {
      SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
      FROM incident_assets ia
      JOIN assets a ON a.id = ia.asset_id
-     JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+    JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
      JOIN users u ON (
        (ot->>'type' = 'user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid)
        OR (
@@ -246,7 +246,7 @@ router.get('/:id/users', async (req, res) => {
      SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
      FROM incident_services is2
      JOIN services s ON s.id = is2.service_id
-     JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
+    JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
      JOIN users u ON (
        (ot->>'type' = 'user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid)
        OR (

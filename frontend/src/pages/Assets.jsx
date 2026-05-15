@@ -52,8 +52,9 @@ export default function Assets() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
-  const [form, setForm] = useState({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [] })
+  const [form, setForm] = useState({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [] })
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
+  const [pickerTarget, setPickerTarget] = useState('owner')
   const [users, setUsers] = useState([])
   const [localGroups, setLocalGroups] = useState([])
   const [ldapEnabled, setLdapEnabled] = useState(false)
@@ -106,6 +107,7 @@ export default function Assets() {
       owner_group_id: firstOwner?.type === 'local_group' ? firstOwner.id : undefined,
       owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.dn : undefined,
       owner_ldap_name: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.name : undefined,
+      user_targets: Array.isArray(form.user_targets) ? form.user_targets : [],
     }
     try {
       const res = await assetsApi.create(payload)
@@ -118,7 +120,7 @@ export default function Assets() {
       }
       toast.success('Asset created')
       setShowCreate(false)
-      setForm({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [] })
+      setForm({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [] })
       setCreateDepIds([])
       setCreateLicenseIds([])
       load()
@@ -138,6 +140,7 @@ export default function Assets() {
     setForm({
       name: a.name, category: a.category, criticality: a.criticality, description: a.description || '',
       owner_targets: ownerTargets,
+      user_targets: Array.isArray(a.user_targets) ? a.user_targets : [],
     })
     try {
       const r = await assetsApi.get(a.id)
@@ -157,19 +160,43 @@ export default function Assets() {
 
   const ownerFieldsJsx = (
     <div>
-      <label className="block text-sm font-medium mb-1">Utilizzatori *</label>
+      <label className="block text-sm font-medium mb-1">Owner *</label>
       <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
         <div className="text-xs text-gray-600 dark:text-gray-300">
-          {form.owner_targets?.length > 0 ? `${form.owner_targets.length} utilizzatore/i selezionati` : 'Nessun utilizzatore selezionato'}
+          {form.owner_targets?.length > 0 ? `${form.owner_targets.length} owner(s) selected` : 'No owners selected'}
         </div>
-        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => setOwnerPickerOpen(true)}>
-          Seleziona utilizzatori
+        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => { setPickerTarget('owner'); setOwnerPickerOpen(true) }}>
+          Select owner
         </button>
       </div>
       {(form.owner_targets || []).length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {form.owner_targets.map((o, idx) => (
             <span key={`${o.type}:${o.id || o.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-100 text-brand-700">
+              {o.name || o.id || o.dn}
+              <span className="opacity-70">{o.type}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  const usersFieldsJsx = (
+    <div>
+      <label className="block text-sm font-medium mb-1">Users / Groups</label>
+      <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+        <div className="text-xs text-gray-600 dark:text-gray-300">
+          {form.user_targets?.length > 0 ? `${form.user_targets.length} user/group target(s) selected` : 'No user/group targets selected'}
+        </div>
+        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => { setPickerTarget('users'); setOwnerPickerOpen(true) }}>
+          Select users/groups
+        </button>
+      </div>
+      {(form.user_targets || []).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {form.user_targets.map((o, idx) => (
+            <span key={`${o.type}:${o.id || o.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
               {o.name || o.id || o.dn}
               <span className="opacity-70">{o.type}</span>
             </span>
@@ -194,6 +221,7 @@ export default function Assets() {
       owner_group_id: firstOwner?.type === 'local_group' ? firstOwner.id : undefined,
       owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.dn : undefined,
       owner_ldap_name: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.name : undefined,
+      user_targets: Array.isArray(form.user_targets) ? form.user_targets : [],
     }
     try {
       await assetsApi.update(editTarget.id, payload)
@@ -306,6 +334,7 @@ export default function Assets() {
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             {ownerFieldsJsx}
+            {usersFieldsJsx}
             <ItemPicker
               label="Assigned licenses"
               allItems={allLicenses}
@@ -361,6 +390,7 @@ export default function Assets() {
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
             {ownerFieldsJsx}
+            {usersFieldsJsx}
             <ItemPicker
               label="Assigned licenses"
               allItems={allLicenses}
@@ -392,8 +422,8 @@ export default function Assets() {
       <OwnerPickerModal
         open={ownerPickerOpen}
         onClose={() => setOwnerPickerOpen(false)}
-        value={form.owner_targets || []}
-        onChange={(owners) => setForm(f => ({ ...f, owner_targets: owners }))}
+        value={pickerTarget === 'owner' ? (form.owner_targets || []) : (form.user_targets || [])}
+        onChange={(owners) => setForm(f => pickerTarget === 'owner' ? ({ ...f, owner_targets: owners }) : ({ ...f, user_targets: owners }))}
         users={users}
         localGroups={localGroups}
         ldapEnabled={ldapEnabled}

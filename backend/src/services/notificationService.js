@@ -131,11 +131,11 @@ async function getMaintenanceSubscribers(maintenanceId) {
     [serviceIds]
   );
 
-  // Owners from owner_targets (services)
+  // Users audience from service user_targets
   const targetServiceOwners = await getMany(
     `SELECT DISTINCT u.id AS user_id, u.email AS user_email
      FROM services s
-     JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
+     JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
      JOIN users u ON (
        (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
        OR (
@@ -151,12 +151,12 @@ async function getMaintenanceSubscribers(maintenanceId) {
     [serviceIds]
   ).catch(() => []);
 
-  // Owners from owner_targets (assets linked to maintenance)
+  // Users audience from asset user_targets linked to maintenance
   const targetAssetOwners = await getMany(
     `SELECT DISTINCT u.id AS user_id, u.email AS user_email
      FROM maintenance_assets ma
      JOIN assets a ON a.id=ma.asset_id
-     JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+     JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
      JOIN users u ON (
        (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
        OR (
@@ -289,7 +289,7 @@ async function notifyIncident(incidentId, eventType) {
         const targetServiceOwners = await getMany(
           `SELECT DISTINCT u.id AS user_id, u.email AS user_email
            FROM services s
-           JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
+           JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
            JOIN users u ON (
              (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
              OR (
@@ -313,7 +313,7 @@ async function notifyIncident(incidentId, eventType) {
       const targetAssetOwners = await getMany(
         `SELECT DISTINCT u.id AS user_id, u.email AS user_email
          FROM assets a
-         JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+         JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
          JOIN users u ON (
            (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
            OR (
