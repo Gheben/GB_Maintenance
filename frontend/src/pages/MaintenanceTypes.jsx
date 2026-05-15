@@ -81,7 +81,7 @@ export default function MaintenanceTypes() {
             {types.map(t => (
               <div key={t.id} className="flex items-center gap-3 py-3">
                 <div className="w-4 h-4 rounded-full shrink-0 border border-white shadow-sm" style={{ backgroundColor: t.color || '#6366f1' }} />
-                <span className="font-mono text-xs text-gray-400 w-32 shrink-0">{t.slug}</span>
+                <span className="font-mono text-xs text-gray-500 w-32 shrink-0">{t.code || t.slug}</span>
                 {editingId === t.id ? (
                   <div className="flex items-center gap-2 flex-1 flex-wrap">
                     <input
@@ -170,7 +170,7 @@ export default function MaintenanceTypes() {
 
       {deleteTarget && (
         <ConfirmDialog title="Delete Type" danger confirmLabel="Delete"
-          message={`Delete type "${deleteTarget.label}" (${deleteTarget.slug})?`}
+          message={`Delete type "${deleteTarget.label}" (${deleteTarget.code || deleteTarget.slug})?`}
           onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />
       )}
     </Layout>

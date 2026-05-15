@@ -932,6 +932,36 @@ const MIGRATIONS = [
         );
       }
     }
+  },
+  {
+    version: 20,
+    name: 'public_codes_for_types_and_categories',
+    up: async (client) => {
+      await client.query(`CREATE SEQUENCE IF NOT EXISTS maintenance_types_code_seq START 1`);
+      await client.query(`CREATE SEQUENCE IF NOT EXISTS asset_categories_code_seq START 1`);
+
+      await client.query(`ALTER TABLE maintenance_types ADD COLUMN IF NOT EXISTS code VARCHAR(20)`);
+      await client.query(`ALTER TABLE asset_categories ADD COLUMN IF NOT EXISTS code VARCHAR(20)`);
+
+      await client.query(`
+        ALTER TABLE maintenance_types
+        ALTER COLUMN code SET DEFAULT ('GB' || LPAD(nextval('maintenance_types_code_seq')::text, 6, '0'))
+      `);
+      await client.query(`
+        ALTER TABLE asset_categories
+        ALTER COLUMN code SET DEFAULT ('GB' || LPAD(nextval('asset_categories_code_seq')::text, 6, '0'))
+      `);
+
+      // Backfill current rows with GB-prefixed progressive codes.
+      await client.query(`UPDATE maintenance_types SET code = DEFAULT WHERE code IS NULL`);
+      await client.query(`UPDATE asset_categories SET code = DEFAULT WHERE code IS NULL`);
+
+      await client.query(`ALTER TABLE maintenance_types ALTER COLUMN code SET NOT NULL`);
+      await client.query(`ALTER TABLE asset_categories ALTER COLUMN code SET NOT NULL`);
+
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_maintenance_types_code ON maintenance_types(code)`);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_asset_categories_code ON asset_categories(code)`);
+    }
   }
 ];
 
