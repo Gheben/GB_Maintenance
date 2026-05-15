@@ -243,57 +243,73 @@ router.post('/', requireOperator, [
 
 // ─── PUT /api/services/:id ────────────────────────────────────────────────────
 router.put('/:id', requireOperator, async (req, res) => {
-  const service = await getOne(
-    `SELECT id, owner_id, owner_group_id, owner_ldap_dn, owner_targets
-     FROM services
-     WHERE id=$1`,
-    [req.params.id]
-  );
-  if (!service) return res.status(404).json({ error: 'Servizio non trovato' });
+  try {
+    const service = await getOne(
+      `SELECT id, owner_id, owner_group_id, owner_ldap_dn, owner_targets
+       FROM services
+       WHERE id=$1`,
+      [req.params.id]
+    );
+    if (!service) return res.status(404).json({ error: 'Servizio non trovato' });
 
-  const allowed = ['name','description','criticality','owner_id','owner_type','owner_group_id','owner_ldap_dn','owner_ldap_name','owner_targets','user_targets','system_name','sla_uptime_percent','is_public','is_active'];
-  const sets=[]; const vals=[]; let i=1;
-  for (const f of allowed) {
-    if (req.body[f] !== undefined) {
+    if (req.body.criticality !== undefined && !CRITICALITIES.includes(req.body.criticality)) {
+      return res.status(400).json({ error: 'Criticality non valida' });
+    }
+
+    const hasOwnerTargets = req.body.owner_targets !== undefined;
+    const ownerFieldNames = new Set(['owner_id', 'owner_type', 'owner_group_id', 'owner_ldap_dn', 'owner_ldap_name']);
+    const allowed = ['name','description','criticality','owner_id','owner_type','owner_group_id','owner_ldap_dn','owner_ldap_name','owner_targets','user_targets','system_name','sla_uptime_percent','is_public','is_active'];
+    const sets=[]; const vals=[]; let i=1;
+
+    for (const f of allowed) {
+      if (req.body[f] === undefined) continue;
+      // owner_targets is authoritative: skip owner_* direct assignments to avoid duplicate SET clauses
+      if (hasOwnerTargets && ownerFieldNames.has(f)) continue;
       sets.push(`${f}=$${i++}`);
       vals.push(['owner_targets','user_targets'].includes(f) ? JSON.stringify(req.body[f]) : req.body[f]);
     }
-  }
 
-  if (req.body.owner_targets !== undefined) {
-    const ownerTargets = normalizeOwnerTargets(req.body.owner_targets);
-    if (ownerTargets.length < 1) {
-      return res.status(400).json({ error: 'At least one owner is required' });
-    }
-    const ownerFields = primaryOwnerFieldsFromTargets(ownerTargets);
-    sets.push(`owner_id=$${i++}`); vals.push(ownerFields.owner_id);
-    sets.push(`owner_type=$${i++}`); vals.push(ownerFields.owner_type);
-    sets.push(`owner_group_id=$${i++}`); vals.push(ownerFields.owner_group_id);
-    sets.push(`owner_ldap_dn=$${i++}`); vals.push(ownerFields.owner_ldap_dn);
-    sets.push(`owner_ldap_name=$${i++}`); vals.push(ownerFields.owner_ldap_name);
-  } else {
-    const currentTargets = Array.isArray(service.owner_targets) ? service.owner_targets : [];
-    const hasOwner = currentTargets.length > 0 || !!(service.owner_id || service.owner_group_id || service.owner_ldap_dn);
-    if (!hasOwner) {
-      return res.status(400).json({ error: 'At least one owner is required' });
-    }
-  }
-
-  if (req.body.user_targets !== undefined) {
-    const userTargets = normalizeOwnerTargets(req.body.user_targets);
-    const idx = sets.findIndex((s) => s.startsWith('user_targets='));
-    if (idx >= 0) {
-      vals[idx] = JSON.stringify(userTargets);
+    if (hasOwnerTargets) {
+      const ownerTargets = normalizeOwnerTargets(req.body.owner_targets);
+      if (ownerTargets.length < 1) {
+        return res.status(400).json({ error: 'At least one owner is required' });
+      }
+      const ownerFields = primaryOwnerFieldsFromTargets(ownerTargets);
+      sets.push(`owner_id=$${i++}`); vals.push(ownerFields.owner_id);
+      sets.push(`owner_type=$${i++}`); vals.push(ownerFields.owner_type);
+      sets.push(`owner_group_id=$${i++}`); vals.push(ownerFields.owner_group_id);
+      sets.push(`owner_ldap_dn=$${i++}`); vals.push(ownerFields.owner_ldap_dn);
+      sets.push(`owner_ldap_name=$${i++}`); vals.push(ownerFields.owner_ldap_name);
     } else {
-      sets.push(`user_targets=$${i++}`);
-      vals.push(JSON.stringify(userTargets));
+      const currentTargets = Array.isArray(service.owner_targets) ? service.owner_targets : [];
+      const hasOwner = currentTargets.length > 0 || !!(service.owner_id || service.owner_group_id || service.owner_ldap_dn);
+      if (!hasOwner) {
+        return res.status(400).json({ error: 'At least one owner is required' });
+      }
     }
+
+    if (req.body.user_targets !== undefined) {
+      const userTargets = normalizeOwnerTargets(req.body.user_targets);
+      const idx = sets.findIndex((s) => s.startsWith('user_targets='));
+      if (idx >= 0) {
+        vals[idx] = JSON.stringify(userTargets);
+      } else {
+        sets.push(`user_targets=$${i++}`);
+        vals.push(JSON.stringify(userTargets));
+      }
+    }
+
+    if (sets.length===0) return res.status(400).json({ error: 'Nessun campo' });
+    sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
+    await query(`UPDATE services SET ${sets.join(',')} WHERE id=$${i}`, vals);
+    await auditService.log(req.user.id, req.user.username, 'service:update', 'service', req.params.id, null, req.ip, req.get('user-agent'));
+    res.json({ message: 'Servizio aggiornato' });
+  } catch (err) {
+    if (err.code === '23514' || err.code === '22P02') {
+      return res.status(400).json({ error: 'Dati non validi per aggiornare il servizio' });
+    }
+    res.status(500).json({ error: err.message });
   }
-  if (sets.length===0) return res.status(400).json({ error: 'Nessun campo' });
-  sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
-  await query(`UPDATE services SET ${sets.join(',')} WHERE id=$${i}`, vals);
-  await auditService.log(req.user.id, req.user.username, 'service:update', 'service', req.params.id, null, req.ip, req.get('user-agent'));
-  res.json({ message: 'Servizio aggiornato' });
 });
 
 // ─── PATCH /api/services/:id/status ──────────────────────────────────────────
