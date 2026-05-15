@@ -209,6 +209,56 @@ function PermissionsEditor({ value, onChange, disabled, lockedKeys = new Set() }
   )
 }
 
+function LocalGroupPicker({ groups, value, onChange, required }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const localGroups = (groups || []).filter(g => !g.ldap_mapping_count || g.ldap_mapping_count === 0)
+  const selected = localGroups.find(g => g.id === value)
+  const filtered = q.trim()
+    ? localGroups.filter(g => String(g.name || '').toLowerCase().includes(q.trim().toLowerCase()))
+    : localGroups
+
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1">Local group {required ? '*' : ''}</label>
+      <button type="button" className="input w-full text-left" onClick={() => setOpen(true)}>
+        {selected?.name || 'Select group'}
+      </button>
+      {required && <input type="hidden" required value={value || ''} onChange={() => {}} />}
+
+      {open && (
+        <Modal title="Select Local Group" onClose={() => { setOpen(false); setQ('') }}>
+          <div className="space-y-3">
+            <div className="relative">
+              <input className="input" placeholder="Search group..." value={q} onChange={e => setQ(e.target.value)} />
+            </div>
+            <div className="max-h-[50vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+              {filtered.map(g => (
+                <button
+                  key={g.id}
+                  type="button"
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 ${value === g.id ? 'bg-brand-50 text-brand-700' : ''}`}
+                  onClick={() => {
+                    onChange(g.id)
+                    setOpen(false)
+                    setQ('')
+                  }}
+                >
+                  {g.name}
+                </button>
+              ))}
+              {filtered.length === 0 && <div className="px-3 py-3 text-sm text-gray-500">No groups found.</div>}
+            </div>
+            <div className="flex justify-end">
+              <button type="button" className="btn-secondary" onClick={() => { setOpen(false); setQ('') }}>Close</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
 function UserDetailModal({ user: u, onClose, onEdit }) {
   const hasFullAccess = u.role === 'admin' || u.role === 'superadmin'
   return (
@@ -379,15 +429,7 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
             </button>
           </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Local group *</label>
-          <select className="input" required value={groupId} onChange={e => setGroupId(e.target.value)}>
-            <option value="">— Select group —</option>
-            {localGroups.filter(g => !g.ldap_mapping_count || g.ldap_mapping_count === 0).map(g => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
-        </div>
+        <LocalGroupPicker groups={localGroups} value={groupId} onChange={setGroupId} required />
         <div>
           <label className="block text-sm font-medium mb-1">Role *</label>
           <select className="input" required value={role} onChange={e => {
@@ -514,7 +556,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
           <div className="overflow-x-auto">
           <table className="min-w-[640px] w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
-            <tr>{['Username','Display name','Email','Auth','Role','Permissions','Active','Last login','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+            <tr>{['Username','Display name','Email','Auth','Role','Active','Last login','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
             {filtered.map(u => (
@@ -533,13 +575,6 @@ function UsersTab({ roleOptions, roleProfiles }) {
                 <td className="px-4 py-3 text-gray-500 text-xs">{u.email}</td>
                 <td className="px-4 py-3"><AuthBadge authType={u.auth_type} /></td>
                 <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
-                <td className="px-4 py-3 text-gray-500 text-xs max-w-[200px]">
-                  {hasFullAccess(u)
-                    ? <span className="italic text-green-600">Full access</span>
-                    : ALL_PERMS.filter(p => u.permissions?.[p.key]).map(p => p.label).join(', ') ||
-                      <span className="italic text-gray-400">No permissions</span>
-                  }
-                </td>
                 <td className="px-4 py-3 text-xs">
                   {u.is_active
                     ? <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium">Active</span>
@@ -557,7 +592,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-gray-500">No users</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-gray-500">No users</td></tr>}
           </tbody>
         </table>
         </div>
@@ -614,12 +649,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
                 </button>
               </div>
             </div>
-            <div><label className="block text-sm font-medium mb-1">Local group *</label>
-              <select className="input" required value={form.group_id} onChange={e => setForm(f => ({ ...f, group_id: e.target.value }))}>
-                <option value="">— Select group —</option>
-                {localGroups.filter(g => !g.ldap_mapping_count || g.ldap_mapping_count === 0).map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
-            </div>
+            <LocalGroupPicker groups={localGroups} value={form.group_id} onChange={v => setForm(f => ({ ...f, group_id: v }))} required />
             <div><label className="block text-sm font-medium mb-1">Role *</label>
               <select className="input" required value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value, permissions: rebaseRolePermissions(f.role, e.target.value, f.permissions, roleProfiles) }))}>
                 {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
@@ -1221,7 +1251,7 @@ function RolesTab() {
                 >
                   <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">{preset.name}</td>
                   <td className="px-4 py-3 text-gray-500">{preset.description || '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">{Object.keys(preset.permissions || {}).length}</td>
+                  <td className="px-4 py-3 text-gray-500">{Object.values(preset.permissions || {}).filter(Boolean).length}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
                       <button className="action-icon-btn" onClick={() => beginEdit(preset)} title="Edit permissions"><Pencil size={14} /></button>

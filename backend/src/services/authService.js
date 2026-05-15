@@ -24,20 +24,31 @@ const ROLE_DEFAULTS = {
   },
   operator: {
     dashboard: true, assets: true, services: true, maintenance: true,
-    incidents: true, calendar: true, status_page: true, notifications: false,
+    incidents: true, calendar: true, status_page: true, notifications: true,
     reports: true, users: false, settings: false, apikeys: false, audit: false
   },
   viewer: {
     dashboard: true, assets: true, services: true, maintenance: true,
-    incidents: true, calendar: true, status_page: true, notifications: false,
+    incidents: true, calendar: true, status_page: true, notifications: true,
     reports: false, users: false, settings: false, apikeys: false, audit: false
   },
   subscriber: {
     dashboard: true, assets: false, services: false, maintenance: false,
-    incidents: false, calendar: true, status_page: true, notifications: false,
+    incidents: false, calendar: true, status_page: true, notifications: true,
     reports: false, users: false, settings: false, apikeys: false, audit: false
   }
 };
+
+function normalizePermissions(role, permissions) {
+  const baseline = ROLE_DEFAULTS[role] || {};
+  const current = permissions && typeof permissions === 'object' ? permissions : {};
+  const merged = {};
+  for (const key of PERMISSION_KEYS) {
+    if (typeof current[key] === 'boolean') merged[key] = current[key];
+    else merged[key] = !!baseline[key];
+  }
+  return merged;
+}
 
 // ─── Password ─────────────────────────────────────────────────────────────────
 function hashPassword(plain) {
@@ -56,7 +67,7 @@ function signToken(user) {
     username: user.username,
     displayName: user.display_name || user.username,
     role: user.role,
-    permissions: user.permissions,
+    permissions: normalizePermissions(user.role, user.permissions),
   };
   return { token: jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES }), jti };
 }
@@ -69,6 +80,7 @@ function verifyToken(token) {
 function safeUser(u) {
   if (!u) return null;
   const { password_hash, totp_secret, ...safe } = u;
+  safe.permissions = normalizePermissions(safe.role, safe.permissions);
   return safe;
 }
 
@@ -139,17 +151,19 @@ async function getAllUsers() {
             failed_login_count, locked_until, avatar_color, created_at, updated_at
      FROM users ORDER BY username`
   );
-  return users;
+  return users.map(u => ({ ...u, permissions: normalizePermissions(u.role, u.permissions) }));
 }
 
 async function getUserById(id) {
-  return getOne(
+  const user = await getOne(
     `SELECT id, username, display_name, email, role, auth_type, permissions,
             totp_enabled, totp_verified, is_active, last_login_at, avatar_color,
             password_changed_at, created_at, updated_at
      FROM users WHERE id=$1`,
     [id]
   );
+  if (!user) return null;
+  return { ...user, permissions: normalizePermissions(user.role, user.permissions) };
 }
 
 async function getUserWithHash(id) {
@@ -158,7 +172,7 @@ async function getUserWithHash(id) {
 
 async function createUser(username, password, role, opts = {}) {
   const hash = hashPassword(password);
-  const perms = opts.permissions || ROLE_DEFAULTS[role] || {};
+  const perms = normalizePermissions(role, opts.permissions || ROLE_DEFAULTS[role] || {});
   const colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444'];
   const color = colors[Math.floor(Math.random() * colors.length)];
 
