@@ -206,6 +206,8 @@ export const statusApi = {
 // ─── Reports ──────────────────────────────────────────────────────────────────
 export const reportsApi = {
   maintenance: (params) => api.get('/reports/maintenance', { params }),
+  maintenanceExportCsv: (params) => api.get('/reports/maintenance', { params: { ...(params || {}), format: 'csv' }, responseType: 'blob' }),
+  maintenanceExportPdf: (params) => api.get('/reports/maintenance', { params: { ...(params || {}), format: 'pdf' }, responseType: 'blob' }),
   uptime: (params) => api.get('/reports/uptime', { params }),
   assets: () => api.get('/reports/assets'),
   dashboard: (params) => api.get('/reports/dashboard', { params }),

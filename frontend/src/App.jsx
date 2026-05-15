@@ -7,6 +7,29 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { ToastContainer } from './components/Toast'
 import { settingsApi } from './api'
 
+let routeChunksPreloaded = false
+
+function preloadRouteChunks() {
+  if (routeChunksPreloaded) return
+  routeChunksPreloaded = true
+  Promise.allSettled([
+    import('./pages/Dashboard'),
+    import('./pages/Assets'),
+    import('./pages/AssetDetail'),
+    import('./pages/Services'),
+    import('./pages/ServiceDetail'),
+    import('./pages/Maintenance'),
+    import('./pages/MaintenanceDetail'),
+    import('./pages/Incidents'),
+    import('./pages/IncidentDetail'),
+    import('./pages/Notifications'),
+    import('./pages/Users'),
+    import('./pages/Licenses'),
+    import('./pages/Reports'),
+    import('./pages/Settings'),
+  ]).catch(() => {})
+}
+
 const Login = lazy(() => import('./pages/Login'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Assets = lazy(() => import('./pages/Assets'))
@@ -38,7 +61,7 @@ const P = ({ children, perm }) => <ProtectedRoute permission={perm}>{children}</
 
 function PageFallback() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+    <div className="min-h-screen flex items-center justify-center bg-transparent">
       <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin" />
     </div>
   )
@@ -111,6 +134,30 @@ export default function App() {
     applyBranding()
     window.addEventListener('app-branding-updated', onBrandingUpdate)
     return () => window.removeEventListener('app-branding-updated', onBrandingUpdate)
+  }, [])
+
+  useEffect(() => {
+    if (!localStorage.getItem('token')) return
+
+    let cancelled = false
+    const preload = () => {
+      if (cancelled) return
+      preloadRouteChunks()
+    }
+
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(preload, { timeout: 1200 })
+      return () => {
+        cancelled = true
+        window.cancelIdleCallback(id)
+      }
+    }
+
+    const timer = setTimeout(preload, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [])
 
   return (

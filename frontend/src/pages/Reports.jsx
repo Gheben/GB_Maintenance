@@ -4,6 +4,7 @@ import { reportsApi } from '../api'
 import { format } from 'date-fns'
 import { Download } from 'lucide-react'
 import { StatusBadge } from '../components/StatusBadge'
+import { toast } from '../components/Toast'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
   ResponsiveContainer, LineChart, Line, Legend
@@ -36,13 +37,33 @@ export default function Reports() {
 
   useEffect(() => { load() }, [tab])
 
-  const downloadCsv = () => {
-    const url = `/api/reports/maintenance?from=${from}&to=${to}&format=csv`
-    const a = document.createElement('a'); a.href = url; a.download = 'maintenance.csv'; a.click()
+  const triggerBlobDownload = (blob, fileName) => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   }
-  const downloadPdf = () => {
-    const url = `/api/reports/maintenance?from=${from}&to=${to}&format=pdf`
-    window.open(url)
+
+  const downloadCsv = async () => {
+    try {
+      const res = await reportsApi.maintenanceExportCsv({ from, to })
+      triggerBlobDownload(res.data, `maintenance-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`)
+    } catch {
+      toast.error('CSV download failed')
+    }
+  }
+
+  const downloadPdf = async () => {
+    try {
+      const res = await reportsApi.maintenanceExportPdf({ from, to })
+      triggerBlobDownload(res.data, `maintenance-${format(new Date(), 'yyyyMMdd-HHmm')}.pdf`)
+    } catch {
+      toast.error('PDF download failed')
+    }
   }
 
   return (
