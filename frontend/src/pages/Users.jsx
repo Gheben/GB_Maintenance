@@ -121,8 +121,12 @@ function PasswordRequirements({ password, optional = false }) {
 }
 
 function AuthBadge({ authType }) {
-  if (authType === 'ldap') return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">LDAP</span>
-  return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">Local</span>
+  if (authType === 'ldap') return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">LDAP</span>
+  return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Local</span>
+}
+
+function authAccentClass(authType) {
+  return authType === 'ldap' ? 'bg-sky-500' : 'bg-emerald-500'
 }
 
 function RoleBadge({ role }) {
@@ -520,6 +524,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
                 title="Double click for details">
                 <td className="px-4 py-3 font-mono text-xs">
                   <div className="flex items-center gap-1.5">
+                    <span className={`inline-block w-2 h-2 rounded-full ${authAccentClass(u.auth_type)}`} />
                     {u.role === 'superadmin' ? <Shield size={13} className="text-purple-500" /> : <User size={13} className="text-gray-400" />}
                     {u.username}
                   </div>
@@ -860,7 +865,7 @@ function GroupsTab({ roleOptions, roleProfiles }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                {['Name','Description','Type','Role','Members/Mapping','']
+                {['Name','Description','Type','Role','Members','']
                   .map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{h}</th>)}
               </tr>
             </thead>
@@ -869,20 +874,26 @@ function GroupsTab({ roleOptions, roleProfiles }) {
                 <tr><td colSpan={6} className="text-center py-8 text-gray-500">No groups</td></tr>
               )}
               {pagedGroups.map(g => (
-                <tr key={g.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => openDetail(g.id)}>
-                  <td className="px-4 py-3 font-medium flex items-center gap-2"><UsersIcon size={15} className="text-gray-400 flex-shrink-0" />{g.name}</td>
+                <tr key={g.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onDoubleClick={() => openDetail(g.id)} title="Double click for details">
+                  <td className="px-4 py-3 font-medium flex items-center gap-2">
+                    <span className={`inline-block w-2 h-2 rounded-full ${g.type === 'ldap' ? 'bg-sky-500' : 'bg-emerald-500'}`} />
+                    <UsersIcon size={15} className="text-gray-400 flex-shrink-0" />
+                    {g.name}
+                  </td>
                   <td className="px-4 py-3 text-gray-500">{g.description || <span className="text-gray-300">—</span>}</td>
                   <td className="px-4 py-3"><AuthBadge authType={g.type} /></td>
                   <td className="px-4 py-3"><RoleBadge role={g.role || 'viewer'} /></td>
                   {g.type === 'local' ? (
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
                         {g.member_count ?? '—'}
                       </span>
                     </td>
                   ) : (
-                    <td className="px-4 py-3 text-xs text-gray-500">
-                      {mappingsByGroup(g.id).map(m => m.ldap_group_dn).join(', ') || <span className="italic text-gray-400">No mapping</span>}
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-sky-100 text-sky-700">
+                        {mappingsByGroup(g.id).length}
+                      </span>
                     </td>
                   )}
                   <td className="px-4 py-3">

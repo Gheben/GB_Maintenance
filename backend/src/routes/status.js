@@ -6,11 +6,10 @@ const router = Router();
 
 // ─── GET /api/status ── Public status page ────────────────────────────────────
 router.get('/', async (req, res) => {
-  // Public services (or all if authenticated)
-  const isPublic = !req.headers['authorization'];
+  // Always expose only public services on status endpoints.
   const services = await getMany(
     `SELECT s.id, s.name, s.slug, s.status, s.description, s.criticality
-     FROM services s WHERE s.is_active=true ${isPublic ? 'AND s.is_public=true' : ''}
+     FROM services s WHERE s.is_active=true AND s.is_public=true
      ORDER BY s.criticality, s.name`
   );
 
@@ -244,7 +243,7 @@ router.delete('/maintenance/:id/subscribe', requireAuth, async (req, res) => {
 router.get('/services/:slug', async (req, res) => {
   const service = await getOne(
     `SELECT id, name, slug, status, description, criticality, sla_uptime_percent
-     FROM services WHERE slug=$1 AND is_active=true`,
+     FROM services WHERE slug=$1 AND is_active=true AND is_public=true`,
     [req.params.slug]
   );
   if (!service) return res.status(404).json({ error: 'Servizio non trovato' });
