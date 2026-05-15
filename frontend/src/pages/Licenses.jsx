@@ -59,9 +59,9 @@ const emptyLicenseForm = {
   name: '',
   description: '',
   supplier_id: '',
-  owner_contact: null,
-  maintainer_contact: null,
-  approver_contact: null,
+  owner_contacts: [],
+  maintainer_contacts: [],
+  approver_contacts: [],
   expiry_date: '',
   renewal_date: '',
   reminder_days: 30,
@@ -142,6 +142,45 @@ function formatContact(c) {
   return c.name || c.username || c.email || '—'
 }
 
+function contactKey(c) {
+  if (!c || typeof c !== 'object') return ''
+  return `${c.type || 'x'}::${c.id || c.dn || c.email || c.username || c.name || ''}`
+}
+
+function dedupeContacts(list) {
+  const out = []
+  const seen = new Set()
+  for (const c of (Array.isArray(list) ? list : [])) {
+    if (!c || typeof c !== 'object') continue
+    const key = contactKey(c)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(c)
+  }
+  return out
+}
+
+function extractContactList(value) {
+  if (!value || typeof value !== 'object') return []
+  if (Array.isArray(value)) return dedupeContacts(value)
+  const nested = Array.isArray(value.contacts) ? value.contacts : []
+  return dedupeContacts([value, ...nested])
+}
+
+function contactSummary(value) {
+  const list = extractContactList(value)
+  if (list.length === 0) return '—'
+  const first = formatContact(list[0])
+  return list.length > 1 ? `${first} +${list.length - 1}` : first
+}
+
+function primaryContactPayload(list) {
+  const contacts = dedupeContacts(list)
+  if (contacts.length === 0) return null
+  const first = contacts[0]
+  return { ...first, contacts }
+}
+
 function mergeUniqueContacts(a, b) {
   const out = []
   const seen = new Set()
@@ -155,14 +194,18 @@ function mergeUniqueContacts(a, b) {
 }
 
 function toLicensePayload(form) {
+  const ownerContact = primaryContactPayload(form.owner_contacts)
+  const maintainerContact = primaryContactPayload(form.maintainer_contacts)
+  const approverContact = primaryContactPayload(form.approver_contacts)
+
   return {
     ...form,
     supplier_id: form.supplier_id || null,
-    owner_contact: form.owner_contact || null,
+    owner_contact: ownerContact,
     owner_user_id: null,
-    maintainer_contact: form.maintainer_contact || null,
+    maintainer_contact: maintainerContact,
     maintainer_user_id: null,
-    approver_contact: form.approver_contact || null,
+    approver_contact: approverContact,
     approver_user_id: null,
     expiry_date: form.expiry_date || null,
     renewal_date: form.renewal_date || null,
@@ -380,58 +423,94 @@ function SupplierFormTabbed({ value, onChange, onUploadDoc }) {
   )
 }
 
-function ContactPicker({ label, placeholder, value, onSelect, onClear, onSearch, loading, results }) {
+function ContactPicker({ label, placeholder, value, onChange, onSearch, loading, results }) {
   const [q, setQ] = useState('')
-  const canSearch = q.trim().length >= 2
+  const [open, setOpen] = useState(false)
+  const selected = dedupeContacts(value)
+  const selectedKeys = new Set(selected.map(contactKey))
 
   useEffect(() => {
+    if (!open) return
     const t = setTimeout(() => {
-      if (q.trim().length >= 2) {
-        onSearch(q.trim())
-      } else {
-        onSearch('')
-      }
+      const cleaned = q.trim()
+      if (cleaned.length >= 2) onSearch(cleaned)
+      else onSearch('')
     }, 250)
     return () => clearTimeout(t)
-  }, [q, onSearch])
+  }, [open, q, onSearch])
+
+  const toggle = (item) => {
+    const key = contactKey(item)
+    if (!key) return
+    const next = selectedKeys.has(key)
+      ? selected.filter(c => contactKey(c) !== key)
+      : [...selected, item]
+    onChange(dedupeContacts(next))
+  }
+
+  const clearAll = () => {
+    onChange([])
+    setQ('')
+    onSearch('')
+  }
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium mb-1">{label}</label>
-      <div className="relative">
-        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input
-          className="input pl-8"
-          placeholder={placeholder}
-          value={q}
-          onChange={e => setQ(e.target.value)}
-        />
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-medium mb-1">{label}</label>
+        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50" onClick={() => setOpen(true)}>
+          Select
+        </button>
       </div>
-      <p className="text-xs text-gray-400 min-h-4"> </p>
-      {canSearch && Array.isArray(results) && results.length > 0 && (
-        <div className="max-h-36 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-1 space-y-1">
-          {results.map((r, idx) => (
-            <button
-              type="button"
-              key={`${r.type || 'x'}-${r.id || r.dn || idx}`}
-              onClick={() => {
-                onSelect(r)
-                setQ('')
-                onSearch('')
-              }}
-              className="w-full text-left px-2 py-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 text-xs"
-            >
-              <div className="font-medium text-gray-800 dark:text-gray-100">{r.name || r.company || r.email || r.dn}</div>
-              <div className="text-gray-500">{[r.email, r.mobile || r.phone].filter(Boolean).join(' • ')}</div>
-            </button>
+
+      <div className="text-xs text-gray-500 border border-gray-200 rounded-lg px-2.5 py-1.5">
+        {selected.length > 0 ? `${selected.length} selected` : 'No contacts selected'}
+      </div>
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map((c, idx) => (
+            <span key={`${contactKey(c)}-${idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-100 text-brand-700">
+              {formatContact(c)}
+              <button type="button" className="hover:text-red-600" onClick={() => toggle(c)}>×</button>
+            </span>
           ))}
+          <button type="button" className="text-xs text-gray-500 hover:text-gray-700" onClick={clearAll}>Clear all</button>
         </div>
       )}
-      {value && (
-        <div className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs">
-          <span className="text-blue-700">{formatContact(value)}</span>
-          <button type="button" className="action-text-btn" onClick={() => { onClear(); setQ(''); onSearch('') }}>Clear</button>
-        </div>
+
+      {open && (
+        <Modal title={label} onClose={() => { setOpen(false); setQ(''); onSearch('') }} size="lg">
+          <div className="space-y-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input className="input pl-8" placeholder={placeholder} value={q} onChange={e => setQ(e.target.value)} />
+            </div>
+
+            <div className="max-h-[52vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+              {loading && <div className="px-3 py-2 text-xs text-gray-500">Searching...</div>}
+              {!loading && q.trim().length < 2 && <div className="px-3 py-3 text-sm text-gray-500">Type at least 2 characters.</div>}
+              {!loading && q.trim().length >= 2 && (!Array.isArray(results) || results.length === 0) && <div className="px-3 py-3 text-sm text-gray-500">No results found.</div>}
+              {(results || []).map((r, idx) => {
+                const key = `${contactKey(r)}-${idx}`
+                return (
+                  <label key={key} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-sm">
+                    <input type="checkbox" checked={selectedKeys.has(contactKey(r))} onChange={() => toggle(r)} className="rounded" />
+                    <span className="flex-1 min-w-0">
+                      <span className="block truncate">{r.name || r.company || r.email || r.dn}</span>
+                      <span className="block truncate text-xs text-gray-400">{[r.email, r.mobile || r.phone].filter(Boolean).join(' • ') || r.dn || ''}</span>
+                    </span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{String(r.type || '').toUpperCase()}</span>
+                  </label>
+                )
+              })}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary" onClick={() => { setOpen(false); setQ(''); onSearch('') }}>Done</button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   )
@@ -757,12 +836,13 @@ export default function Licenses() {
       const d = r.data || {}
       setEditingLicense(d)
       setLicenseForm({
+        ...emptyLicenseForm,
         name: d.name || '',
         description: d.description || '',
         supplier_id: d.supplier_id || '',
-        owner_contact: d.owner_contact || null,
-        maintainer_contact: d.maintainer_contact || null,
-        approver_contact: d.approver_contact || null,
+        owner_contacts: extractContactList(d.owner_contact),
+        maintainer_contacts: extractContactList(d.maintainer_contact),
+        approver_contacts: extractContactList(d.approver_contact),
         expiry_date: d.expiry_date ? String(d.expiry_date).slice(0, 10) : '',
         renewal_date: d.renewal_date ? String(d.renewal_date).slice(0, 10) : '',
         reminder_days: d.reminder_days || 30,
@@ -1138,8 +1218,8 @@ export default function Licenses() {
                       <tr key={l.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onDoubleClick={() => openEditLicense(l)} title="Double click for details">
                         <td className="px-4 py-3 font-medium">{l.name}</td>
                         <td className="px-4 py-3 text-gray-500">{l.supplier_company || l.supplier || '—'}</td>
-                        <td className="px-4 py-3 text-gray-500">{l.owner_name || formatContact(l.owner_contact)}</td>
-                        <td className="px-4 py-3 text-gray-500">{l.approver_name || formatContact(l.approver_contact)}</td>
+                        <td className="px-4 py-3 text-gray-500">{l.owner_name || contactSummary(l.owner_contact)}</td>
+                        <td className="px-4 py-3 text-gray-500">{l.approver_name || contactSummary(l.approver_contact)}</td>
                         <td className="px-4 py-3 text-gray-500">{l.expiry_date ? String(l.expiry_date).slice(0, 10) : '—'}</td>
                         <td className="px-4 py-3">
                           {l.approval_status === 'approved' && <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Approved</span>}
@@ -1295,32 +1375,29 @@ export default function Licenses() {
               <ContactPicker
                 label="Owner (Local or LDAP)"
                 placeholder="Search local or LDAP user..."
-                value={licenseForm.owner_contact}
+                value={licenseForm.owner_contacts}
                 loading={ownerSearching}
                 results={ownerResults}
                 onSearch={searchOwnerLocalOrLdap}
-                onSelect={(item) => setLicenseForm(f => ({ ...f, owner_contact: item }))}
-                onClear={() => setLicenseForm(f => ({ ...f, owner_contact: null }))}
+                onChange={(items) => setLicenseForm(f => ({ ...f, owner_contacts: items }))}
               />
               <ContactPicker
                 label="Maintainer (Local, LDAP or Suppliers)"
                 placeholder="Search local/LDAP user or supplier..."
-                value={licenseForm.maintainer_contact}
+                value={licenseForm.maintainer_contacts}
                 loading={maintSearching}
                 results={maintResults}
                 onSearch={(q) => searchMaintOrApprover(q, setMaintSearching, setMaintResults)}
-                onSelect={(item) => setLicenseForm(f => ({ ...f, maintainer_contact: item }))}
-                onClear={() => setLicenseForm(f => ({ ...f, maintainer_contact: null }))}
+                onChange={(items) => setLicenseForm(f => ({ ...f, maintainer_contacts: items }))}
               />
               <ContactPicker
                 label="Approver (Local, LDAP or Suppliers)"
                 placeholder="Search local/LDAP user or supplier..."
-                value={licenseForm.approver_contact}
+                value={licenseForm.approver_contacts}
                 loading={approverSearching}
                 results={approverResults}
                 onSearch={(q) => searchMaintOrApprover(q, setApproverSearching, setApproverResults)}
-                onSelect={(item) => setLicenseForm(f => ({ ...f, approver_contact: item }))}
-                onClear={() => setLicenseForm(f => ({ ...f, approver_contact: null }))}
+                onChange={(items) => setLicenseForm(f => ({ ...f, approver_contacts: items }))}
               />
             </div>
 

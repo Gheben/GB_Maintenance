@@ -3,19 +3,52 @@ const { body, param, validationResult } = require('express-validator');
 const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
+const ldapService = require('../services/ldapService');
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
+async function getAllowedRoles() {
+  const defaults = ['admin', 'change_manager', 'operator', 'viewer', 'subscriber'];
+  const row = await getOne("SELECT value FROM settings WHERE key='role_presets'");
+  const presets = row ? JSON.parse(row.value) : [];
+  const presetRoles = Array.isArray(presets)
+    ? presets
+      .map((p) => String((p?.name || p?.id || '')).trim())
+      .filter(Boolean)
+    : [];
+  return new Set([...defaults, ...presetRoles]);
+}
+
 // ─── GET /api/groups ──────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const groups = await getMany(
-    `SELECT lg.*, COUNT(ugm.user_id)::int as member_count
+    `SELECT lg.*, COUNT(DISTINCT ugm.user_id)::int as local_member_count,
+            COUNT(DISTINCT lgm.id)::int as ldap_mapping_count,
+            COALESCE(
+              ARRAY_AGG(DISTINCT lgm.ldap_group_dn) FILTER (WHERE lgm.ldap_group_dn IS NOT NULL AND TRIM(lgm.ldap_group_dn) <> ''),
+              '{}'::text[]
+            ) AS ldap_group_dns
      FROM local_groups lg
      LEFT JOIN user_group_members ugm ON ugm.group_id = lg.id
+     LEFT JOIN ldap_group_mappings lgm ON lgm.local_group_id = lg.id
      GROUP BY lg.id ORDER BY lg.name`
   );
-  res.json(groups);
+
+  const enriched = await Promise.all(groups.map(async (group) => {
+    let ldapMemberCount = 0;
+    try {
+      ldapMemberCount = await ldapService.countUsersInGroups(group.ldap_group_dns || []);
+    } catch (_) {
+      ldapMemberCount = 0;
+    }
+    return {
+      ...group,
+      member_count: Number(group.local_member_count || 0) + Number(ldapMemberCount || 0),
+    };
+  }));
+
+  res.json(enriched);
 });
 
 // ─── GET /api/groups/:id ──────────────────────────────────────────────────────
@@ -24,7 +57,7 @@ router.get('/:id', async (req, res) => {
   if (!group) return res.status(404).json({ error: 'Gruppo non trovato' });
 
   const members = await getMany(
-    `SELECT u.id, u.username, u.display_name, u.email, u.role, u.avatar_color
+    `SELECT u.id, u.username, u.display_name, u.email, u.role, u.avatar_color, u.auth_type
      FROM users u JOIN user_group_members ugm ON ugm.user_id=u.id
      WHERE ugm.group_id=$1 ORDER BY u.username`,
     [req.params.id]
@@ -40,15 +73,19 @@ router.get('/:id', async (req, res) => {
 router.post('/', [
   body('name').isString().trim().isLength({ min: 2, max: 100 }),
   body('description').optional().isString().trim(),
+  body('role').isString().trim().isLength({ min: 1, max: 100 }),
   body('permissions').optional().isObject(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
+  const allowedRoles = await getAllowedRoles();
+  if (!allowedRoles.has(req.body.role)) return res.status(400).json({ error: 'Ruolo non valido' });
+
   try {
     const result = await query(
-      `INSERT INTO local_groups (name, description, permissions) VALUES ($1, $2, $3) RETURNING id`,
-      [req.body.name, req.body.description || null, JSON.stringify(req.body.permissions || {})]
+      `INSERT INTO local_groups (name, description, role, permissions) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [req.body.name, req.body.description || null, req.body.role, JSON.stringify(req.body.permissions || {})]
     );
     const id = result.rows[0].id;
     await auditService.log(req.user.id, req.user.username, 'group:create', 'local_group', id, `name=${req.body.name}`, req.ip);
@@ -63,14 +100,20 @@ router.post('/', [
 router.put('/:id', [
   body('name').optional().isString().trim().isLength({ min: 2, max: 100 }),
   body('description').optional().isString(),
+  body('role').optional().isString().trim().isLength({ min: 1, max: 100 }),
   body('permissions').optional().isObject(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  if (req.body.role === undefined) return res.status(400).json({ error: 'Ruolo obbligatorio' });
+
+  const allowedRoles = await getAllowedRoles();
+  if (!allowedRoles.has(req.body.role)) return res.status(400).json({ error: 'Ruolo non valido' });
 
   const sets = []; const vals = []; let i = 1;
   if (req.body.name !== undefined)        { sets.push(`name=$${i++}`); vals.push(req.body.name); }
   if (req.body.description !== undefined) { sets.push(`description=$${i++}`); vals.push(req.body.description); }
+  if (req.body.role !== undefined)        { sets.push(`role=$${i++}`); vals.push(req.body.role); }
   if (req.body.permissions !== undefined) { sets.push(`permissions=$${i++}`); vals.push(JSON.stringify(req.body.permissions)); }
   if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
   sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
@@ -124,10 +167,13 @@ router.get('/ldap/mappings', async (req, res) => {
 router.post('/ldap/mappings', [
   body('ldap_group_dn').isString().trim().isLength({ min: 1 }),
   body('local_group_id').optional().isUUID(),
-  body('role').optional().isIn(['admin','change_manager','operator','viewer','subscriber']),
+  body('role').isString().trim().isLength({ min: 1, max: 100 }),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const allowedRoles = await getAllowedRoles();
+  if (!allowedRoles.has(req.body.role)) return res.status(400).json({ error: 'Ruolo non valido' });
 
   const result = await query(
     `INSERT INTO ldap_group_mappings (ldap_group_dn, local_group_id, role) VALUES ($1,$2,$3) RETURNING id`,

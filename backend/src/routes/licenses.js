@@ -11,13 +11,44 @@ function hashApprovalToken(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
 
+function collectContactItems(contact) {
+  if (!contact || typeof contact !== 'object') return [];
+  if (Array.isArray(contact)) return contact.filter(v => v && typeof v === 'object');
+  const nested = Array.isArray(contact.contacts) ? contact.contacts.filter(v => v && typeof v === 'object') : [];
+  return [contact, ...nested];
+}
+
+function collectContactEmails(contact) {
+  const emails = new Set();
+  for (const item of collectContactItems(contact)) {
+    const email = String(item?.email || '').trim().toLowerCase();
+    if (email) emails.add(email);
+  }
+  return [...emails];
+}
+
+function buildApproverEmailMatchClause(paramPos) {
+  return `(
+    LOWER(l.approver_contact->>'email')=$${paramPos}
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(l.approver_contact->'contacts')='array' THEN l.approver_contact->'contacts'
+          ELSE '[]'::jsonb
+        END
+      ) ap
+      WHERE LOWER(ap->>'email')=$${paramPos}
+    )
+  )`;
+}
+
 function extractApproverIdentity(row) {
-  if (!row || typeof row !== 'object') return { approverUserId: null, approverEmail: '' };
-  const contact = row.approver_contact && typeof row.approver_contact === 'object' ? row.approver_contact : null;
-  const approverEmail = String(contact?.email || '').trim().toLowerCase();
+  if (!row || typeof row !== 'object') return { approverUserId: null, approverEmails: [] };
+  const approverEmails = collectContactEmails(row.approver_contact);
   return {
     approverUserId: row.approver_user_id || null,
-    approverEmail,
+    approverEmails,
   };
 }
 
@@ -36,14 +67,14 @@ async function findApprovalScopeByTokenHash(tokenHash) {
   }
 
   const identity = extractApproverIdentity(row);
-  if (!identity.approverUserId && !identity.approverEmail) {
+  if (!identity.approverUserId && identity.approverEmails.length === 0) {
     return { error: 'Approver is not configured for this license', status: 400 };
   }
 
   return {
     sourceLicenseId: row.id,
     approverUserId: identity.approverUserId,
-    approverEmail: identity.approverEmail,
+    approverEmails: identity.approverEmails,
   };
 }
 
@@ -63,9 +94,10 @@ async function listPendingApprovalsByScope(scope) {
     identityClauses.push(`l.approver_user_id=$${idx++}`);
     params.push(scope.approverUserId);
   }
-  if (scope.approverEmail) {
-    identityClauses.push(`LOWER(l.approver_contact->>'email')=$${idx++}`);
-    params.push(scope.approverEmail);
+  const approverEmails = Array.isArray(scope.approverEmails) ? scope.approverEmails : [];
+  for (const email of approverEmails) {
+    identityClauses.push(buildApproverEmailMatchClause(idx++));
+    params.push(email);
   }
   if (!identityClauses.length) return [];
   where.push(`(${identityClauses.join(' OR ')})`);
@@ -99,9 +131,10 @@ async function getApprovalInfoByScope(scope, requestId) {
     identityClauses.push(`l.approver_user_id=$${idx++}`);
     params.push(scope.approverUserId);
   }
-  if (scope.approverEmail) {
-    identityClauses.push(`LOWER(l.approver_contact->>'email')=$${idx++}`);
-    params.push(scope.approverEmail);
+  const approverEmails = Array.isArray(scope.approverEmails) ? scope.approverEmails : [];
+  for (const email of approverEmails) {
+    identityClauses.push(buildApproverEmailMatchClause(idx++));
+    params.push(email);
   }
   if (!identityClauses.length) return null;
   where.push(`(${identityClauses.join(' OR ')})`);
@@ -126,9 +159,8 @@ async function getAppBaseUrl() {
 }
 
 function getContactEmail(contact) {
-  if (!contact || typeof contact !== 'object') return null;
-  const email = String(contact.email || '').trim();
-  return email || null;
+  const emails = collectContactEmails(contact);
+  return emails.length > 0 ? emails[0] : null;
 }
 
 function buildLicenseTemplateVars(license, extraVars = {}) {
@@ -174,11 +206,11 @@ function collectLicenseRecipientEmails(license, includeApprover = false) {
   add(license.owner_user_email);
   add(license.maintainer_user_email);
   add(license.created_by_email);
-  add(getContactEmail(license.owner_contact));
-  add(getContactEmail(license.maintainer_contact));
+  collectContactEmails(license.owner_contact).forEach(add);
+  collectContactEmails(license.maintainer_contact).forEach(add);
   if (includeApprover) {
     add(license.approver_user_email);
-    add(getContactEmail(license.approver_contact));
+    collectContactEmails(license.approver_contact).forEach(add);
   }
   return [...recipients];
 }
@@ -710,9 +742,10 @@ router.post('/:id/request-approval', requireAdmin, [
   if (!lic) return res.status(404).json({ error: 'License not found' });
   if (!lic.approval_required) return res.status(400).json({ error: 'Approval not required for this license' });
 
-  const approverContact = lic.approver_contact && typeof lic.approver_contact === 'object' ? lic.approver_contact : null;
-  const to = approverContact?.email || lic.approver_user_email;
-  if (!to) return res.status(400).json({ error: 'No approver email configured' });
+  const approverEmails = new Set(collectContactEmails(lic.approver_contact));
+  if (lic.approver_user_email) approverEmails.add(String(lic.approver_user_email).trim().toLowerCase());
+  const recipients = [...approverEmails];
+  if (recipients.length === 0) return res.status(400).json({ error: 'No approver email configured' });
 
   const hours = Number(req.body.expiry_hours || 72);
   const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
@@ -734,12 +767,12 @@ router.post('/:id/request-approval', requireAdmin, [
   const vars = buildLicenseTemplateVars(context || { id: lic.id, name: lic.name }, {
     approval_url: approvalUrl,
     expires_at: expiresAt.toISOString(),
-    approver_email: to,
+    approver_email: recipients[0],
   });
 
-  await sendEmailNotification('license_approval_requested', [to], vars, 'license', lic.id);
+  await sendEmailNotification('license_approval_requested', recipients, vars, 'license', lic.id);
 
-  res.json({ message: `Approval request sent to ${to}`, expires_at: expiresAt.toISOString() });
+  res.json({ message: `Approval request sent to ${recipients.join(', ')}`, expires_at: expiresAt.toISOString() });
 });
 
 router.delete('/:id', requireAdmin, [param('id').isUUID()], async (req, res) => {
