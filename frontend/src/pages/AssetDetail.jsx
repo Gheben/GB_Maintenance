@@ -7,7 +7,7 @@ import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { assetsApi, usersApi, groupsApi, settingsApi } from '../api'
 import { format } from 'date-fns'
-import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Users, Cog } from 'lucide-react'
+import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Cog } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CATEGORIES = ['application','infrastructure','database','network','hardware','api','other']
@@ -30,21 +30,16 @@ export default function AssetDetail() {
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [userPickerOpen, setUserPickerOpen] = useState(false)
+  const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
+  const [pickerTarget, setPickerTarget] = useState('owner')
   // deps
   const [allAssets, setAllAssets] = useState([])
   const [depSearch, setDepSearch] = useState('')
   const [addingDep, setAddingDep] = useState(false)
   // owner
   const [ownerUsers, setOwnerUsers] = useState([])
-  const [ownerUserSearch, setOwnerUserSearch] = useState('')
-  const [ownerUserResults, setOwnerUserResults] = useState([])
-  const [ownerUserSearching, setOwnerUserSearching] = useState(false)
   const [localGroups, setLocalGroups] = useState([])
   const [ldapEnabled, setLdapEnabled] = useState(false)
-  const [groupSearch, setGroupSearch] = useState('')
-  const [groupResults, setGroupResults] = useState([])
-  const [groupLoading, setGroupLoading] = useState(false)
   const [licenseRows, setLicenseRows] = useState([])
   const [savingLicenses, setSavingLicenses] = useState(false)
 
@@ -78,76 +73,6 @@ export default function AssetDetail() {
     }).catch(() => {})
     groupsApi.list().then(r => setLocalGroups(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     settingsApi.getLdap().then(r => setLdapEnabled(r.data?.enabled || false)).catch(() => {})
-  }
-
-  const handleGroupSearch = async (q) => {
-    setGroupSearch(q)
-    if (!q || q.length < 1) { setGroupResults([]); return }
-
-    const localMatches = localGroups
-      .filter(g => String(g.name || '').toLowerCase().includes(q.toLowerCase()))
-      .slice(0, 20)
-      .map(g => ({ key: `local:${g.id}`, type: 'local_group', label: g.name, id: g.id }))
-
-    if (!ldapEnabled) {
-      setGroupResults(localMatches)
-      return
-    }
-
-    setGroupLoading(true)
-    try {
-      const r = await settingsApi.searchLdapGroups(q)
-      const ldapMatches = (r.data || []).map(g => ({
-        key: `ldap:${g.dn}`,
-        type: 'ldap_group',
-        label: g.name,
-        description: g.description,
-        dn: g.dn,
-      }))
-      setGroupResults([...localMatches, ...ldapMatches])
-    } catch {
-      setGroupResults(localMatches)
-    } finally {
-      setGroupLoading(false)
-    }
-  }
-
-  const handleOwnerUserSearch = async (q) => {
-    setOwnerUserSearch(q)
-    const qq = String(q || '').trim().toLowerCase()
-    if (qq.length < 1) { setOwnerUserResults([]); return }
-
-    const localMatches =
-      ownerUsers
-        .filter(u =>
-          String(u.display_name || u.username || '').toLowerCase().includes(qq) ||
-          String(u.username || '').toLowerCase().includes(qq) ||
-          String(u.email || '').toLowerCase().includes(qq)
-        )
-        .slice(0, 25)
-        .map(u => ({ key: `local:${u.id}`, type: 'local_user', id: u.id, name: u.display_name || u.username, email: u.email }))
-
-    if (!ldapEnabled) {
-      setOwnerUserResults(localMatches)
-      return
-    }
-
-    setOwnerUserSearching(true)
-    try {
-      const r = await settingsApi.searchLdapUsers(q)
-      const ldapMatches = (r.data || []).map(u => ({
-        key: `ldap:${u.dn}`,
-        type: 'ldap_user',
-        dn: u.dn,
-        name: u.name || u.username || u.email,
-        email: u.email,
-      }))
-      setOwnerUserResults([...localMatches, ...ldapMatches])
-    } catch {
-      setOwnerUserResults(localMatches)
-    } finally {
-      setOwnerUserSearching(false)
-    }
   }
 
   const saveLicenses = async () => {
@@ -186,11 +111,20 @@ export default function AssetDetail() {
   const enterEdit = () => {
     if (!asset) return
     loadOwnerData()
+    const ownerTargets = Array.isArray(asset.owner_targets) && asset.owner_targets.length > 0
+      ? asset.owner_targets
+      : (() => {
+        if (asset.owner_type === 'user' && asset.owner_id) return [{ type: 'user', id: asset.owner_id, name: asset.owner_name || asset.owner_label || 'User', email: asset.owner_email || '' }]
+        if (asset.owner_type === 'local_group' && asset.owner_group_id) return [{ type: 'local_group', id: asset.owner_group_id, name: asset.owner_group_name || asset.owner_label || 'Group' }]
+        if (['ldap_user', 'ldap_group'].includes(asset.owner_type) && asset.owner_ldap_dn) return [{ type: asset.owner_type, dn: asset.owner_ldap_dn, name: asset.owner_ldap_name || asset.owner_ldap_dn }]
+        return []
+      })()
     setEditForm({
       name: asset.name || '',
       category: asset.category || 'application',
       criticality: asset.criticality || 'medium',
       description: asset.description || '',
+      owner_targets: ownerTargets,
       user_targets: Array.isArray(asset.user_targets) ? asset.user_targets : [],
       owner_type: asset.owner_type || 'user',
       owner_id: asset.owner_id || '',
@@ -198,8 +132,6 @@ export default function AssetDetail() {
       owner_ldap_dn: asset.owner_ldap_dn || '',
       owner_ldap_name: asset.owner_ldap_name || '',
     })
-    setGroupResults([])
-    setGroupSearch('')
     setEditMode(true)
     setTab('info')
   }
@@ -208,34 +140,28 @@ export default function AssetDetail() {
 
   const saveEdit = async () => {
     if (!editForm.name.trim()) { toast.error('Name is required'); return }
+    const ownerTargets = Array.isArray(editForm.owner_targets) ? editForm.owner_targets : []
+    if (ownerTargets.length < 1) {
+      toast.error('At least one owner is required')
+      return
+    }
 
     setSaving(true)
     try {
-      let ownerTarget = null
-      if (editForm.owner_type === 'user' && editForm.owner_id) {
-        const owner = ownerUsers.find(u => u.id === editForm.owner_id)
-        ownerTarget = { type: 'user', id: editForm.owner_id, name: owner?.display_name || owner?.username, email: owner?.email }
-      } else if (editForm.owner_type === 'local_group' && editForm.owner_group_id) {
-        const group = localGroups.find(g => g.id === editForm.owner_group_id)
-        ownerTarget = { type: 'local_group', id: editForm.owner_group_id, name: group?.name }
-      } else if (editForm.owner_type === 'ldap_user' && editForm.owner_ldap_dn) {
-        ownerTarget = { type: 'ldap_user', dn: editForm.owner_ldap_dn, name: editForm.owner_ldap_name || editForm.owner_ldap_dn }
-      } else if (editForm.owner_type === 'ldap_group' && editForm.owner_ldap_dn) {
-        ownerTarget = { type: 'ldap_group', dn: editForm.owner_ldap_dn, name: editForm.owner_ldap_name || editForm.owner_ldap_dn }
-      }
+      const firstOwner = ownerTargets[0] || null
 
       await assetsApi.update(id, {
         name: editForm.name,
         category: editForm.category,
         criticality: editForm.criticality,
         description: editForm.description || null,
-        owner_targets: ownerTarget ? [ownerTarget] : [],
+        owner_targets: ownerTargets,
         user_targets: Array.isArray(editForm.user_targets) ? editForm.user_targets : [],
-        owner_type: editForm.owner_type,
-        owner_id: editForm.owner_type === 'user' ? (editForm.owner_id || null) : null,
-        owner_group_id: editForm.owner_type === 'local_group' ? (editForm.owner_group_id || null) : null,
-        owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(editForm.owner_type) ? (editForm.owner_ldap_dn || null) : null,
-        owner_ldap_name: ['ldap_user', 'ldap_group'].includes(editForm.owner_type) ? (editForm.owner_ldap_name || null) : null,
+        owner_type: firstOwner?.type || 'user',
+        owner_id: firstOwner?.type === 'user' ? (firstOwner.id || null) : null,
+        owner_group_id: firstOwner?.type === 'local_group' ? (firstOwner.id || null) : null,
+        owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? (firstOwner.dn || null) : null,
+        owner_ldap_name: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? (firstOwner.name || firstOwner.dn || null) : null,
       })
       toast.success('Asset updated')
       setEditMode(false)
@@ -269,6 +195,54 @@ export default function AssetDetail() {
     (u.email||'').toLowerCase().includes(q))
   const visibleUsers = filteredUsers.slice(0, userLimit)
   const assignedTargets = Array.isArray(asset.user_targets) ? asset.user_targets : []
+
+  const ownerFieldsJsx = (
+    <div>
+      <label className="block text-sm font-medium mb-1">Owner *</label>
+      <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+        <div className="text-xs text-gray-600 dark:text-gray-300">
+          {editForm?.owner_targets?.length > 0 ? `${editForm.owner_targets.length} owner(s) selected` : 'No owners selected'}
+        </div>
+        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => { setPickerTarget('owner'); setOwnerPickerOpen(true) }}>
+          Select owner
+        </button>
+      </div>
+      {(editForm?.owner_targets || []).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {editForm.owner_targets.map((o, idx) => (
+            <span key={`${o.type}:${o.id || o.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-100 text-brand-700">
+              {o.name || o.id || o.dn}
+              <span className="opacity-70">{o.type}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  const usersFieldsJsx = (
+    <div>
+      <label className="block text-sm font-medium mb-1">Users / Groups</label>
+      <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+        <div className="text-xs text-gray-600 dark:text-gray-300">
+          {editForm?.user_targets?.length > 0 ? `${editForm.user_targets.length} user/group target(s) selected` : 'No user/group targets selected'}
+        </div>
+        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => { setPickerTarget('users'); setOwnerPickerOpen(true) }}>
+          Select users/groups
+        </button>
+      </div>
+      {(editForm?.user_targets || []).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {editForm.user_targets.map((t, idx) => (
+            <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
+              {t.name || t.id || t.dn}
+              <span className="opacity-70">{t.type}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <Layout title={asset.name}>
@@ -321,124 +295,8 @@ export default function AssetDetail() {
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={editForm.description} onChange={e => setEditForm(f => ({...f, description: e.target.value}))} />
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Owner</label>
-              <div className="flex gap-1 mb-2 flex-wrap">
-                {[
-                  { key: 'user', label: 'User', icon: <User size={11} /> },
-                  { key: 'ldap_user', label: 'AD User', icon: <User size={11} /> },
-                  { key: 'local_group', label: 'Group', icon: <Users size={11} /> },
-                ].map(t => (
-                  <button key={t.key} type="button"
-                    onClick={() => setEditForm(f => ({ ...f, owner_type: t.key, owner_id: '', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))}
-                    className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors ${editForm.owner_type === t.key ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-300 text-gray-600 hover:border-brand-400'}`}>
-                    {t.icon}{t.label}
-                  </button>
-                ))}
-              </div>
-              {(editForm.owner_type === 'user' || editForm.owner_type === 'ldap_user') && (
-                <div className="relative">
-                  <input
-                    className="input"
-                    placeholder="Search user in AD/local..."
-                    value={editForm.owner_type === 'user' && editForm.owner_id
-                      ? (ownerUsers.find(u => u.id === editForm.owner_id)?.display_name || ownerUsers.find(u => u.id === editForm.owner_id)?.username || '')
-                      : (editForm.owner_type === 'ldap_user' && editForm.owner_ldap_dn ? (editForm.owner_ldap_name || editForm.owner_ldap_dn) : ownerUserSearch)}
-                    onChange={e => {
-                      if (editForm.owner_id || editForm.owner_ldap_dn) {
-                        setEditForm(f => ({ ...f, owner_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))
-                      }
-                      handleOwnerUserSearch(e.target.value)
-                    }}
-                  />
-                  {(editForm.owner_id || editForm.owner_ldap_dn) && <span className="absolute right-2 top-2 text-xs text-green-600 font-medium">selected</span>}
-                  {ownerUserResults.length > 0 && !editForm.owner_id && !editForm.owner_ldap_dn && (
-                    <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                      {ownerUserResults.map(u => (
-                        <button
-                          key={u.key}
-                          type="button"
-                          onClick={() => {
-                            if (u.type === 'local_user') {
-                              setEditForm(f => ({ ...f, owner_type: 'user', owner_id: u.id, owner_ldap_dn: '', owner_ldap_name: '' }))
-                            } else {
-                              setEditForm(f => ({ ...f, owner_type: 'ldap_user', owner_id: '', owner_ldap_dn: u.dn, owner_ldap_name: u.name }))
-                            }
-                            setOwnerUserResults([])
-                            setOwnerUserSearch('')
-                          }}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 dark:hover:bg-gray-700"
-                        >
-                          <span className="font-medium">{u.name}</span>
-                          <span className="text-xs text-gray-400 ml-2">{u.email || (u.type === 'ldap_user' ? 'LDAP' : '')}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {(editForm.owner_type === 'local_group' || editForm.owner_type === 'ldap_group') && (
-                <div className="relative">
-                  <input className="input" placeholder="Search local/LDAP group..."
-                    value={(editForm.owner_type === 'local_group' && editForm.owner_group_id) || (editForm.owner_type === 'ldap_group' && editForm.owner_ldap_dn)
-                      ? (editForm.owner_type === 'local_group' ? (localGroups.find(g => g.id === editForm.owner_group_id)?.name || '') : editForm.owner_ldap_name)
-                      : groupSearch}
-                    onChange={e => {
-                      if (editForm.owner_type !== 'user') {
-                        setEditForm(f => ({ ...f, owner_type: 'local_group', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))
-                      }
-                      handleGroupSearch(e.target.value)
-                    }} />
-                  {(editForm.owner_group_id || editForm.owner_ldap_dn) && <span className="absolute right-2 top-2 text-xs text-green-600 font-medium">selected</span>}
-                  {groupResults.length > 0 && !editForm.owner_group_id && !editForm.owner_ldap_dn && (
-                    <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-                      {groupResults.map(g => (
-                        <button key={g.key} type="button"
-                          onClick={() => {
-                            if (g.type === 'local_group') {
-                              setEditForm(f => ({ ...f, owner_type: 'local_group', owner_group_id: g.id, owner_ldap_dn: '', owner_ldap_name: '' }))
-                            } else {
-                              setEditForm(f => ({ ...f, owner_type: 'ldap_group', owner_group_id: '', owner_ldap_dn: g.dn, owner_ldap_name: g.label }))
-                            }
-                            setGroupResults([])
-                          }}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 dark:hover:bg-gray-700">
-                          <span className="font-medium">{g.label}</span>
-                          <span className="text-xs text-gray-400 ml-2">{g.type === 'local_group' ? 'Local' : 'LDAP'}</span>
-                          {g.description && <span className="text-xs text-gray-400 ml-2">{g.description}</span>}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Users / Groups</label>
-              <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
-                <div className="text-xs text-gray-600 dark:text-gray-300">
-                  {editForm.user_targets?.length > 0 ? `${editForm.user_targets.length} user/group target(s) selected` : 'No user/group targets selected'}
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  onClick={() => setUserPickerOpen(true)}
-                >
-                  Select users/groups
-                </button>
-              </div>
-              {(editForm.user_targets || []).length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {editForm.user_targets.map((t, idx) => (
-                    <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
-                      {t.name || t.id || t.dn}
-                      <span className="opacity-70">{t.type}</span>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+            {ownerFieldsJsx}
+            {usersFieldsJsx}
           </div>
         ) : (
           <div className="card p-6">
@@ -638,10 +496,10 @@ export default function AssetDetail() {
       )}
 
       <OwnerPickerModal
-        open={userPickerOpen}
-        onClose={() => setUserPickerOpen(false)}
-        value={editForm?.user_targets || []}
-        onChange={(targets) => setEditForm(f => (f ? { ...f, user_targets: targets } : f))}
+        open={ownerPickerOpen}
+        onClose={() => setOwnerPickerOpen(false)}
+        value={pickerTarget === 'owner' ? (editForm?.owner_targets || []) : (editForm?.user_targets || [])}
+        onChange={(targets) => setEditForm(f => (f ? (pickerTarget === 'owner' ? { ...f, owner_targets: targets } : { ...f, user_targets: targets }) : f))}
         users={ownerUsers}
         localGroups={localGroups}
         ldapEnabled={ldapEnabled}
