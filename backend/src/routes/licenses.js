@@ -510,17 +510,24 @@ router.get('/', [
             ua.display_name AS approver_name,
             s.company AS supplier_company,
             s.email AS supplier_email,
-            COUNT(DISTINCT la.asset_id)::int AS asset_count,
-            COUNT(DISTINCT ls.service_id)::int AS service_count
+            COALESCE(la.asset_count, 0) AS asset_count,
+            COALESCE(ls.service_count, 0) AS service_count
      FROM licenses l
      LEFT JOIN users uo ON uo.id = l.owner_user_id
      LEFT JOIN users um ON um.id = l.maintainer_user_id
      LEFT JOIN users ua ON ua.id = l.approver_user_id
      LEFT JOIN suppliers s ON s.id = l.supplier_id
-     LEFT JOIN license_assets la ON la.license_id = l.id
-     LEFT JOIN license_services ls ON ls.license_id = l.id
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS asset_count
+       FROM license_assets la
+       WHERE la.license_id = l.id
+     ) la ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS service_count
+       FROM license_services ls
+       WHERE ls.license_id = l.id
+     ) ls ON TRUE
      ${whereSql}
-     GROUP BY l.id, uo.display_name, um.display_name, ua.display_name, s.company, s.email
      ORDER BY l.expiry_date NULLS LAST, l.name
      LIMIT $${idx} OFFSET $${idx + 1}`,
     [...vals, limit, offset]
