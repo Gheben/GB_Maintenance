@@ -774,7 +774,7 @@ router.post('/:id/complete', requireOperator, [
 
 // ─── POST /api/maintenance/:id/cancel ────────────────────────────────────────
 router.post('/:id/cancel', requireOperator, [
-  body('reason').trim().notEmpty().withMessage('Cancellation reason is required'),
+  body('reason').trim().isLength({ min: 10 }).withMessage('Cancellation reason must be at least 10 characters'),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });

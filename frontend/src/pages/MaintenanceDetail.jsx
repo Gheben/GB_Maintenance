@@ -631,16 +631,17 @@ export default function MaintenanceDetail() {
           <div className="space-y-4">
             {mw?.status === 'in_progress' && (
               <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                ⚠️ This maintenance is <strong>in progress</strong>. Subscribers will be notified.
+                This maintenance is <strong>in progress</strong>. Subscribers will be notified.
               </div>
             )}
             <div>
               <label className="block text-sm font-medium mb-2">Cancellation notes *</label>
               <textarea className="input" rows={4} placeholder="Why is this maintenance being cancelled?..." value={cancelNotes} onChange={e => setCancelNotes(e.target.value)} />
+              <p className="text-xs text-gray-500 mt-1">Minimum 10 characters.</p>
             </div>
             <div className="flex justify-end gap-3">
               <button className="btn-secondary" onClick={() => { setCancelModal(false); setCancelNotes('') }}>Cancel</button>
-              <button className="btn-primary" disabled={cancelLoading || !cancelNotes.trim()} onClick={async () => {
+              <button className="btn-primary" disabled={cancelLoading || cancelNotes.trim().length < 10} onClick={async () => {
                 try {
                   setCancelLoading(true)
                   await maintenanceApi.cancel(id, cancelNotes)

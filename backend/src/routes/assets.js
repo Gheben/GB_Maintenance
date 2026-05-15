@@ -329,7 +329,9 @@ router.put('/:id', requireOperator, async (req, res) => {
     'owner_targets','probe_type','probe_url','probe_interval_seconds','probe_timeout_seconds',
     'expected_status_code','tags','metadata','is_active'];
   const sets = []; const vals = []; let i = 1;
+  const ownerManagedFields = new Set(['owner_id', 'owner_type', 'owner_group_id', 'owner_ldap_dn', 'owner_ldap_name']);
   for (const field of allowed) {
+    if (req.body.owner_targets !== undefined && ownerManagedFields.has(field)) continue;
     if (req.body[field] !== undefined) {
       sets.push(`${field}=$${i++}`);
       if (['tags','metadata','owner_targets'].includes(field)) vals.push(JSON.stringify(req.body[field]));
