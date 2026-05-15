@@ -7,7 +7,7 @@ import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { assetsApi, usersApi, groupsApi, settingsApi } from '../api'
 import { format } from 'date-fns'
-import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Cog } from 'lucide-react'
+import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Mail, Cog } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CATEGORIES = ['application','infrastructure','database','network','hardware','api','other']
@@ -37,6 +37,7 @@ export default function AssetDetail() {
   const [allAssets, setAllAssets] = useState([])
   const [depSearch, setDepSearch] = useState('')
   const [addingDep, setAddingDep] = useState(false)
+  const [depDeleteTarget, setDepDeleteTarget] = useState(null)
   // owner
   const [ownerUsers, setOwnerUsers] = useState([])
   const [localGroups, setLocalGroups] = useState([])
@@ -182,6 +183,12 @@ export default function AssetDetail() {
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
+  const confirmRemoveDependency = async () => {
+    if (!depDeleteTarget) return
+    await removeDep(depDeleteTarget.id)
+    setDepDeleteTarget(null)
+  }
+
   if (!asset) return <Layout title="Asset"><div className="text-center py-16 text-gray-500">Loading...</div></Layout>
 
   const canEdit = hasRole('superadmin','admin')
@@ -317,6 +324,7 @@ export default function AssetDetail() {
                 <User size={14} className="text-gray-400" />
                 <span className="font-medium text-gray-700 dark:text-gray-300">Owner:</span>
                 <span>{asset.owner_label || asset.owner_name}</span>
+                {asset.owner_email && <a href={`mailto:${asset.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs"><Mail size={12} />{asset.owner_email}</a>}
               </div>
             )}
             {asset.probe_enabled && (
@@ -338,7 +346,7 @@ export default function AssetDetail() {
                     <Link to={`/assets/${a.id}`} className="text-sm text-brand-600 hover:underline flex items-center gap-1.5">
                       <Cog size={13} />{a.name}
                     </Link>
-                    {canEdit && <button onClick={() => removeDep(a.id)} className="text-xs text-red-400 hover:text-red-600 ml-2"><X size={13} /></button>}
+                    {editMode && canEdit && <button onClick={() => setDepDeleteTarget({ id: a.id, name: a.name })} className="text-xs text-red-400 hover:text-red-600 ml-2"><X size={13} /></button>}
                   </div>
                 ))}
               </div>
@@ -350,7 +358,7 @@ export default function AssetDetail() {
                 ))}
               </div>
             </div>
-            {canEdit && (
+            {editMode && canEdit && (
               <div>
                 <button className="btn-secondary text-xs flex items-center gap-1 mb-3" onClick={() => setAddingDep(o => !o)}>
                   <Plus size={13} />{addingDep ? 'Cancel' : 'Add dependency'}
@@ -526,6 +534,17 @@ export default function AssetDetail() {
       {deleteConfirm && (
         <ConfirmDialog title="Delete Asset" message={`Delete "${asset.name}"?`} danger confirmLabel="Delete"
           onConfirm={handleDelete} onCancel={() => setDeleteConfirm(false)} />
+      )}
+
+      {depDeleteTarget && (
+        <ConfirmDialog
+          title="Remove Dependency"
+          message={`Remove dependency "${depDeleteTarget.name}" from this asset?`}
+          danger
+          confirmLabel="Remove"
+          onConfirm={confirmRemoveDependency}
+          onCancel={() => setDepDeleteTarget(null)}
+        />
       )}
 
       <OwnerPickerModal

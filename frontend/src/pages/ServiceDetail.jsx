@@ -29,6 +29,7 @@ export default function ServiceDetail() {
   const [pickerTarget, setPickerTarget] = useState('owner')
   const [depSearch, setDepSearch] = useState('')
   const [addingDep, setAddingDep] = useState(false)
+  const [depDeleteTarget, setDepDeleteTarget] = useState(null)
   const [userSearch, setUserSearch] = useState('')
   const [userLimit, setUserLimit] = useState(25)
   const [serviceUsers, setServiceUsers] = useState([])
@@ -164,6 +165,12 @@ export default function ServiceDetail() {
   const removeDep = async (depId) => {
     try { await servicesApi.removeDependency(id, depId); toast.success('Dependency removed'); load() }
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
+
+  const confirmRemoveDependency = async () => {
+    if (!depDeleteTarget) return
+    await removeDep(depDeleteTarget.id)
+    setDepDeleteTarget(null)
   }
 
   if (!service) return <Layout title="Service"><div className="text-center py-16 text-gray-500">Loading...</div></Layout>
@@ -334,7 +341,7 @@ export default function ServiceDetail() {
                     <Link to={`/services/${s.id}`} className="text-sm text-brand-600 hover:underline flex items-center gap-1.5">
                       <Cog size={13} />{s.name}
                     </Link>
-                    {canEdit && <button onClick={() => removeDep(s.id)} className="text-xs text-red-400 hover:text-red-600 ml-2"><X size={13} /></button>}
+                    {editMode && canEdit && <button onClick={() => setDepDeleteTarget({ id: s.id, name: s.name })} className="text-xs text-red-400 hover:text-red-600 ml-2"><X size={13} /></button>}
                   </div>
                 ))}
               </div>
@@ -346,7 +353,7 @@ export default function ServiceDetail() {
                 ))}
               </div>
             </div>
-            {canEdit && (
+            {editMode && canEdit && (
               <div>
                 <button className="btn-secondary text-xs flex items-center gap-1 mb-3" onClick={() => setAddingDep(o => !o)}>
                   <Plus size={13} />{addingDep ? 'Cancel' : 'Add dependency'}
@@ -517,6 +524,17 @@ export default function ServiceDetail() {
       </div>
 
       {deleteConfirm && <ConfirmDialog title="Delete Service" message={`Delete "${service.name}"?`} danger confirmLabel="Delete" onConfirm={handleDelete} onCancel={() => setDeleteConfirm(false)} />}
+
+      {depDeleteTarget && (
+        <ConfirmDialog
+          title="Remove Dependency"
+          message={`Remove dependency "${depDeleteTarget.name}" from this service?`}
+          danger
+          confirmLabel="Remove"
+          onConfirm={confirmRemoveDependency}
+          onCancel={() => setDepDeleteTarget(null)}
+        />
+      )}
 
       <OwnerPickerModal
         open={ownerPickerOpen}
