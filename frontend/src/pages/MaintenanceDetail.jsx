@@ -284,6 +284,8 @@ export default function MaintenanceDetail() {
                 selectedIds={editForm.asset_ids}
                 onToggle={toggleAsset}
                 badgeKey="criticality"
+                useModal
+                filterKey="criticality"
               />
               <ItemPicker
                 label={`Services (${editForm.service_ids.length} selected)`}
@@ -291,6 +293,8 @@ export default function MaintenanceDetail() {
                 selectedIds={editForm.service_ids}
                 onToggle={toggleService}
                 badgeKey="criticality"
+                useModal
+                filterKey="criticality"
               />
             </div>
           </div>
@@ -346,7 +350,6 @@ export default function MaintenanceDetail() {
               <h3 className="font-medium mb-3">Involved Services</h3>
               {mw.services?.length > 0 && (
                 <>
-                  <p className="text-xs text-gray-500 mb-2 uppercase tracking-wide">Selected</p>
                   <div className="space-y-2 mb-4">
                     {mw.services.map(s => (
                       <Link key={s.id} to={`/services/${s.id}`} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50">

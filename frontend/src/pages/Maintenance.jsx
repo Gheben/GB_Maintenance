@@ -243,6 +243,8 @@ export default function Maintenance() {
                 selectedIds={form.asset_ids}
                 onToggle={toggleAsset}
                 badgeKey="category"
+                useModal
+                filterKey="category"
               />
               <ItemPicker
                 label="Services"
@@ -250,6 +252,8 @@ export default function Maintenance() {
                 selectedIds={form.service_ids}
                 onToggle={toggleService}
                 badgeKey="criticality"
+                useModal
+                filterKey="criticality"
               />
             </div>
 
