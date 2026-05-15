@@ -207,7 +207,7 @@ router.get('/:id/users', async (req, res) => {
        )
      )
      WHERE a.id = $1 AND u.is_active = true
-     ORDER BY COALESCE(u.display_name, u.username)`,
+     ORDER BY u.display_name NULLS LAST, u.username`,
     [req.params.id]
   );
   res.json(rows);
