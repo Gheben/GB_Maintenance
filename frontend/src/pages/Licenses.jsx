@@ -25,7 +25,6 @@ import {
   UserRound,
   XCircle,
   FileText,
-  Globe,
   Phone,
   Mail,
   Clock,
@@ -300,18 +299,31 @@ function SupplierForm({ value, onChange }) {
 }
 
 function SupplierFavicon({ url }) {
-  const [failed, setFailed] = useState(false)
-  if (!url || failed) return null
+  const [sourceIndex, setSourceIndex] = useState(0)
+  if (!url) return null
   let origin = url
+  let host = ''
   try { origin = new URL(url.startsWith('http') ? url : `https://${url}`).origin } catch { return null }
+  try { host = new URL(url.startsWith('http') ? url : `https://${url}`).hostname } catch { return null }
+
+  const sources = [
+    `${origin}/favicon.ico`,
+    `${origin}/favicon.png`,
+    `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`,
+  ]
+
+  if (sourceIndex >= sources.length) return null
+
   return (
     <img
-      src={`${origin}/favicon.ico`}
+      src={sources[sourceIndex]}
       alt=""
       width={16}
       height={16}
       className="inline-block w-4 h-4 object-contain rounded-sm"
-      onError={() => setFailed(true)}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setSourceIndex((i) => i + 1)}
     />
   )
 }
@@ -1350,7 +1362,22 @@ export default function Licenses() {
                       <tr key={s.id}>
                         <td className="px-4 py-3">{s.first_name}</td>
                         <td className="px-4 py-3">{s.last_name}</td>
-                        <td className="px-4 py-3">{s.company}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span>{s.company}</span>
+                            {s.website ? (
+                              <a
+                                href={s.website.startsWith('http') ? s.website : `https://${s.website}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Open supplier website"
+                                className="inline-flex items-center gap-1 text-brand-600 hover:underline"
+                              >
+                                <SupplierFavicon url={s.website} />
+                              </a>
+                            ) : null}
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-gray-500">{s.email}</td>
                         <td className="px-4 py-3 text-gray-500">{s.phone || '—'}</td>
                         <td className="px-4 py-3 text-gray-500">{s.mobile || '—'}</td>
