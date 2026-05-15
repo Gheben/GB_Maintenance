@@ -11,6 +11,66 @@ import { settingsApi } from '../api'
 const DEFAULT_BRANDING = { app_name: 'GB Maintenance', app_brand_image_url: '' }
 let brandingMemoryCache = null
 let brandingFetchedOnce = false
+const preloadedRouteChunks = new Set()
+
+function prefetchRouteChunk(routePath) {
+  if (!routePath || preloadedRouteChunks.has(routePath)) return
+
+  let loader = null
+  switch (routePath) {
+    case '/':
+      loader = () => import('../pages/Dashboard')
+      break
+    case '/assets':
+      loader = () => import('../pages/Assets')
+      break
+    case '/services':
+      loader = () => import('../pages/Services')
+      break
+    case '/maintenance':
+      loader = () => import('../pages/Maintenance')
+      break
+    case '/incidents':
+      loader = () => import('../pages/Incidents')
+      break
+    case '/calendar':
+      loader = () => import('../pages/Calendar')
+      break
+    case '/notifications':
+      loader = () => import('../pages/Notifications')
+      break
+    case '/reports':
+      loader = () => import('../pages/Reports')
+      break
+    case '/licenses':
+      loader = () => import('../pages/Licenses')
+      break
+    case '/users':
+      loader = () => import('../pages/Users')
+      break
+    case '/blackout':
+      loader = () => import('../pages/BlackoutPeriods')
+      break
+    case '/audit':
+      loader = () => import('../pages/AuditLog')
+      break
+    case '/settings':
+      loader = () => import('../pages/Settings')
+      break
+    case '/apikeys':
+      loader = () => import('../pages/ApiKeys')
+      break
+    default:
+      loader = null
+      break
+  }
+
+  if (!loader) return
+  preloadedRouteChunks.add(routePath)
+  loader().catch(() => {
+    preloadedRouteChunks.delete(routePath)
+  })
+}
 
 function getCachedBranding() {
   try {
@@ -194,6 +254,8 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
             return (
               <NavLink key={item.to} to={item.to} end={item.to === '/'}
                 onClick={onClose}
+                onMouseEnter={() => prefetchRouteChunk(item.to)}
+                onFocus={() => prefetchRouteChunk(item.to)}
                 title={cl ? item.label : undefined}
                 className={({ isActive }) =>
                   `${itemBase} ${isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}`}>
