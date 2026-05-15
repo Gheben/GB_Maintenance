@@ -56,7 +56,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: gbmaintenance-backend
-    restart: unless-stopped
+    restart: always
     env_file: .env
     environment:
       - NODE_ENV=production
@@ -83,7 +83,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: gbmaintenance-frontend
-    restart: unless-stopped
+    restart: always
     ports:
       - "${FRONTEND_PORT:-4681}:80"
     depends_on:

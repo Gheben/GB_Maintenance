@@ -308,16 +308,6 @@ export default function Calendar() {
         </Modal>
       )}
 
-            <div className="rounded-lg border border-amber-200 bg-amber-50/70 dark:bg-amber-900/20 px-3 py-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
-                <input
-                  type="checkbox"
-                  checked={!!form.owner_approval_required}
-                  onChange={e => setForm(f => ({ ...f, owner_approval_required: e.target.checked }))}
-                />
-                Requires owner approval workflow
-              </label>
-            </div>
     </Layout>
   )
 }

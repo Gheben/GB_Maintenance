@@ -95,7 +95,7 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
       </div>
 
       {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="max-h-28 overflow-y-auto flex flex-wrap gap-1.5 pr-1">
           {selected.map(item => (
             <span key={item.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
               {item[nameKey]}

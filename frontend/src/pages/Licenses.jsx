@@ -1339,9 +1339,9 @@ export default function Licenses() {
 
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="min-w-[980px] w-full text-sm">
+                <table className="min-w-[760px] w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
-                    <tr>{['First name', 'Last name', 'Company', 'Website', 'Email', 'Phone', 'Mobile', 'VAT', 'Actions'].map(h => (
+                    <tr>{['First name', 'Last name', 'Company', 'Email', 'Phone', 'Mobile', 'Actions'].map(h => (
                       <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
                     ))}</tr>
                   </thead>
@@ -1352,18 +1352,8 @@ export default function Licenses() {
                         <td className="px-4 py-3">{s.last_name}</td>
                         <td className="px-4 py-3">{s.company}</td>
                         <td className="px-4 py-3 text-gray-500">{s.email}</td>
-                        <td className="px-4 py-3 text-gray-500">
-                          {s.website ? (
-                            <a href={s.website.startsWith('http') ? s.website : `https://${s.website}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-brand-600 hover:underline">
-                              <SupplierFavicon url={s.website} />
-                              <Globe size={13} className="text-gray-400" />
-                            </a>
-                          ) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-gray-500">{s.email}</td>
                         <td className="px-4 py-3 text-gray-500">{s.phone || '—'}</td>
                         <td className="px-4 py-3 text-gray-500">{s.mobile || '—'}</td>
-                        <td className="px-4 py-3 text-gray-500">{s.vat_number || '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 justify-end">
                             <button className="action-icon-btn" onClick={() => openEditSupplier(s)} title="Edit"><Pencil size={14} /></button>
@@ -1372,7 +1362,7 @@ export default function Licenses() {
                         </td>
                       </tr>
                     ))}
-                    {suppliers.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-gray-500">No suppliers</td></tr>}
+                    {suppliers.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-gray-500">No suppliers</td></tr>}
                   </tbody>
                 </table>
               </div>
