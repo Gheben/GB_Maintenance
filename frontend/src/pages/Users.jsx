@@ -239,9 +239,6 @@ function LocalGroupPicker({ groups, value, onChange, required }) {
             <div className="relative">
               <input className="input" placeholder="Search group..." value={q} onChange={e => setQ(e.target.value)} />
             </div>
-            <div className="flex justify-start">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreateGroup(true)}>New local group</button>
-            </div>
             <div className="max-h-[50vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
               {filtered.map(g => (
                 <button
@@ -483,7 +480,6 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
   )
 }
 
-// â”€â”€â”€ Tab Utenti â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function UsersTab({ roleOptions, roleProfiles }) {
   const [users, setUsers] = useState([])
   const [total, setTotal] = useState(0)
