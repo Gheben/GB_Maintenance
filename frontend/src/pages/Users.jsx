@@ -5,7 +5,7 @@ import { usersApi, groupsApi, settingsApi } from '../api'
 import { Pagination } from '../components/Pagination'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
-import { Plus, Trash2, Users as UsersIcon, X, User, Shield, CheckCircle, XCircle, Pencil, Save, ShieldCheck, Wand2 } from 'lucide-react'
+import { Plus, Trash2, Users as UsersIcon, X, User, Shield, CheckCircle, XCircle, Pencil, Save, ShieldCheck, Wand2, Eye, EyeOff } from 'lucide-react'
 
 const DEFAULT_ROLES = ['admin','change_manager','operator','viewer','subscriber']
 const TABS = [
@@ -271,6 +271,9 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
   const [displayName, setDisplayName] = useState(u.display_name || '')
   const [email, setEmail] = useState(u.email || '')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [role, setRole] = useState(u.role)
   const [permissions, setPermissions] = useState(mergeWithRoleBaseline(u.role, u.permissions || {}, roleProfiles))
   const [groupId, setGroupId] = useState('')
@@ -291,6 +294,8 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
     if (!email.trim()) { toast.error('Email is required'); return }
     if (!role) { toast.error('Role is required'); return }
     if (!groupId) { toast.error('Group is required'); return }
+    if (password && !confirmPassword) { toast.error('Please confirm the new password'); return }
+    if (password && password !== confirmPassword) { toast.error('Passwords do not match'); return }
     if (password && !passwordPolicyOk(password)) {
       toast.error('Password does not meet minimum security requirements')
       return
@@ -314,7 +319,9 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
   }
 
   const handleGeneratePassword = () => {
-    setPassword(generateStrongPassword())
+    const generated = generateStrongPassword()
+    setPassword(generated)
+    setConfirmPassword(generated)
     toast.success('Password generated')
   }
 
@@ -338,13 +345,27 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
         <div>
           <label className="block text-sm font-medium mb-1">New password</label>
           <div className="flex items-center gap-2">
-            <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave empty to keep current password" />
+            <input className="input" type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave empty to keep current password" />
+            <button type="button" className="btn-secondary whitespace-nowrap" onClick={() => setShowPassword(v => !v)}>
+              {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
             <button type="button" className="btn-secondary whitespace-nowrap" onClick={handleGeneratePassword}>
               <Wand2 size={14} />
               Generate
             </button>
           </div>
           <PasswordRequirements password={password} optional />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Confirm new password</label>
+          <div className="flex items-center gap-2">
+            <input className="input" type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Repeat new password" />
+            <button type="button" className="btn-secondary whitespace-nowrap" onClick={() => setShowConfirmPassword(v => !v)}>
+              {showConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+              {showConfirmPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Local group *</label>
@@ -398,7 +419,9 @@ function UsersTab({ roleOptions, roleProfiles }) {
   const [detail, setDetail] = useState(null)
   const [editTarget, setEditTarget] = useState(null)
   const [localGroups, setLocalGroups] = useState([])
-  const [form, setForm] = useState({ username: '', display_name: '', email: '', password: '', role: 'operator', permissions: {}, group_id: '' })
+  const [showCreatePassword, setShowCreatePassword] = useState(false)
+  const [showCreateConfirmPassword, setShowCreateConfirmPassword] = useState(false)
+  const [form, setForm] = useState({ username: '', display_name: '', email: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' })
 
   useEffect(() => {
     setForm(f => ({ ...f, permissions: mergeWithRoleBaseline(f.role, f.permissions, roleProfiles) }))
@@ -421,21 +444,25 @@ function UsersTab({ roleOptions, roleProfiles }) {
   const handleCreate = async (e) => {
     e.preventDefault()
     if (!form.group_id) { toast.error('Group is required'); return }
+    if (!form.confirm_password) { toast.error('Please confirm the password'); return }
+    if (form.password !== form.confirm_password) { toast.error('Passwords do not match'); return }
     if (!passwordPolicyOk(form.password)) {
       toast.error('Password does not meet minimum security requirements')
       return
     }
     try {
       const payload = { ...form, permissions: mergeWithRoleBaseline(form.role, form.permissions, roleProfiles) }
+      delete payload.confirm_password
       if (form.role === 'admin') payload.permissions = {}
       await usersApi.create(payload); toast.success('User created'); setShowCreate(false)
-      setForm({ username: '', display_name: '', email: '', password: '', role: 'operator', permissions: {}, group_id: '' }); load()
+      setForm({ username: '', display_name: '', email: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' }); load()
     }
     catch (err) { toast.error(err.response?.data?.errors?.[0]?.msg || err.response?.data?.error || 'Error') }
   }
 
   const handleGenerateCreatePassword = () => {
-    setForm(f => ({ ...f, password: generateStrongPassword() }))
+    const generated = generateStrongPassword()
+    setForm(f => ({ ...f, password: generated, confirm_password: generated }))
     toast.success('Password generated')
   }
 
@@ -467,7 +494,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
           {authFilter !== 'all' && <span className="text-xs text-gray-400">({filtered.length} shown)</span>}
         </div>
         {authFilter === 'local' && (
-          <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />New User</button>
+          <button className="btn-primary" onClick={() => { setShowCreatePassword(false); setShowCreateConfirmPassword(false); setShowCreate(true) }}><Plus size={15} />New User</button>
         )}
       </div>
 
@@ -545,13 +572,26 @@ function UsersTab({ roleOptions, roleProfiles }) {
               <input className="input" type="email" required value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
             <div><label className="block text-sm font-medium mb-1">Password *</label>
               <div className="flex items-center gap-2">
-                <input className="input" type="password" required value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                <input className="input" type={showCreatePassword ? 'text' : 'password'} required value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                <button type="button" className="btn-secondary whitespace-nowrap" onClick={() => setShowCreatePassword(v => !v)}>
+                  {showCreatePassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {showCreatePassword ? 'Hide' : 'Show'}
+                </button>
                 <button type="button" className="btn-secondary whitespace-nowrap" onClick={handleGenerateCreatePassword}>
                   <Wand2 size={14} />
                   Generate
                 </button>
               </div>
               <PasswordRequirements password={form.password} />
+            </div>
+            <div><label className="block text-sm font-medium mb-1">Confirm password *</label>
+              <div className="flex items-center gap-2">
+                <input className="input" type={showCreateConfirmPassword ? 'text' : 'password'} required value={form.confirm_password} onChange={e => setForm(f => ({ ...f, confirm_password: e.target.value }))} />
+                <button type="button" className="btn-secondary whitespace-nowrap" onClick={() => setShowCreateConfirmPassword(v => !v)}>
+                  {showCreateConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {showCreateConfirmPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
             </div>
             <div><label className="block text-sm font-medium mb-1">Local group *</label>
               <select className="input" required value={form.group_id} onChange={e => setForm(f => ({ ...f, group_id: e.target.value }))}>
