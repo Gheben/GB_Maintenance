@@ -67,6 +67,17 @@ const DEFAULT_BRANDING = {
   approval_page_load_error_text: 'Cannot load approval request',
 }
 
+function getCachedBranding() {
+  try {
+    const raw = localStorage.getItem('public_branding_cache')
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 export default function LicenseApproval() {
   const [searchParams] = useSearchParams()
   const token = useMemo(() => (searchParams.get('token') || '').trim(), [searchParams])
@@ -80,11 +91,19 @@ export default function LicenseApproval() {
   const [error, setError] = useState('')
   const [result, setResult] = useState('')
   const [reason, setReason] = useState('')
-  const [branding, setBranding] = useState(DEFAULT_BRANDING)
+  const [branding, setBranding] = useState(() => ({ ...DEFAULT_BRANDING, ...(getCachedBranding() || {}) }))
 
   useEffect(() => {
     settingsApi.publicBranding()
-      .then(r => setBranding(prev => ({ ...prev, ...(r.data || {}) })))
+      .then(r => {
+        const payload = r.data || {}
+        setBranding(prev => ({ ...prev, ...payload }))
+        try {
+          localStorage.setItem('public_branding_cache', JSON.stringify(payload))
+        } catch {
+          // Ignore quota/storage errors.
+        }
+      })
       .catch(() => setBranding(DEFAULT_BRANDING))
   }, [])
 
@@ -323,7 +342,7 @@ export default function LicenseApproval() {
           </div>
         </aside>
       </div>
-      <div className="max-w-5xl mx-auto pt-4 text-center text-xs text-gray-500">
+      <div className="max-w-5xl mx-auto pt-4 text-center text-[10px] text-gray-400">
         {footerText}
       </div>
     </div>
