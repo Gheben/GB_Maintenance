@@ -242,7 +242,12 @@ export default function Assets() {
                 {loading ? (
                   <tr><td colSpan={7} className="text-center py-8 text-gray-500">Loading...</td></tr>
                 ) : assets.map(a => (
-                  <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <tr
+                    key={a.id}
+                    className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${canEdit ? 'cursor-pointer' : ''}`}
+                    onDoubleClick={canEdit ? () => openEdit(a) : undefined}
+                    title={canEdit ? 'Double click to edit' : undefined}
+                  >
                     <td className="px-4 py-3 font-medium">
                       <Link to={`/assets/${a.id}`} className="text-brand-600 hover:underline">{a.name}</Link>
                     </td>

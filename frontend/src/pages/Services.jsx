@@ -289,7 +289,12 @@ export default function Services() {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {loading ? <tr><td colSpan={10} className="text-center py-8 text-gray-500">Loading...</td></tr>
                   : services.map(s => (
-                    <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <tr
+                      key={s.id}
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${canEdit ? 'cursor-pointer' : ''}`}
+                      onDoubleClick={canEdit ? () => openEdit(s) : undefined}
+                      title={canEdit ? 'Double click to edit' : undefined}
+                    >
                       <td className="px-4 py-3 font-medium">
                         <Link to={`/services/${s.id}`} className="text-brand-600 hover:underline">{s.name}</Link>
                       </td>

@@ -109,7 +109,7 @@ export default function BlackoutPeriods() {
 
         <div className="space-y-3">
           {periods.map(p => (
-            <div key={p.id} className="card p-4">
+            <div key={p.id} className="card p-4 cursor-pointer" onDoubleClick={() => openEdit(p)} title="Double click to edit">
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="font-medium">{p.name}</p>
@@ -137,8 +137,8 @@ export default function BlackoutPeriods() {
                   )}
                 </div>
                 <div className="flex gap-1 shrink-0 ml-3">
-                  <button className="p-1.5 text-gray-400 hover:bg-gray-100 rounded hover:text-brand-600 transition-colors" onClick={() => openEdit(p)}><Pencil size={14} /></button>
-                  <button className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors" onClick={() => setDeleteTarget(p)}><Trash2 size={14} /></button>
+                  <button className="p-1.5 text-gray-400 hover:bg-gray-100 rounded hover:text-brand-600 transition-colors" onClick={(e) => { e.stopPropagation(); openEdit(p) }}><Pencil size={14} /></button>
+                  <button className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors" onClick={(e) => { e.stopPropagation(); setDeleteTarget(p) }}><Trash2 size={14} /></button>
                 </div>
               </div>
             </div>

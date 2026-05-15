@@ -494,41 +494,108 @@ async function countUsersInGroups(groupDns = []) {
   const cfg = await getLdapSettings();
   if (!cfg || !cfg.enabled || !ldap) return 0;
 
-  const searchBase = cfg.search_base || cfg.base_dn;
-  if (!searchBase) return 0;
+  const searchBases = [
+    cfg.search_base,
+    cfg.base_dn,
+    cfg.group_search_base,
+    cfg.groups_search_base,
+  ].map(v => String(v || '').trim()).filter(Boolean);
+  const uniqueBases = [...new Set(searchBases)];
+  if (uniqueBases.length === 0) return 0;
 
   const client = _createClient(cfg);
   try {
     await _bind(client, _bindPrincipal(cfg), _bindPassword(cfg));
     const uniqueUsers = new Set();
+    const visitedGroups = new Set();
+    const inspectedMembers = new Set();
 
-    for (const dn of dns) {
+    const readEntryByDn = async (dn, attrs) => {
+      try {
+        const rows = await _search(client, dn, {
+          filter: '(objectClass=*)',
+          scope: 'base',
+          attributes: attrs,
+          sizeLimit: 1,
+        });
+        return rows[0] || null;
+      } catch (_) {
+        return null;
+      }
+    };
+
+    const isGroupObjectClass = (value) => {
+      const values = Array.isArray(value) ? value : [value];
+      const classes = values.map(v => String(v || '').toLowerCase().trim());
+      return classes.some(c => c === 'group' || c === 'groupofnames' || c === 'groupofuniquenames' || c === 'posixgroup');
+    };
+
+    const addUserKey = (entry, fallbackValue = '') => {
+      const key = String(entry?.dn || entry?.distinguishedName || '').toLowerCase().trim()
+        || String(entry?.mail || '').toLowerCase().trim()
+        || String(entry?.sAMAccountName || '').toLowerCase().trim()
+        || String(entry?.uid || '').toLowerCase().trim()
+        || String(fallbackValue || '').toLowerCase().trim();
+      if (key) uniqueUsers.add(key);
+    };
+
+    const queue = [...dns];
+    while (queue.length > 0) {
+      const dn = String(queue.shift() || '').trim();
+      const dnKey = dn.toLowerCase();
+      if (!dn || visitedGroups.has(dnKey)) continue;
+      visitedGroups.add(dnKey);
+
       const escapedDn = _escapeLdap(dn);
       const filters = [
         `(&(objectClass=user)(memberOf:1.2.840.113556.1.4.1941:=${escapedDn}))`,
-        `(&(objectClass=user)(memberOf=${escapedDn}))`,
+        `(&(|(objectClass=user)(objectClass=person))(memberOf=${escapedDn}))`,
       ];
 
-      let entries = [];
-      for (const filter of filters) {
-        try {
-          entries = await _search(client, searchBase, {
-            filter,
-            scope: 'sub',
-            attributes: ['dn', 'distinguishedName', 'mail', 'sAMAccountName'],
-            sizeLimit: 5000,
-          });
-          if (entries.length > 0) break;
-        } catch (_) {
-          // Ignore and fallback to the next filter.
+      for (const base of uniqueBases) {
+        for (const filter of filters) {
+          try {
+            const entries = await _search(client, base, {
+              filter,
+              scope: 'sub',
+              attributes: ['dn', 'distinguishedName', 'mail', 'sAMAccountName', 'uid'],
+              sizeLimit: 5000,
+            });
+            for (const entry of entries) addUserKey(entry);
+          } catch (_) {
+            // Ignore unsupported filters/bases and continue with fallback strategies.
+          }
         }
       }
 
-      for (const entry of entries) {
-        const key = String(entry.dn || entry.distinguishedName || '').toLowerCase().trim()
-          || String(entry.mail || '').toLowerCase().trim()
-          || String(entry.sAMAccountName || '').toLowerCase().trim();
-        if (key) uniqueUsers.add(key);
+      // Fallback for directories that do not support memberOf matching rules.
+      const groupEntry = await readEntryByDn(dn, ['member', 'uniqueMember', 'memberUid']);
+      const members = [
+        ...(Array.isArray(groupEntry?.member) ? groupEntry.member : (groupEntry?.member ? [groupEntry.member] : [])),
+        ...(Array.isArray(groupEntry?.uniqueMember) ? groupEntry.uniqueMember : (groupEntry?.uniqueMember ? [groupEntry.uniqueMember] : [])),
+      ];
+
+      for (const memberDnRaw of members) {
+        const memberDn = String(memberDnRaw || '').trim();
+        if (!memberDn) continue;
+        const memberKey = memberDn.toLowerCase();
+        if (inspectedMembers.has(memberKey)) continue;
+        inspectedMembers.add(memberKey);
+
+        const memberEntry = await readEntryByDn(memberDn, ['objectClass', 'dn', 'distinguishedName', 'mail', 'sAMAccountName', 'uid']);
+        if (memberEntry && isGroupObjectClass(memberEntry.objectClass)) {
+          queue.push(memberDn);
+        } else {
+          addUserKey(memberEntry, memberDn);
+        }
+      }
+
+      const memberUids = Array.isArray(groupEntry?.memberUid)
+        ? groupEntry.memberUid
+        : (groupEntry?.memberUid ? [groupEntry.memberUid] : []);
+      for (const uid of memberUids) {
+        const normalized = String(uid || '').toLowerCase().trim();
+        if (normalized) uniqueUsers.add(`uid:${normalized}`);
       }
     }
 
