@@ -12,6 +12,12 @@ router.use(requireAuth);
 const SEVERITIES = ['critical','high','medium','low'];
 const STATUSES = ['investigating','identified','monitoring','resolved'];
 
+async function getAllowedSeverities() {
+  const rows = await getMany(`SELECT slug FROM incident_severities ORDER BY sort_order, label`, []);
+  const fromCatalog = rows.map((r) => r.slug).filter(Boolean);
+  return fromCatalog.length > 0 ? fromCatalog : SEVERITIES;
+}
+
 // ─── GET /api/incidents ───────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const { status, severity, page = 1, limit = 50 } = req.query;
@@ -60,24 +66,35 @@ router.get('/:id', async (req, res) => {
      FROM assets a JOIN incident_assets ia ON ia.asset_id=a.id WHERE ia.incident_id=$1`,
     [req.params.id]
   );
+  const services = await getMany(
+    `SELECT s.id, s.name, s.slug, s.status AS current_status
+     FROM services s JOIN incident_services is2 ON is2.service_id=s.id WHERE is2.incident_id=$1`,
+    [req.params.id]
+  );
   const updates = await getMany(
     `SELECT iu.*, u.display_name as author FROM incident_updates iu
      LEFT JOIN users u ON u.id=iu.created_by WHERE iu.incident_id=$1 ORDER BY iu.created_at ASC`,
     [req.params.id]
   );
-  res.json({ ...incident, assets, updates });
+  res.json({ ...incident, assets, services, updates });
 });
 
 // ─── POST /api/incidents ──────────────────────────────────────────────────────
 router.post('/', requireOperator, [
   body('title').isString().trim().isLength({ min: 1, max: 300 }),
-  body('severity').isIn(SEVERITIES),
+  body('severity').isString().trim().isLength({ min: 1, max: 50 }),
   body('description').optional().isString(),
   body('asset_ids').optional().isArray(),
+  body('service_ids').optional().isArray(),
   body('started_at').optional().isISO8601(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const allowedSeverities = await getAllowedSeverities();
+  if (!allowedSeverities.includes(req.body.severity)) {
+    return res.status(400).json({ error: 'Severita non valida' });
+  }
 
   const result = await query(
     `INSERT INTO incidents (title, description, severity, status, started_at, created_by)
@@ -90,11 +107,15 @@ router.post('/', requireOperator, [
   if (Array.isArray(req.body.asset_ids)) {
     for (const aid of req.body.asset_ids) {
       await query(`INSERT INTO incident_assets (incident_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, aid]);
-      // Set asset status to major_outage or partial based on severity
       const newStatus = ['critical','high'].includes(req.body.severity) ? 'major_outage' : 'partial_outage';
       await query(`UPDATE assets SET status=$1, updated_at=NOW() WHERE id=$2`, [newStatus, aid]);
       await query(`INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason) VALUES ('asset',$1,$2,$3,$4)`,
         [aid, newStatus, req.user.username, `Incident: ${req.body.title}`]);
+    }
+  }
+  if (Array.isArray(req.body.service_ids)) {
+    for (const sid of req.body.service_ids) {
+      await query(`INSERT INTO incident_services (incident_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, sid]);
     }
   }
 
@@ -115,6 +136,13 @@ router.put('/:id', requireOperator, async (req, res) => {
   const incident = await getOne('SELECT id FROM incidents WHERE id=$1', [req.params.id]);
   if (!incident) return res.status(404).json({ error: 'Non trovato' });
 
+  if (req.body.severity !== undefined) {
+    const allowedSeverities = await getAllowedSeverities();
+    if (!allowedSeverities.includes(req.body.severity)) {
+      return res.status(400).json({ error: 'Severita non valida' });
+    }
+  }
+
   const allowed = ['title','description','severity'];
   const sets=[]; const vals=[]; let i=1;
   for (const f of allowed) {
@@ -125,6 +153,12 @@ router.put('/:id', requireOperator, async (req, res) => {
     await query('DELETE FROM incident_assets WHERE incident_id=$1', [req.params.id]);
     for (const aid of req.body.asset_ids) {
       await query(`INSERT INTO incident_assets (incident_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, aid]);
+    }
+  }
+  if (Array.isArray(req.body.service_ids)) {
+    await query('DELETE FROM incident_services WHERE incident_id=$1', [req.params.id]);
+    for (const sid of req.body.service_ids) {
+      await query(`INSERT INTO incident_services (incident_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, sid]);
     }
   }
 
@@ -173,6 +207,27 @@ router.post('/:id/updates', requireOperator, [
 router.delete('/:id', requireAdmin, async (req, res) => {
   await query('DELETE FROM incidents WHERE id=$1', [req.params.id]);
   res.json({ message: 'Incidente eliminato' });
+});
+
+// ─── GET /api/incidents/:id/users ────────────────────────────────────────────
+router.get('/:id/users', async (req, res) => {
+  const rows = await getMany(
+    `SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
+     FROM service_subscribers ss
+     JOIN incident_services is2 ON is2.service_id = ss.service_id
+     LEFT JOIN users u ON u.id = ss.user_id
+     WHERE is2.incident_id = $1 AND u.id IS NOT NULL
+     UNION
+     SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
+     FROM service_subscribers ss
+     JOIN service_assets sa ON sa.service_id = ss.service_id
+     JOIN incident_assets ia ON ia.asset_id = sa.asset_id
+     LEFT JOIN users u ON u.id = ss.user_id
+     WHERE ia.incident_id = $1 AND u.id IS NOT NULL
+     ORDER BY display_name`,
+    [req.params.id]
+  );
+  res.json(rows);
 });
 
 module.exports = router;

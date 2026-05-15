@@ -8,6 +8,7 @@ const samlService = require('../services/samlService');
 const totpService = require('../services/totpService');
 const auditService = require('../services/auditService');
 const logger = require('../utils/logger');
+const { getOne } = require('../db/database');
 
 const router = Router();
 
@@ -29,19 +30,41 @@ router.post('/login', loginLimiter, [
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-  const { username, password, auth_type = 'local', totp_token } = req.body;
+  const { username, password, auth_type, totp_token } = req.body;
 
   try {
     let user;
+    let authSource = 'local';
 
     if (auth_type === 'ldap') {
+      authSource = 'ldap';
       user = await ldapService.authenticateUser(username, password);
-    } else {
+    } else if (auth_type === 'local') {
+      authSource = 'local';
       user = await authService.loginLocal(username, password);
+    } else {
+      // Auto mode: if a local user exists, use local auth; otherwise fallback to LDAP (if enabled).
+      const localUser = await getOne(
+        `SELECT id FROM users WHERE username=$1 AND auth_type='local' AND is_active=true LIMIT 1`,
+        [username]
+      );
+      if (localUser) {
+        authSource = 'local';
+        user = await authService.loginLocal(username, password);
+      } else {
+        const ldapCfg = await ldapService.getLdapSettings();
+        if (ldapCfg?.enabled) {
+          authSource = 'ldap';
+          user = await ldapService.authenticateUser(username, password);
+        } else {
+          authSource = 'local';
+          user = await authService.loginLocal(username, password);
+        }
+      }
     }
 
     if (!user) {
-      await auditService.log(null, username, 'auth:login_failed', 'user', null, `auth_type=${auth_type}`, req.ip);
+      await auditService.log(null, username, 'auth:login_failed', 'user', null, `auth_type=${authSource}`, req.ip);
       return res.status(401).json({ error: 'Credenziali non valide' });
     }
 
@@ -60,10 +83,23 @@ router.post('/login', loginLimiter, [
     const { token, jti } = authService.signToken(user);
     const expires = process.env.JWT_EXPIRES_IN || '8h';
     await authService.createSession(user.id, jti, req.ip, req.get('user-agent'), expires);
-    await auditService.log(user.id, user.username, 'auth:login', 'user', user.id, `auth_type=${auth_type}`, req.ip, req.get('user-agent'));
+    await auditService.log(user.id, user.username, 'auth:login', 'user', user.id, `auth_type=${authSource}`, req.ip, req.get('user-agent'));
 
     res.json({ token, user: authService.safeUser(user) });
   } catch (err) {
+    if (auth_type === 'ldap' || /LDAP/i.test(String(err.message || ''))) {
+      const m = String(err.message || '');
+      if (err.name === 'InvalidCredentialsError' || /invalid credentials|credentials/i.test(m)) {
+        await auditService.log(null, username, 'auth:login_failed', 'user', null, 'auth_type=ldap', req.ip);
+        return res.status(401).json({ error: 'Credenziali LDAP non valide' });
+      }
+      if (/LDAP access denied|not belong|authorized LDAP group|Accesso LDAP negato|gruppo LDAP autorizzato/i.test(m)) {
+        return res.status(403).json({ error: m });
+      }
+      if (/LDAP non abilitato|non configurat|search base/i.test(m)) {
+        return res.status(400).json({ error: m });
+      }
+    }
     if (err.code === 'ACCOUNT_LOCKED') return res.status(403).json({ error: err.message });
     logger.error(`[Auth] Login error: ${err.message}`);
     res.status(500).json({ error: 'Errore durante il login' });

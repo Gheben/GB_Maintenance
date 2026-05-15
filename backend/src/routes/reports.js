@@ -119,7 +119,8 @@ router.get('/assets', async (req, res) => {
 router.get('/dashboard', async (req, res) => {
   const [
     totalAssets, totalServices, activeMaintenance, openIncidents,
-    upcomingMaintenance, recentCompleted, assetsByStatus, assetsByCriticality
+    upcomingMaintenance, recentCompleted, assetsByStatus, assetsByCriticality,
+    maintenanceByType, maintenanceByStatus
   ] = await Promise.all([
     getOne(`SELECT COUNT(*)::int as count FROM assets WHERE is_active=true`),
     getOne(`SELECT COUNT(*)::int as count FROM services WHERE is_active=true`),
@@ -131,7 +132,11 @@ router.get('/dashboard', async (req, res) => {
     getMany(`SELECT id, title, status, actual_end FROM maintenance_windows
              WHERE status='completed' ORDER BY actual_end DESC LIMIT 5`),
     getMany(`SELECT status, COUNT(*)::int as count FROM assets WHERE is_active=true GROUP BY status`),
-    getMany(`SELECT criticality, COUNT(*)::int as count FROM assets WHERE is_active=true GROUP BY criticality`)
+    getMany(`SELECT criticality, COUNT(*)::int as count FROM assets WHERE is_active=true GROUP BY criticality`),
+    getMany(`SELECT type, COUNT(*)::int as count FROM maintenance_windows
+             WHERE scheduled_start > NOW() - INTERVAL '90 days' GROUP BY type`),
+    getMany(`SELECT status, COUNT(*)::int as count FROM maintenance_windows
+             WHERE scheduled_start > NOW() - INTERVAL '90 days' GROUP BY status`),
   ]);
 
   res.json({
@@ -145,6 +150,8 @@ router.get('/dashboard', async (req, res) => {
     recent_completed: recentCompleted,
     assets_by_status: assetsByStatus,
     assets_by_criticality: assetsByCriticality,
+    maintenance_by_type: maintenanceByType,
+    maintenance_by_status: maintenanceByStatus,
   });
 });
 

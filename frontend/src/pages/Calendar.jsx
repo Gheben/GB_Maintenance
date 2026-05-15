@@ -3,7 +3,7 @@ import { Layout } from '../components/Layout'
 import { Modal } from '../components/Modal'
 import { ItemPicker } from '../components/ItemPicker'
 import { toast } from '../components/Toast'
-import { maintenanceApi, templatesApi, assetsApi, servicesApi } from '../api'
+import { maintenanceApi, assetsApi, servicesApi } from '../api'
 import { useNavigate } from 'react-router-dom'
 import { StatusBadge } from '../components/StatusBadge'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
@@ -28,13 +28,12 @@ export default function Calendar() {
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false)
-  const [templates, setTemplates] = useState([])
   const [allAssets, setAllAssets] = useState([])
   const [allServices, setAllServices] = useState([])
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState({
     title: '', type: 'planned', impact_level: 'medium', description: '',
-    scheduled_start: '', scheduled_end: '', template_id: '',
+    scheduled_start: '', scheduled_end: '',
     asset_ids: [], service_ids: []
   })
 
@@ -45,7 +44,6 @@ export default function Calendar() {
   }
 
   useEffect(() => { loadEvents() }, [current])
-  useEffect(() => { templatesApi.list().then(r => setTemplates(r.data)) }, [])
   useEffect(() => {
     if (showCreate) {
       assetsApi.list({ limit: 500 }).then(r => setAllAssets(Array.isArray(r.data) ? r.data : (r.data.data || [])))
@@ -59,7 +57,7 @@ export default function Calendar() {
       title: '', type: 'planned', impact_level: 'medium', description: '',
       scheduled_start: `${dateStr}T09:00`,
       scheduled_end: `${dateStr}T18:00`,
-      template_id: '', asset_ids: [], service_ids: []
+      asset_ids: [], service_ids: []
     })
     setShowCreate(true)
   }
@@ -105,11 +103,30 @@ export default function Calendar() {
 
   return (
     <Layout title="Maintenance Calendar">
-      <div className="max-w-5xl space-y-4">
+      <div className="space-y-4">
         {/* Navigation */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setCurrent(subMonths(current, 1))}><ChevronLeft size={20} /></button>
-          <h2 className="text-lg font-bold capitalize">{format(current, 'MMMM yyyy')}</h2>
+          <div className="flex items-center gap-2">
+            <select
+              value={current.getMonth()}
+              onChange={e => setCurrent(new Date(current.getFullYear(), parseInt(e.target.value), 1))}
+              className="input text-sm py-1 px-2 h-auto"
+            >
+              {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                <option key={i} value={i}>{m}</option>
+              ))}
+            </select>
+            <select
+              value={current.getFullYear()}
+              onChange={e => setCurrent(new Date(parseInt(e.target.value), current.getMonth(), 1))}
+              className="input text-sm py-1 px-2 h-auto w-24"
+            >
+              {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
           <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setCurrent(addMonths(current, 1))}><ChevronRight size={20} /></button>
         </div>
 
@@ -201,16 +218,6 @@ export default function Calendar() {
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={2} value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} />
             </div>
-
-            {templates.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium mb-1">Notification template</label>
-                <select className="input" value={form.template_id} onChange={e => setForm(f => ({...f, template_id: e.target.value}))}>
-                  <option value="">None</option>
-                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
-            )}
 
             <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-4">
               <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Assets and Services</h4>

@@ -9,7 +9,7 @@ export function NotificationsProvider({ children }) {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const res = await notificationsApi.list({ limit: 20 })
+      const res = await notificationsApi.list({ limit: 25 })
       setNotifications(res.data.data)
       setUnreadCount(res.data.unread_count)
     } catch { /* ignore */ }
@@ -28,7 +28,7 @@ export function NotificationsProvider({ children }) {
   }
 
   const addNotification = (notif) => {
-    setNotifications(prev => [notif, ...prev].slice(0, 20))
+    setNotifications(prev => [notif, ...prev].slice(0, 25))
     if (!notif.is_read) setUnreadCount(c => c + 1)
   }
 

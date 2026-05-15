@@ -20,8 +20,8 @@ export function AuthProvider({ children }) {
 
   const login = async (credentials) => {
     const res = await authApi.login(credentials)
-    const { token, user: u, totp_required } = res.data
-    if (totp_required) return res.data
+    const { token, user: u, totp_required, require_totp } = res.data
+    if (totp_required || require_totp) return { ...res.data, totp_required: true }
     localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(u))
     setUser(u)

@@ -32,11 +32,31 @@ import Licenses from './pages/Licenses'
 import LicenseApproval from './pages/LicenseApproval'
 import MaintenanceTypes from './pages/MaintenanceTypes'
 import AssetCategories from './pages/AssetCategories'
+import IncidentSeverities from './pages/IncidentSeverities'
 
 const P = ({ children, perm }) => <ProtectedRoute permission={perm}>{children}</ProtectedRoute>
 
 export default function App() {
   useEffect(() => {
+    const getCachedBranding = () => {
+      try {
+        const raw = localStorage.getItem('public_branding_cache')
+        if (!raw) return null
+        const parsed = JSON.parse(raw)
+        return parsed && typeof parsed === 'object' ? parsed : null
+      } catch {
+        return null
+      }
+    }
+
+    const setCachedBranding = (payload) => {
+      try {
+        localStorage.setItem('public_branding_cache', JSON.stringify(payload || {}))
+      } catch {
+        // Ignore quota/storage errors.
+      }
+    }
+
     const applyBrandingFromPayload = (b) => {
       if (!b || typeof b !== 'object') return
       const appName = String(b.app_name || 'GB Maintenance').trim()
@@ -67,7 +87,9 @@ export default function App() {
     const applyBranding = async () => {
       try {
         const r = await settingsApi.publicBranding()
-        applyBrandingFromPayload(r.data || {})
+        const payload = r.data || {}
+        applyBrandingFromPayload(payload)
+        setCachedBranding(payload)
       } catch {
         // Keep static defaults if branding cannot be loaded.
       }
@@ -77,6 +99,7 @@ export default function App() {
       applyBrandingFromPayload(ev?.detail || {})
     }
 
+    applyBrandingFromPayload(getCachedBranding())
     applyBranding()
     window.addEventListener('app-branding-updated', onBrandingUpdate)
     return () => window.removeEventListener('app-branding-updated', onBrandingUpdate)
@@ -102,6 +125,7 @@ export default function App() {
               <Route path="/calendar" element={<P perm="maintenance"><Calendar /></P>} />
               <Route path="/maintenance/:id" element={<P perm="maintenance"><MaintenanceDetail /></P>} />
               <Route path="/incidents" element={<P perm="incidents"><Incidents /></P>} />
+              <Route path="/incidents/severities" element={<P perm="incidents"><IncidentSeverities /></P>} />
               <Route path="/incidents/:id" element={<P perm="incidents"><IncidentDetail /></P>} />
               <Route path="/notifications" element={<P perm="notifications"><Notifications /></P>} />
               <Route path="/users" element={<P perm="users"><Users /></P>} />

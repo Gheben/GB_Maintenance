@@ -97,7 +97,9 @@ export default function AuditLog() {
   const [purgeOpen, setPurgeOpen] = useState(false)
   const [purgeDays, setPurgeDays] = useState(90)
   const [purging, setPurging] = useState(false)
-  const limit = 50
+  const [limit, setLimit] = useState(25)
+  const [retentionDays, setRetentionDays] = useState(null)
+  const [retentionAutoPurge, setRetentionAutoPurge] = useState(true)
 
   const load = useCallback((p = 1) => {
     setLoading(true)
@@ -108,10 +110,21 @@ export default function AuditLog() {
     if (filters.from) params.from = filters.from
     if (filters.to) params.to = filters.to + 'T23:59:59'
     auditApi.list(params)
-      .then(r => { setEntries(r.data.data); setTotal(r.data.total); setPage(p) })
+      .then(r => {
+        setEntries(r.data.data)
+        setTotal(r.data.total)
+        setPage(p)
+        if (typeof r.data.retention_days === 'number') {
+          setRetentionDays(r.data.retention_days)
+          setPurgeDays((prev) => (prev === 90 ? r.data.retention_days : prev))
+        }
+        if (typeof r.data.retention_auto_purge === 'boolean') {
+          setRetentionAutoPurge(r.data.retention_auto_purge)
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [filters])
+  }, [filters, limit])
 
   useEffect(() => { load(1) }, [load])
 
@@ -137,12 +150,17 @@ export default function AuditLog() {
 
   return (
     <Layout title="Audit Log">
-      <div className="max-w-6xl space-y-4">
+      <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <ClipboardList size={20} className="text-gray-500" />
             <span className="text-sm text-gray-400">{total} total entries</span>
+            {retentionDays && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                Retention: {retentionDays} days{retentionAutoPurge ? ' (auto purge on)' : ' (auto purge off)'}
+              </span>
+            )}
           </div>
           <div className="flex gap-2">
             <button onClick={() => load(page)} className="btn-secondary flex items-center gap-1.5 text-sm">
@@ -236,7 +254,7 @@ export default function AuditLog() {
               </table>
             </div>
           )}
-          <div className="p-4"><Pagination page={page} limit={limit} total={total} onChange={p => load(p)} /></div>
+          <div className="p-4"><Pagination page={page} limit={limit} total={total} onChange={p => load(p)} onLimitChange={setLimit} /></div>
         </div>
       </div>
 

@@ -142,6 +142,13 @@ export const assetCategoriesApi = {
   delete: (id) => api.delete(`/asset-categories/${id}`),
 }
 
+export const incidentSeveritiesApi = {
+  list: () => api.get('/incident-severities'),
+  create: (data) => api.post('/incident-severities', data),
+  update: (id, data) => api.put(`/incident-severities/${id}`, data),
+  delete: (id) => api.delete(`/incident-severities/${id}`),
+}
+
 // ─── Incidents ────────────────────────────────────────────────────────────────
 export const incidentsApi = {
   list: (params) => api.get('/incidents', { params }),

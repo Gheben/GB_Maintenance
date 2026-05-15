@@ -1078,6 +1078,67 @@ const MIGRATIONS = [
           AND owner_type IN ('ldap_user','ldap_group') AND owner_ldap_dn IS NOT NULL
       `);
     }
+  },
+  {
+    version: 23,
+    name: 'incident_severities_catalog',
+    up: async (client) => {
+      await client.query(`CREATE SEQUENCE IF NOT EXISTS incident_severities_code_seq START 1`);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS incident_severities (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          slug VARCHAR(50) UNIQUE NOT NULL,
+          label VARCHAR(100) NOT NULL,
+          color VARCHAR(20) NOT NULL DEFAULT '#6366f1',
+          code VARCHAR(40) NOT NULL DEFAULT ('GB' || nextval('incident_severities_code_seq')::text),
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_incident_severities_code ON incident_severities(code)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_incident_severities_sort ON incident_severities(sort_order)`);
+
+      const seeds = [
+        ['critical', 'Critical', '#ef4444', 1],
+        ['high', 'High', '#f97316', 2],
+        ['medium', 'Medium', '#f59e0b', 3],
+        ['low', 'Low', '#10b981', 4],
+      ];
+
+      for (const [slug, label, color, sort_order] of seeds) {
+        await client.query(
+          `INSERT INTO incident_severities (slug, label, color, sort_order) VALUES ($1, $2, $3, $4) ON CONFLICT (slug) DO NOTHING`,
+          [slug, label, color, sort_order]
+        );
+      }
+
+      await client.query(`
+        SELECT setval(
+          'incident_severities_code_seq',
+          COALESCE((SELECT MAX((regexp_replace(code, '\\D', '', 'g'))::bigint) FROM incident_severities WHERE code ~ '^GB[0-9]+$'), 1),
+          true
+        )
+      `);
+
+      // Normalize any incident severities that are missing in the catalog.
+      await client.query(`
+        INSERT INTO incident_severities (slug, label, color, sort_order)
+        SELECT DISTINCT
+          lower(trim(i.severity)) AS slug,
+          initcap(lower(trim(i.severity))) AS label,
+          '#6b7280' AS color,
+          999
+        FROM incidents i
+        WHERE i.severity IS NOT NULL
+          AND trim(i.severity) <> ''
+          AND NOT EXISTS (
+            SELECT 1 FROM incident_severities s WHERE s.slug = lower(trim(i.severity))
+          )
+      `);
+    }
   }
 ];
 

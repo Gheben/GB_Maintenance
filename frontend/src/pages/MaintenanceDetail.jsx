@@ -40,6 +40,9 @@ export default function MaintenanceDetail() {
   const [mw, setMw] = useState(null)
   const [rejectModal, setRejectModal] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  const [cancelModal, setCancelModal] = useState(false)
+  const [cancelNotes, setCancelNotes] = useState('')
+  const [cancelLoading, setCancelLoading] = useState(false)
 
   // Edit mode
   const [editMode, setEditMode] = useState(false)
@@ -241,7 +244,7 @@ export default function MaintenanceDetail() {
               {mw.status === 'scheduled' && <button className="btn-primary flex items-center gap-1" onClick={() => action(() => maintenanceApi.start(id), 'Started')}><Play size={14} />Start</button>}
               {mw.status === 'in_progress' && <button className="btn-primary flex items-center gap-1" onClick={() => action(() => maintenanceApi.complete(id), 'Completed')}><Square size={14} />Complete</button>}
               {['scheduled','in_progress','pending_approval'].includes(mw.status) && (
-                <button className="btn-secondary flex items-center gap-1" onClick={() => action(() => maintenanceApi.cancel(id, 'Manually cancelled'), 'Cancelled')}><Ban size={14} />Cancel</button>
+                <button className="btn-secondary flex items-center gap-1" onClick={() => setCancelModal(true)}><Ban size={14} />Cancel</button>
               )}
             </>}
           </div>
@@ -618,6 +621,39 @@ export default function MaintenanceDetail() {
                 await action(() => maintenanceApi.reject(id, rejectReason), 'Rejected')
                 setRejectModal(false)
               }}>Reject</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {cancelModal && (
+        <Modal title="Cancel Maintenance" onClose={() => { setCancelModal(false); setCancelNotes('') }} size="sm">
+          <div className="space-y-4">
+            {mw?.status === 'in_progress' && (
+              <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                ⚠️ This maintenance is <strong>in progress</strong>. Subscribers will be notified.
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium mb-2">Cancellation notes *</label>
+              <textarea className="input" rows={4} placeholder="Why is this maintenance being cancelled?..." value={cancelNotes} onChange={e => setCancelNotes(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button className="btn-secondary" onClick={() => { setCancelModal(false); setCancelNotes('') }}>Cancel</button>
+              <button className="btn-primary" disabled={cancelLoading || !cancelNotes.trim()} onClick={async () => {
+                try {
+                  setCancelLoading(true)
+                  await maintenanceApi.cancel(id, cancelNotes)
+                  toast.success('Maintenance cancelled and subscribers notified')
+                  setCancelModal(false)
+                  setCancelNotes('')
+                  load()
+                } catch (err) {
+                  toast.error(err.response?.data?.error || 'Error')
+                } finally {
+                  setCancelLoading(false)
+                }
+              }}>{cancelLoading ? 'Cancelling...' : 'Cancel Maintenance'}</button>
             </div>
           </div>
         </Modal>

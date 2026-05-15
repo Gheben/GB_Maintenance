@@ -4,16 +4,22 @@ import { apikeysApi } from '../api'
 import { Modal } from '../components/Modal'
 import { ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
+import { Pagination } from '../components/Pagination'
 import { Plus, Trash2, Copy } from 'lucide-react'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
 
 export default function ApiKeys() {
   const [keys, setKeys] = useState([])
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(25)
   const [showCreate, setShowCreate] = useState(false)
   const [newKey, setNewKey] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [form, setForm] = useState({ name: '', expires_at: '' })
+
+  const total = keys.length
+  const visibleKeys = keys.slice((page - 1) * limit, page * limit)
 
   const load = () => apikeysApi.list().then(r => setKeys(r.data))
   useEffect(() => { load() }, [])
@@ -37,7 +43,7 @@ export default function ApiKeys() {
 
   return (
     <Layout title="API Keys">
-      <div className="max-w-3xl space-y-4">
+      <div className="space-y-4">
         <div className="flex justify-end">
           <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />Nuova Chiave</button>
         </div>
@@ -48,7 +54,7 @@ export default function ApiKeys() {
               <tr>{['Nome','Prefisso','Scadenza','Ultima uso','Azioni'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {keys.map(k => (
+              {visibleKeys.map(k => (
                 <tr key={k.id}>
                   <td className="px-4 py-3">{k.name}</td>
                   <td className="px-4 py-3 font-mono text-xs">{k.key_prefix}...</td>
@@ -62,6 +68,9 @@ export default function ApiKeys() {
               {keys.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-gray-500">Nessuna chiave</td></tr>}
             </tbody>
           </table>
+          <div className="p-4 border-t border-gray-100 dark:border-gray-700">
+            <Pagination page={page} limit={limit} total={total} onChange={setPage} onLimitChange={setLimit} />
+          </div>
         </div>
       </div>
 

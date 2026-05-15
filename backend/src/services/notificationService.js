@@ -44,7 +44,9 @@ async function sendEmailNotification(eventType, toEmails, vars, refType, refId) 
     return;
   }
 
-  const appUrl = process.env.APP_URL || 'http://localhost:4681';
+  const row = await getOne("SELECT value FROM settings WHERE key='general_config'").catch(() => null);
+  const general = row?.value ? JSON.parse(row.value || '{}') : {};
+  const appUrl = String(general?.app_url || process.env.APP_URL || 'http://localhost:4681').replace(/\/$/, '');
   const allVars = { ...vars, app_url: appUrl };
   const subject = renderTemplate(tpl.subject_template, allVars);
   const html    = renderTemplate(tpl.body_html_template, allVars);
@@ -112,6 +114,15 @@ async function getMaintenanceSubscribers(maintenanceId) {
     [serviceIds]
   );
 
+  // Direct maintenance status subscribers
+  const statusSubs = await getMany(
+    `SELECT u.id as user_id, u.email as user_email
+     FROM maintenance_status_subscribers mss
+     JOIN users u ON u.id = mss.user_id
+     WHERE mss.maintenance_id = $1 AND u.is_active = true`,
+    [maintenanceId]
+  ).catch(() => []);
+
   // Service owners
   const owners = await getMany(
     `SELECT DISTINCT s.owner_id as user_id, u.email as user_email
@@ -124,6 +135,10 @@ async function getMaintenanceSubscribers(maintenanceId) {
     if (sub.email) emails.add(sub.email);
     if (sub.user_email) emails.add(sub.user_email);
     if (sub.user_id) userIds.add(sub.user_id);
+  }
+  for (const ss of statusSubs) {
+    if (ss.user_email) emails.add(ss.user_email);
+    if (ss.user_id) userIds.add(ss.user_id);
   }
   for (const o of owners) {
     if (o.user_email) emails.add(o.user_email);
@@ -162,10 +177,12 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
     // In-app for subscribed users
     for (const uid of userIds) {
       const titles = {
-        maintenance_scheduled: `Manutenzione Programmata: ${maint.title}`,
-        maintenance_reminder: `Promemoria: ${maint.title} inizia tra ${extraVars.time_before || ''}`,
-        maintenance_started: `Manutenzione Iniziata: ${maint.title}`,
-        maintenance_completed: `Manutenzione Completata: ${maint.title}`,
+        maintenance_scheduled: `Maintenance Scheduled: ${maint.title}`,
+        maintenance_reminder: `Reminder: ${maint.title} starts in ${extraVars.time_before || ''}`,
+        maintenance_started: `Maintenance Started: ${maint.title}`,
+        maintenance_completed: `Maintenance Completed: ${maint.title}`,
+        maintenance_cancelled: `Maintenance Cancelled: ${maint.title}`,
+        maintenance_rejected: `Maintenance Rejected: ${maint.title}`,
       };
       await sendInApp(uid, eventType, titles[eventType] || maint.title, vars.description, 'maintenance', maintenanceId);
     }

@@ -289,7 +289,7 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 router.get('/:id/maintenance', async (req, res) => {
   const rows = await getMany(
     `SELECT m.id, m.title, m.type, m.status, m.impact_level, m.scheduled_start, m.scheduled_end
-     FROM maintenance_records m
+     FROM maintenance_windows m
      JOIN maintenance_assets ma ON ma.maintenance_id=m.id
      JOIN service_assets sa ON sa.asset_id=ma.asset_id
      WHERE sa.service_id=$1

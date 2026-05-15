@@ -18,6 +18,8 @@ function getDefaultGeneralSettings() {
     app_brand_image_url: '',
     default_language: 'it',
     require_approval_for: ['critical', 'high'],
+    audit_log_retention_days: 365,
+    audit_log_auto_purge: true,
     maintenance_reminders: ['7d', '1d', '2h', '30m'],
     approval_page_title: 'License Approval',
     approval_page_subtitle: 'Review the request and confirm whether the license can be approved.',

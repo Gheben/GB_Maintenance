@@ -1,16 +1,38 @@
 const { Router } = require('express');
 const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
-const { getMany, query } = require('../db/database');
+const { getMany, getOne, query } = require('../db/database');
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
 
+function normalizeRetentionDays(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return 365;
+  return Math.min(3650, Math.max(1, parsed));
+}
+
+async function loadAuditRetention() {
+  const row = await getOne("SELECT value FROM settings WHERE key='general_config'");
+  const general = row ? JSON.parse(row.value || '{}') : {};
+  return {
+    retentionDays: normalizeRetentionDays(general.audit_log_retention_days),
+    autoPurge: general.audit_log_auto_purge !== false,
+  };
+}
+
 // ─── GET /api/audit ───────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const { user_id, username, action, entity_type, from, to, page = 1, limit = 50 } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const pageNum = Math.max(1, Number.parseInt(page, 10) || 1);
+  const limitNum = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 50));
+  const offset = (pageNum - 1) * limitNum;
+  const retention = await loadAuditRetention();
+
   const params = []; let i = 1;
   const filters = [];
+
+  filters.push(`created_at >= NOW() - ($${i++} || ' days')::INTERVAL`);
+  params.push(String(retention.retentionDays));
 
   if (user_id)     { filters.push(`user_id=$${i++}`); params.push(user_id); }
   if (username)    { filters.push(`username ILIKE $${i++}`); params.push(`%${username}%`); }
@@ -19,23 +41,32 @@ router.get('/', async (req, res) => {
   if (from)        { filters.push(`created_at >= $${i++}`); params.push(from); }
   if (to)          { filters.push(`created_at <= $${i++}`); params.push(to); }
 
-  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-  const total = parseInt((await query(`SELECT COUNT(*) FROM audit_log ${where}`, params)).rows[0].count);
+  const where = `WHERE ${filters.join(' AND ')}`;
+  const total = Number.parseInt((await query(`SELECT COUNT(*) FROM audit_log ${where}`, params)).rows[0].count, 10) || 0;
   const rows = await getMany(
     `SELECT * FROM audit_log ${where} ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`,
-    [...params, parseInt(limit), offset]
+    [...params, limitNum, offset]
   );
-  res.json({ data: rows, total, page: parseInt(page), limit: parseInt(limit) });
+  res.json({
+    data: rows,
+    total,
+    page: pageNum,
+    limit: limitNum,
+    retention_days: retention.retentionDays,
+    retention_auto_purge: retention.autoPurge,
+  });
 });
 
 // ─── DELETE /api/audit/purge ──────────────────────────────────────────────────
 router.delete('/purge', async (req, res) => {
-  const days = Math.max(1, parseInt(req.query.days) || 90);
+  const retention = await loadAuditRetention();
+  const requestedDays = Number.parseInt(req.query.days, 10);
+  const days = Number.isFinite(requestedDays) ? Math.max(1, requestedDays) : retention.retentionDays;
   const result = await query(
     `DELETE FROM audit_log WHERE created_at < NOW() - ($1 || ' days')::INTERVAL`,
     [String(days)]
   );
-  res.json({ removed: result.rowCount });
+  res.json({ removed: result.rowCount, days });
 });
 
 module.exports = router;

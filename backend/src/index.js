@@ -8,7 +8,7 @@ const morgan = require('morgan');
 const { WebSocketServer } = require('ws');
 
 const logger = require('./utils/logger');
-const { initDb, getOne } = require('./db/database');
+const { initDb, getOne, query } = require('./db/database');
 const { runMigrations } = require('./db/migrations');
 const { seedSuperAdmin } = require('./services/authService');
 const wsService = require('./services/wsService');
@@ -35,6 +35,7 @@ const templateRoutes = require('./routes/templates');
 const blackoutRoutes = require('./routes/blackout');
 const maintenanceTypesRoutes = require('./routes/maintenanceTypes');
 const assetCategoriesRoutes = require('./routes/assetCategories');
+const incidentSeveritiesRoutes = require('./routes/incidentSeverities');
 const licenseRoutes = require('./routes/licenses');
 const supplierRoutes = require('./routes/suppliers');
 const uploadRoutes = require('./routes/uploads');
@@ -375,6 +376,7 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/maintenance-types', maintenanceTypesRoutes);
 app.use('/api/asset-categories', assetCategoriesRoutes);
+app.use('/api/incident-severities', incidentSeveritiesRoutes);
 app.use('/api/licenses', licenseRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/uploads', uploadRoutes);
@@ -390,6 +392,38 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Errore interno del server' });
 });
 
+async function runAuditAutoPurge() {
+  try {
+    const row = await getOne("SELECT value FROM settings WHERE key='general_config'");
+    const general = row ? JSON.parse(row.value || '{}') : {};
+    if (general.audit_log_auto_purge === false) return;
+
+    const retentionRaw = Number.parseInt(general.audit_log_retention_days, 10);
+    const retentionDays = Number.isFinite(retentionRaw)
+      ? Math.min(3650, Math.max(1, retentionRaw))
+      : 365;
+
+    const result = await query(
+      `DELETE FROM audit_log WHERE created_at < NOW() - ($1 || ' days')::INTERVAL`,
+      [String(retentionDays)]
+    );
+
+    if (result.rowCount > 0) {
+      logger.info(`[Audit] Auto-purge removed ${result.rowCount} rows older than ${retentionDays} days`);
+    }
+  } catch (err) {
+    logger.error(`[Audit] Auto-purge failed: ${err.message}`);
+  }
+}
+
+function scheduleAuditAutoPurge() {
+  const every24hMs = 24 * 60 * 60 * 1000;
+  setTimeout(() => {
+    runAuditAutoPurge();
+    setInterval(runAuditAutoPurge, every24hMs);
+  }, 15000);
+}
+
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 async function bootstrap() {
   await initDb(); // includes migrations
@@ -402,6 +436,7 @@ async function bootstrap() {
   // Background services
   schedulerService.start();
   probeService.start();
+  scheduleAuditAutoPurge();
 
   const PORT = process.env.PORT || 4680;
   server.listen(PORT, () => {

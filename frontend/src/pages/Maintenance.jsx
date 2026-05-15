@@ -157,9 +157,7 @@ export default function Maintenance() {
                             )}
                             <span
                               className="text-sm text-gray-800 dark:text-gray-100"
-                              onClick={(e) => e.stopPropagation()}
-                              onDoubleClick={(e) => e.stopPropagation()}
-                              title="Use row or arrow interactions"
+                              title="Click to expand timeline"
                             >
                               {m.title}
                             </span>

@@ -774,26 +774,64 @@ router.post('/:id/complete', requireOperator, [
 
 // ─── POST /api/maintenance/:id/cancel ────────────────────────────────────────
 router.post('/:id/cancel', requireOperator, [
-  body('reason').optional().isString(),
+  body('reason').trim().notEmpty().withMessage('Cancellation reason is required'),
 ], async (req, res) => {
-  const maint = await getOne('SELECT status FROM maintenance_windows WHERE id=$1', [req.params.id]);
-  if (!maint || ['completed','cancelled'].includes(maint.status)) {
-    return res.status(400).json({ error: 'Stato non valido' });
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const maint = await getOne('SELECT id, title, status FROM maintenance_windows WHERE id=$1', [req.params.id]);
+  if (!maint) return res.status(404).json({ error: 'Maintenance not found' });
+  if (!['scheduled','in_progress','pending_approval'].includes(maint.status)) {
+    return res.status(400).json({ error: 'Can only cancel scheduled, pending approval, or in-progress maintenance' });
   }
+
+  // Store cancellation reason in rejection_reason field
   await query(
     `UPDATE maintenance_windows SET status='cancelled', rejection_reason=$1, updated_at=NOW() WHERE id=$2`,
-    [req.body.reason || null, req.params.id]
+    [req.body.reason, req.params.id]
   );
-  await notifyMaintenance(req.params.id, 'maintenance_cancelled', { reason: req.body.reason || '' });
+
+  // Notify maintenance creator and subscribers about cancellation
+  await notifyMaintenance(req.params.id, 'maintenance_cancelled', { reason: req.body.reason });
   wsService.broadcast({ type: 'maintenance_cancelled', id: req.params.id });
-  await auditService.log(req.user.id, req.user.username, 'maintenance:cancel', 'maintenance', req.params.id, req.body.reason||null, req.ip);
+  
+  // Audit log with reason
+  await auditService.log(req.user.id, req.user.username, 'maintenance:cancelled_with_reason', 'maintenance', req.params.id, req.body.reason, req.ip);
   res.json({ message: 'Manutenzione annullata' });
 });
 
 // ─── DELETE /api/maintenance/:id ─────────────────────────────────────────────
-router.delete('/:id', requireAdmin, async (req, res) => {
+router.delete('/:id', requireAdmin, [
+  body('cancellation_reason').optional().trim(),
+], async (req, res) => {
+  const maint = await getOne(
+    'SELECT id, title, status FROM maintenance_windows WHERE id=$1',
+    [req.params.id]
+  );
+  if (!maint) return res.status(404).json({ error: 'Maintenance not found' });
+
+  // If in_progress or scheduled, require cancellation reason and notify subscribers
+  if (['in_progress', 'scheduled'].includes(maint.status)) {
+    if (!req.body.cancellation_reason || !req.body.cancellation_reason.trim()) {
+      return res.status(400).json({ error: 'Cancellation reason is required when deleting in-progress or scheduled maintenance' });
+    }
+    
+    // Notify subscribers about cancellation
+    await notifyMaintenance(req.params.id, 'maintenance_cancelled', { 
+      reason: req.body.cancellation_reason,
+      deleted: true 
+    });
+  }
+
+  // Delete the maintenance record
   await query('DELETE FROM maintenance_windows WHERE id=$1', [req.params.id]);
-  await auditService.log(req.user.id, req.user.username, 'maintenance:delete', 'maintenance', req.params.id, null, req.ip);
+  
+  // Audit log
+  const auditReason = maint.status === 'in_progress' || maint.status === 'scheduled' 
+    ? `Deleted with reason: ${req.body.cancellation_reason}`
+    : 'Deleted';
+  await auditService.log(req.user.id, req.user.username, 'maintenance:deleted', 'maintenance', req.params.id, auditReason, req.ip);
+  
   res.json({ message: 'Manutenzione eliminata' });
 });
 

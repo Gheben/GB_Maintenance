@@ -3,27 +3,51 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toast'
-import { incidentsApi } from '../api'
+import { incidentsApi, incidentSeveritiesApi } from '../api'
 import { format } from 'date-fns'
 import { ArrowLeft, Pencil, Save, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const STATUSES = ['investigating','identified','monitoring','resolved']
 const SEVERITIES = ['critical','high','medium','low']
+const TABS = [['info','Info'],['affected','Affected'],['users','Users'],['timeline','Timeline']]
 
 export default function IncidentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { hasRole } = useAuth()
   const [incident, setIncident] = useState(null)
+  const [tab, setTab] = useState('info')
+  const [incidentUsers, setIncidentUsers] = useState([])
+  const [userSearch, setUserSearch] = useState('')
+  const [userLimit, setUserLimit] = useState(25)
   const [updateForm, setUpdateForm] = useState({ status: 'investigating', message: '' })
   const [posting, setPosting] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [severityDefs, setSeverityDefs] = useState([])
 
   const load = () => incidentsApi.get(id).then(r => { setIncident(r.data); setUpdateForm(f => ({ ...f, status: r.data.status })) }).catch(() => navigate('/incidents'))
   useEffect(() => { load() }, [id])
+
+  useEffect(() => {
+    if (tab === 'users') {
+      incidentsApi.users(id).then(r => setIncidentUsers(r.data)).catch(() => {})
+    }
+  }, [tab, id])
+
+  useEffect(() => {
+    incidentSeveritiesApi.list()
+      .then((r) => setSeverityDefs(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setSeverityDefs([]))
+  }, [])
+
+  const severityOptions = severityDefs.length > 0 ? severityDefs.map((s) => s.slug) : SEVERITIES
+  const severityLabel = (slug) => {
+    const found = severityDefs.find((s) => s.slug === slug)
+    return found?.label || slug
+  }
 
   const handleUpdate = async (e) => {
     e.preventDefault()
@@ -60,9 +84,16 @@ export default function IncidentDetail() {
 
   const canEdit = hasRole('superadmin','admin')
 
+  const q = userSearch.toLowerCase()
+  const filteredUsers = incidentUsers.filter(u => !q ||
+    (u.display_name||'').toLowerCase().includes(q) ||
+    (u.username||'').toLowerCase().includes(q) ||
+    (u.email||'').toLowerCase().includes(q))
+  const visibleUsers = filteredUsers.slice(0, userLimit)
+
   return (
     <Layout title={incident.title}>
-      <div className="max-w-3xl space-y-6">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
           <Link to="/incidents" className="flex items-center gap-1 text-gray-500 hover:text-gray-700 text-sm"><ArrowLeft size={16} />Incidents</Link>
           <div className="flex gap-2">
@@ -76,7 +107,18 @@ export default function IncidentDetail() {
           </div>
         </div>
 
-        {editMode && editForm ? (
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+          {TABS.map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === key ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Info tab */}
+        {tab === 'info' && (editMode && editForm ? (
           <div className="card p-6 space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Title *</label>
@@ -85,7 +127,7 @@ export default function IncidentDetail() {
             <div>
               <label className="block text-sm font-medium mb-1">Severity</label>
               <select className="input" value={editForm.severity} onChange={e => setEditForm(f => ({...f, severity: e.target.value}))}>
-                {SEVERITIES.map(s => <option key={s} value={s}>{s}</option>)}
+                {severityOptions.map(s => <option key={s} value={s}>{severityLabel(s)}</option>)}
               </select>
             </div>
             <div>
@@ -105,56 +147,98 @@ export default function IncidentDetail() {
               {incident.resolved_at && <div><span className="text-gray-500">Resolved:</span> <strong>{format(new Date(incident.resolved_at), 'MM/dd/yyyy HH:mm')}</strong></div>}
             </div>
           </div>
-        )}
+        ))}
 
-        {/* Assets */}
-        {incident.assets?.length > 0 && (
+        {/* Affected tab */}
+        {tab === 'affected' && (
           <div className="card p-5">
             <h3 className="font-medium mb-3 text-sm">Affected assets</h3>
-            <div className="flex flex-wrap gap-2">
-              {incident.assets.map(a => <Link key={a.id} to={`/assets/${a.id}`} className="text-sm text-brand-600 hover:underline">{a.name}</Link>)}
-            </div>
+            {incident.assets?.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {incident.assets.map(a => <Link key={a.id} to={`/assets/${a.id}`} className="text-sm text-brand-600 hover:underline">{a.name}</Link>)}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-sm">No affected assets</p>
+            )}
           </div>
         )}
 
-        {/* Timeline */}
-        <div className="card p-5">
-          <h3 className="font-medium mb-4">Update timeline</h3>
-          <div className="space-y-4">
-            {incident.updates?.map(u => (
-              <div key={u.id} className="flex gap-3">
-                <div className="w-2 h-2 rounded-full bg-brand-500 mt-2 shrink-0" />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <StatusBadge status={u.status} />
-                    <span className="text-xs text-gray-400">{format(new Date(u.created_at), 'MM/dd HH:mm')} · {u.author || '—'}</span>
-                  </div>
-                  <p className="text-sm text-gray-700 dark:text-gray-300">{u.message}</p>
-                </div>
+        {/* Users tab */}
+        {tab === 'users' && (
+          <div className="card overflow-hidden">
+            <div className="p-3 border-b border-gray-100 dark:border-gray-700">
+              <input className="input text-sm" placeholder="Search users..."
+                value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserLimit(25) }} />
+            </div>
+            {filteredUsers.length === 0 ? (
+              <p className="text-gray-500 text-sm p-5 text-center">No users impacted by this incident.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>{['Display Name','Username','Email','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {visibleUsers.map(u => (
+                    <tr key={u.id}>
+                      <td className="px-4 py-2 font-medium">{u.display_name || u.username}</td>
+                      <td className="px-4 py-2 text-gray-500">{u.username}</td>
+                      <td className="px-4 py-2 text-gray-500">{u.email || '—'}</td>
+                      <td className="px-4 py-2 text-gray-500">{u.role}</td>
+                      <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-bold ${u.auth_type === 'ldap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{u.auth_type || 'local'}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {filteredUsers.length > userLimit && (
+              <div className="p-3 text-center border-t border-gray-100">
+                <button className="text-sm text-brand-600 hover:underline" onClick={() => setUserLimit(l => l + 25)}>
+                  Show {filteredUsers.length - userLimit} more
+                </button>
               </div>
-            ))}
+            )}
           </div>
-        </div>
+        )}
 
-        {/* Add update */}
-        {incident.status !== 'resolved' && (
-          <div className="card p-5">
-            <h3 className="font-medium mb-4 text-sm">Add update</h3>
-            <form onSubmit={handleUpdate} className="space-y-3">
-              <select className="input" value={updateForm.status} onChange={e => setUpdateForm(f => ({ ...f, status: e.target.value }))}>
-                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <textarea className="input" rows={3} required placeholder="Message..." value={updateForm.message}
-                onChange={e => setUpdateForm(f => ({ ...f, message: e.target.value }))} />
-              <div className="flex justify-end">
-                <button type="submit" disabled={posting} className="btn-primary">{posting ? 'Sending...' : 'Publish'}</button>
+        {/* Timeline tab */}
+        {tab === 'timeline' && (
+          <>
+            <div className="card p-5">
+              <h3 className="font-medium mb-4">Update timeline</h3>
+              <div className="space-y-4">
+                {incident.updates?.map(u => (
+                  <div key={u.id} className="flex gap-3">
+                    <div className="w-2 h-2 rounded-full bg-brand-500 mt-2 shrink-0" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <StatusBadge status={u.status} />
+                        <span className="text-xs text-gray-400">{format(new Date(u.created_at), 'MM/dd HH:mm')} · {u.author || '—'}</span>
+                      </div>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">{u.message}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </form>
-          </div>
+            </div>
+
+            {incident.status !== 'resolved' && (
+              <div className="card p-5">
+                <h3 className="font-medium mb-4 text-sm">Add update</h3>
+                <form onSubmit={handleUpdate} className="space-y-3">
+                  <select className="input" value={updateForm.status} onChange={e => setUpdateForm(f => ({ ...f, status: e.target.value }))}>
+                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <textarea className="input" rows={3} required placeholder="Message..." value={updateForm.message}
+                    onChange={e => setUpdateForm(f => ({ ...f, message: e.target.value }))} />
+                  <div className="flex justify-end">
+                    <button type="submit" disabled={posting} className="btn-primary">{posting ? 'Sending...' : 'Publish'}</button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </>
         )}
       </div>
     </Layout>
   )
 }
-
-

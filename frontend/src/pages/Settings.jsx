@@ -45,7 +45,12 @@ export default function Settings() {
     app_name: 'GB Maintenance',
     app_url: '',
     app_brand_image_url: '',
+    audit_log_retention_days: 365,
+    audit_log_auto_purge: true,
   })
+  const [systemGeneralOpen, setSystemGeneralOpen] = useState(false)
+  const [systemAuditOpen, setSystemAuditOpen] = useState(false)
+  const [systemDateTimeOpen, setSystemDateTimeOpen] = useState(false)
   const [appBrandUploading, setAppBrandUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showSmtpPass, setShowSmtpPass] = useState(false)
@@ -1200,87 +1205,160 @@ export default function Settings() {
 
         {tab === 'general' && (
           <div className="space-y-6">
-            <Section title="General settings">
-              <form onSubmit={saveGeneral} className="space-y-3">
-                <div><label className="block text-xs font-medium mb-1">Application name</label><input className="input" value={general.app_name || ''} onChange={e => setGeneral(f => ({ ...f, app_name: e.target.value }))} /></div>
-                <div><label className="block text-xs font-medium mb-1">Application URL</label><input className="input" placeholder="https://maintenance.example.com" value={general.app_url || ''} onChange={e => setGeneral(f => ({ ...f, app_url: e.target.value }))} /></div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">App image (logo, tab icon, app icon)</label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-sm">
-                      <Upload size={14} />{appBrandUploading ? 'Uploading...' : 'Upload image'}
-                      <input type="file" accept="image/*" className="hidden" disabled={appBrandUploading} onChange={e => uploadAppBrandImage(e.target.files?.[0])} />
-                    </label>
-                    {general.app_brand_image_url && (
-                      <button type="button" className="px-3 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 text-sm" onClick={() => setGeneral(f => ({ ...f, app_brand_image_url: '' }))}>
-                        Remove image
-                      </button>
-                    )}
-                  </div>
-                  {general.app_brand_image_url && (
-                    <div className="mt-2 inline-flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 p-2.5">
-                      <img src={general.app_brand_image_url} alt="App brand" className="w-10 h-10 object-contain rounded bg-white" />
-                      <span className="text-xs text-gray-500 break-all max-w-[340px]">{general.app_brand_image_url}</span>
+            <div className="card p-5 sm:p-6 space-y-4">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between text-left"
+                onClick={() => setSystemGeneralOpen(v => !v)}
+              >
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <Cog size={16} className="text-gray-500" />General settings
+                </h2>
+                {systemGeneralOpen ? <ChevronDown size={16} className="text-gray-500" /> : <ChevronRight size={16} className="text-gray-500" />}
+              </button>
+
+              {systemGeneralOpen && (
+                <form onSubmit={saveGeneral} className="space-y-3 pt-1 border-t border-gray-100 dark:border-gray-700">
+                  <div><label className="block text-xs font-medium mb-1">Application name</label><input className="input" value={general.app_name || ''} onChange={e => setGeneral(f => ({ ...f, app_name: e.target.value }))} /></div>
+                  <div><label className="block text-xs font-medium mb-1">Application URL</label><input className="input" placeholder="https://maintenance.example.com" value={general.app_url || ''} onChange={e => setGeneral(f => ({ ...f, app_url: e.target.value }))} /></div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1">App image (logo, tab icon, app icon)</label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-sm">
+                        <Upload size={14} />{appBrandUploading ? 'Uploading...' : 'Upload image'}
+                        <input type="file" accept="image/*" className="hidden" disabled={appBrandUploading} onChange={e => uploadAppBrandImage(e.target.files?.[0])} />
+                      </label>
+                      {general.app_brand_image_url && (
+                        <button type="button" className="px-3 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 text-sm" onClick={() => setGeneral(f => ({ ...f, app_brand_image_url: '' }))}>
+                          Remove image
+                        </button>
+                      )}
                     </div>
-                  )}
-                  <p className="text-xs text-gray-400 mt-1">Used for sidebar logo, browser tab favicon and app icon.</p>
-                </div>
-                <div className="flex justify-end pt-2">
-                  <button type="submit" className="btn-primary">Save</button>
-                </div>
-              </form>
-            </Section>
+                    {general.app_brand_image_url && (
+                      <div className="mt-2 inline-flex items-center gap-3 rounded-xl border border-gray-200 dark:border-gray-700 p-2.5">
+                        <img src={general.app_brand_image_url} alt="App brand" className="w-10 h-10 object-contain rounded bg-white" />
+                        <span className="text-xs text-gray-500 break-all max-w-[340px]">{general.app_brand_image_url}</span>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">Used for sidebar logo, browser tab favicon and app icon.</p>
+                  </div>
+                  <div className="flex justify-end pt-2">
+                    <button type="submit" className="btn-primary">Save</button>
+                  </div>
+                </form>
+              )}
+            </div>
 
             <div className="card p-5 sm:p-6 space-y-4">
-              <h2 className="font-semibold text-base border-b border-gray-100 dark:border-gray-700 pb-2 flex items-center gap-2">
-                <Clock size={16} className="text-gray-500" />Date &amp; Time
-              </h2>
-              <p className="text-sm text-gray-500">
-                Configure the NTP server to verify clock accuracy and the timezone applied to all timestamps in the application.
-              </p>
-              <form onSubmit={saveNtp} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between text-left"
+                onClick={() => setSystemAuditOpen(v => !v)}
+              >
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <Shield size={16} className="text-gray-500" />Audit Log Retention
+                </h2>
+                {systemAuditOpen ? <ChevronDown size={16} className="text-gray-500" /> : <ChevronRight size={16} className="text-gray-500" />}
+              </button>
+
+              {systemAuditOpen && (
+                <form onSubmit={saveGeneral} className="space-y-4 pt-1 border-t border-gray-100 dark:border-gray-700">
+                  <p className="text-sm text-gray-500">
+                    Configure for how long audit entries remain queryable. This is enforced by the API and used by the automatic purge job.
+                  </p>
                   <div>
-                    <label className="block text-xs font-medium mb-1">NTP Server</label>
-                    <div className="flex gap-2">
-                      <input className="input font-mono flex-1" placeholder="pool.ntp.org"
-                        value={ntp.ntp_server}
-                        onChange={e => { setNtp(n => ({ ...n, ntp_server: e.target.value })); setNtpDirty(true) }} />
-                      <button type="button" onClick={handleQueryNtp} disabled={ntpSyncing || !ntp.ntp_server}
-                        className="btn-secondary flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50">
-                        <RefreshCw size={13} className={ntpSyncing ? 'animate-spin' : ''} />{ntpSyncing ? 'Querying...' : 'Query NTP'}
+                    <label className="block text-xs font-medium mb-1">Retention (days)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={3650}
+                      className="input w-40"
+                      value={general.audit_log_retention_days ?? 365}
+                      onChange={e => {
+                        const n = Number.parseInt(e.target.value, 10)
+                        setGeneral(f => ({ ...f, audit_log_retention_days: Number.isFinite(n) ? n : 365 }))
+                      }}
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Recommended baseline for ISO aligned operations: 365 days searchable, longer archival outside app if required.</p>
+                  </div>
+                  <label className="flex items-center gap-3 text-sm cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-brand-600"
+                      checked={general.audit_log_auto_purge !== false}
+                      onChange={e => setGeneral(f => ({ ...f, audit_log_auto_purge: e.target.checked }))}
+                    />
+                    Enable automatic daily purge based on retention window
+                  </label>
+                  <div className="flex justify-end pt-1">
+                    <button type="submit" className="btn-primary">Save</button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            <div className="card p-5 sm:p-6 space-y-4">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between text-left"
+                onClick={() => setSystemDateTimeOpen(v => !v)}
+              >
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <Clock size={16} className="text-gray-500" />Date &amp; Time
+                </h2>
+                {systemDateTimeOpen ? <ChevronDown size={16} className="text-gray-500" /> : <ChevronRight size={16} className="text-gray-500" />}
+              </button>
+
+              {systemDateTimeOpen && (
+                <>
+                  <p className="text-sm text-gray-500 border-t border-gray-100 dark:border-gray-700 pt-3">
+                    Configure the NTP server to verify clock accuracy and the timezone applied to all timestamps in the application.
+                  </p>
+                  <form onSubmit={saveNtp} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium mb-1">NTP Server</label>
+                        <div className="flex gap-2">
+                          <input className="input font-mono flex-1" placeholder="pool.ntp.org"
+                            value={ntp.ntp_server}
+                            onChange={e => { setNtp(n => ({ ...n, ntp_server: e.target.value })); setNtpDirty(true) }} />
+                          <button type="button" onClick={handleQueryNtp} disabled={ntpSyncing || !ntp.ntp_server}
+                            className="btn-secondary flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50">
+                            <RefreshCw size={13} className={ntpSyncing ? 'animate-spin' : ''} />{ntpSyncing ? 'Querying...' : 'Query NTP'}
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">e.g. <code>pool.ntp.org</code>, <code>ntp.inrim.it</code>, <code>time.windows.com</code></p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Timezone (IANA)</label>
+                        <input className="input font-mono" placeholder="Europe/Rome"
+                          value={ntp.timezone}
+                          onChange={e => { setNtp(n => ({ ...n, timezone: e.target.value })); setNtpDirty(true) }} />
+                        <p className="text-xs text-gray-400 mt-1">e.g. <code>Europe/Rome</code>, <code>UTC</code>, <code>America/New_York</code></p>
+                      </div>
+                    </div>
+
+                    {syncResult && (
+                      <div className={`flex items-start gap-3 p-3 rounded-lg border text-sm ${syncResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                        {syncResult.success ? <CheckCircle size={15} /> : <AlertCircle size={15} />}
+                        {syncResult.message}
+                      </div>
+                    )}
+
+                    <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 text-sm text-amber-800 dark:text-amber-200">
+                      <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                      <span>The timezone is applied immediately to the running process and persisted in the database (survives restarts). The <strong>Query NTP</strong> button checks reachability and reports the offset between the NTP server clock and the server's system clock — it does not modify the system clock (use your OS/Docker host NTP daemon for that).</span>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <button type="submit" disabled={ntpSaving || !ntpDirty}
+                        className="btn-primary flex items-center gap-2 disabled:opacity-50">
+                        <Save size={14} />{ntpSaving ? 'Saving...' : 'Save'}
                       </button>
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">e.g. <code>pool.ntp.org</code>, <code>ntp.inrim.it</code>, <code>time.windows.com</code></p>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Timezone (IANA)</label>
-                    <input className="input font-mono" placeholder="Europe/Rome"
-                      value={ntp.timezone}
-                      onChange={e => { setNtp(n => ({ ...n, timezone: e.target.value })); setNtpDirty(true) }} />
-                    <p className="text-xs text-gray-400 mt-1">e.g. <code>Europe/Rome</code>, <code>UTC</code>, <code>America/New_York</code></p>
-                  </div>
-                </div>
-
-                {syncResult && (
-                  <div className={`flex items-start gap-3 p-3 rounded-lg border text-sm ${syncResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
-                    {syncResult.success ? <CheckCircle size={15} /> : <AlertCircle size={15} />}
-                    {syncResult.message}
-                  </div>
-                )}
-
-                <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 text-sm text-amber-800 dark:text-amber-200">
-                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                  <span>The timezone is applied immediately to the running process and persisted in the database (survives restarts). The <strong>Query NTP</strong> button checks reachability and reports the offset between the NTP server clock and the server's system clock — it does not modify the system clock (use your OS/Docker host NTP daemon for that).</span>
-                </div>
-
-                <div className="flex justify-end pt-1">
-                  <button type="submit" disabled={ntpSaving || !ntpDirty}
-                    className="btn-primary flex items-center gap-2 disabled:opacity-50">
-                    <Save size={14} />{ntpSaving ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
-              </form>
+                  </form>
+                </>
+              )}
             </div>
           </div>
         )}

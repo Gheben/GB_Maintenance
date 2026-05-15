@@ -30,7 +30,7 @@ export default function Templates() {
 
   return (
     <Layout title="Template Manutenzione">
-      <div className="max-w-3xl space-y-4">
+      <div className="space-y-4">
         <div className="flex justify-end">
           <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />Nuovo Template</button>
         </div>

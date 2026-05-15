@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
-import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
+import { StatusBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
 import { Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { ItemPicker } from '../components/ItemPicker'
-import { incidentsApi, assetsApi, servicesApi } from '../api'
+import { incidentsApi, assetsApi, servicesApi, incidentSeveritiesApi } from '../api'
 import { Plus, RefreshCw, Pencil } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -28,6 +28,7 @@ export default function Incidents() {
   const [createServiceIds, setCreateServiceIds] = useState([])
   const [editAssetIds, setEditAssetIds] = useState([])
   const [editServiceIds, setEditServiceIds] = useState([])
+  const [severityDefs, setSeverityDefs] = useState([])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -44,6 +45,31 @@ export default function Incidents() {
       servicesApi.list({ limit: 500 }).then(r => setAllServices(Array.isArray(r.data) ? r.data : (r.data.data || []))).catch(() => {})
     }
   }, [showCreate, editTarget])
+
+  useEffect(() => {
+    incidentSeveritiesApi.list()
+      .then((r) => {
+        const rows = Array.isArray(r.data) ? r.data : []
+        setSeverityDefs(rows)
+        if (rows.length > 0) {
+          setForm((prev) => {
+            if (rows.some((s) => s.slug === prev.severity)) return prev
+            return { ...prev, severity: rows[0].slug }
+          })
+        }
+      })
+      .catch(() => setSeverityDefs([]))
+  }, [])
+
+  const severityOptions = severityDefs.length > 0 ? severityDefs.map((s) => s.slug) : SEVERITIES
+
+  const severityMeta = (slug) => {
+    const found = severityDefs.find((s) => s.slug === slug)
+    return {
+      label: found?.label || slug,
+      color: found?.color || '#6b7280',
+    }
+  }
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -85,6 +111,7 @@ export default function Incidents() {
           </select>
           <div className="flex gap-2">
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
+            <Link to="/incidents/severities" className="btn-secondary">Severity</Link>
             <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />New Incident</button>
           </div>
         </div>
@@ -102,7 +129,18 @@ export default function Incidents() {
                     <td className="px-4 py-3 font-medium">
                       <Link to={`/incidents/${i.id}`} className="text-brand-600 hover:underline">{i.title}</Link>
                     </td>
-                    <td className="px-4 py-3"><CriticalityBadge criticality={i.severity} /></td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                        style={{
+                          color: severityMeta(i.severity).color,
+                          backgroundColor: `${severityMeta(i.severity).color}22`,
+                        }}
+                      >
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: severityMeta(i.severity).color }} />
+                        {severityMeta(i.severity).label}
+                      </span>
+                    </td>
                     <td className="px-4 py-3"><StatusBadge status={i.status} /></td>
                     <td className="px-4 py-3 text-gray-500">{format(new Date(i.started_at), 'MM/dd HH:mm')}</td>
                     <td className="px-4 py-3 text-gray-500">{i.resolved_at ? format(new Date(i.resolved_at), 'MM/dd HH:mm') : '—'}</td>
@@ -130,7 +168,7 @@ export default function Incidents() {
             <div>
               <label className="block text-sm font-medium mb-1">Severity</label>
               <select className="input" value={form.severity} onChange={e => setForm(f => ({ ...f, severity: e.target.value }))}>
-                {SEVERITIES.map(s => <option key={s} value={s}>{s}</option>)}
+                {severityOptions.map(s => <option key={s} value={s}>{severityMeta(s).label}</option>)}
               </select>
             </div>
             <div>
@@ -175,7 +213,7 @@ export default function Incidents() {
             <div>
               <label className="block text-sm font-medium mb-1">Severity</label>
               <select className="input" value={form.severity} onChange={e => setForm(f => ({ ...f, severity: e.target.value }))}>
-                {SEVERITIES.map(s => <option key={s} value={s}>{s}</option>)}
+                {severityOptions.map(s => <option key={s} value={s}>{severityMeta(s).label}</option>)}
               </select>
             </div>
             <div>

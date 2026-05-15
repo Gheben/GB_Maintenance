@@ -10,6 +10,14 @@ export default defineConfig({
         target: 'http://localhost:4680',
         changeOrigin: true,
       },
+      '/docs': {
+        target: 'http://localhost:4680',
+        changeOrigin: true,
+      },
+      '/uploads': {
+        target: 'http://localhost:4680',
+        changeOrigin: true,
+      },
       '/ws': {
         target: 'ws://localhost:4680',
         ws: true,

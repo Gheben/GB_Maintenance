@@ -175,6 +175,7 @@ async function updateUser(id, fields) {
   const vals = [];
   let idx = 1;
 
+  if (fields.username !== undefined)     { sets.push(`username=$${idx++}`); vals.push(fields.username); }
   if (fields.display_name !== undefined) { sets.push(`display_name=$${idx++}`); vals.push(fields.display_name); }
   if (fields.email !== undefined)        { sets.push(`email=$${idx++}`); vals.push(fields.email); }
   if (fields.role !== undefined)         { sets.push(`role=$${idx++}`); vals.push(fields.role); }

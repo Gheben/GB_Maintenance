@@ -23,6 +23,7 @@ async function getTransporter() {
     host: cfg.host,
     port: parseInt(cfg.port || '587', 10),
     secure: cfg.secure === true || cfg.secure === 'true',
+    ignoreTLS: cfg.ignoreTls === true || cfg.ignoreTls === 'true',
     auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
     tls: { rejectUnauthorized: false }
   });
@@ -34,7 +35,7 @@ async function sendMail({ to, subject, html, text }) {
   const transporter = await getTransporter();
   if (!transporter) {
     logger.warn('[Mailer] SMTP not configured, skipping email');
-    return false;
+    return null;
   }
 
   const cfg = await getSmtpConfig();
@@ -43,7 +44,12 @@ async function sendMail({ to, subject, html, text }) {
   try {
     const info = await transporter.sendMail({ from, to, subject, html, text });
     logger.info(`[Mailer] Email sent to ${to}: ${info.messageId}`);
-    return true;
+    return {
+      messageId: info.messageId,
+      accepted: info.accepted || [],
+      rejected: info.rejected || [],
+      response: info.response || ''
+    };
   } catch (err) {
     logger.error(`[Mailer] Failed to send email to ${to}: ${err.message}`);
     throw err;
@@ -55,6 +61,7 @@ async function testSmtp(cfg) {
     host: cfg.host,
     port: parseInt(cfg.port || '587', 10),
     secure: cfg.secure === true || cfg.secure === 'true',
+    ignoreTLS: cfg.ignoreTls === true || cfg.ignoreTls === 'true',
     auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
     tls: { rejectUnauthorized: false }
   });
