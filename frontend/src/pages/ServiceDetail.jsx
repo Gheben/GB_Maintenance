@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { ConfirmDialog } from '../components/Modal'
+import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { servicesApi, usersApi, groupsApi, settingsApi } from '../api'
 import { format } from 'date-fns'
@@ -24,6 +25,7 @@ export default function ServiceDetail() {
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [userPickerOpen, setUserPickerOpen] = useState(false)
   const [depSearch, setDepSearch] = useState('')
   const [addingDep, setAddingDep] = useState(false)
   const [userSearch, setUserSearch] = useState('')
@@ -173,6 +175,8 @@ export default function ServiceDetail() {
       criticality: service.criticality || 'medium',
       sla_target: service.sla_target || service.sla_uptime_percent || '',
       system_name: service.system_name || '',
+      is_public: !!service.is_public,
+      user_targets: Array.isArray(service.user_targets) ? service.user_targets : [],
       owner_type: service.owner_type || 'user',
       owner_id: service.owner_id || '',
       owner_group_id: service.owner_group_id || '',
@@ -192,12 +196,28 @@ export default function ServiceDetail() {
 
     setSaving(true)
     try {
+      let ownerTarget = null
+      if (editForm.owner_type === 'user' && editForm.owner_id) {
+        const owner = ownerUsers.find(u => u.id === editForm.owner_id)
+        ownerTarget = { type: 'user', id: editForm.owner_id, name: owner?.display_name || owner?.username, email: owner?.email }
+      } else if (editForm.owner_type === 'local_group' && editForm.owner_group_id) {
+        const group = localGroups.find(g => g.id === editForm.owner_group_id)
+        ownerTarget = { type: 'local_group', id: editForm.owner_group_id, name: group?.name }
+      } else if (editForm.owner_type === 'ldap_user' && editForm.owner_ldap_dn) {
+        ownerTarget = { type: 'ldap_user', dn: editForm.owner_ldap_dn, name: editForm.owner_ldap_name || editForm.owner_ldap_dn }
+      } else if (editForm.owner_type === 'ldap_group' && editForm.owner_ldap_dn) {
+        ownerTarget = { type: 'ldap_group', dn: editForm.owner_ldap_dn, name: editForm.owner_ldap_name || editForm.owner_ldap_dn }
+      }
+
       await servicesApi.update(id, {
         name: editForm.name,
         description: editForm.description || null,
         criticality: editForm.criticality,
         sla_uptime_percent: editForm.sla_target ? parseFloat(editForm.sla_target) : undefined,
         system_name: editForm.system_name || null,
+        is_public: !!editForm.is_public,
+        owner_targets: ownerTarget ? [ownerTarget] : [],
+        user_targets: Array.isArray(editForm.user_targets) ? editForm.user_targets : [],
         owner_type: editForm.owner_type,
         owner_id: editForm.owner_type === 'user' ? (editForm.owner_id || null) : null,
         owner_group_id: editForm.owner_type === 'local_group' ? (editForm.owner_group_id || null) : null,
@@ -232,6 +252,7 @@ export default function ServiceDetail() {
     (u.username||'').toLowerCase().includes(qU) ||
     (u.email||'').toLowerCase().includes(qU))
   const visibleUsers = filteredUsers.slice(0, userLimit)
+  const assignedTargets = Array.isArray(service.user_targets) ? service.user_targets : []
 
   return (
     <Layout title={service.name}>
@@ -285,6 +306,15 @@ export default function ServiceDetail() {
             <div>
               <label className="block text-sm font-medium mb-1">System / Group</label>
               <input className="input" value={editForm.system_name} onChange={e => setEditForm(f => ({ ...f, system_name: e.target.value }))} />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="service-public-detail"
+                checked={!!editForm.is_public}
+                onChange={e => setEditForm(f => ({ ...f, is_public: e.target.checked }))}
+              />
+              <label htmlFor="service-public-detail" className="text-sm">Visible on public status page</label>
             </div>
             {/* Owner Selection */}
             <div>
@@ -376,6 +406,32 @@ export default function ServiceDetail() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Users / Groups</label>
+              <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+                <div className="text-xs text-gray-600 dark:text-gray-300">
+                  {editForm.user_targets?.length > 0 ? `${editForm.user_targets.length} user/group target(s) selected` : 'No user/group targets selected'}
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  onClick={() => setUserPickerOpen(true)}
+                >
+                  Select users/groups
+                </button>
+              </div>
+              {(editForm.user_targets || []).length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {editForm.user_targets.map((t, idx) => (
+                    <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
+                      {t.name || t.id || t.dn}
+                      <span className="opacity-70">{t.type}</span>
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
@@ -523,8 +579,25 @@ export default function ServiceDetail() {
               <input className="input text-sm" placeholder="Search users..."
                 value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserLimit(25) }} />
             </div>
+            {assignedTargets.length > 0 && (
+              <div className="px-4 pt-3 pb-1">
+                <p className="text-xs font-medium text-gray-500 mb-2">Assigned targets</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {assignedTargets.map((t, idx) => (
+                    <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
+                      {t.name || t.id || t.dn}
+                      <span className="opacity-70">{t.type}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {filteredUsers.length === 0 ? (
-              <p className="text-gray-500 text-sm p-5 text-center">No software users assigned to this service.</p>
+              <p className="text-gray-500 text-sm p-5 text-center">
+                {assignedTargets.length > 0
+                  ? 'Targets are assigned, but no local users were resolved from current mappings.'
+                  : 'No software users assigned to this service.'}
+              </p>
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -555,6 +628,16 @@ export default function ServiceDetail() {
       </div>
 
       {deleteConfirm && <ConfirmDialog title="Delete Service" message={`Delete "${service.name}"?`} danger confirmLabel="Delete" onConfirm={handleDelete} onCancel={() => setDeleteConfirm(false)} />}
+
+      <OwnerPickerModal
+        open={userPickerOpen}
+        onClose={() => setUserPickerOpen(false)}
+        value={editForm?.user_targets || []}
+        onChange={(targets) => setEditForm(f => (f ? { ...f, user_targets: targets } : f))}
+        users={ownerUsers}
+        localGroups={localGroups}
+        ldapEnabled={ldapEnabled}
+      />
     </Layout>
   )
 }

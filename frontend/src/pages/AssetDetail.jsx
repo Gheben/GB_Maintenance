@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { ConfirmDialog } from '../components/Modal'
+import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { assetsApi, usersApi, groupsApi, settingsApi } from '../api'
 import { format } from 'date-fns'
@@ -29,6 +30,7 @@ export default function AssetDetail() {
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [userPickerOpen, setUserPickerOpen] = useState(false)
   // deps
   const [allAssets, setAllAssets] = useState([])
   const [depSearch, setDepSearch] = useState('')
@@ -189,6 +191,7 @@ export default function AssetDetail() {
       category: asset.category || 'application',
       criticality: asset.criticality || 'medium',
       description: asset.description || '',
+      user_targets: Array.isArray(asset.user_targets) ? asset.user_targets : [],
       owner_type: asset.owner_type || 'user',
       owner_id: asset.owner_id || '',
       owner_group_id: asset.owner_group_id || '',
@@ -208,11 +211,26 @@ export default function AssetDetail() {
 
     setSaving(true)
     try {
+      let ownerTarget = null
+      if (editForm.owner_type === 'user' && editForm.owner_id) {
+        const owner = ownerUsers.find(u => u.id === editForm.owner_id)
+        ownerTarget = { type: 'user', id: editForm.owner_id, name: owner?.display_name || owner?.username, email: owner?.email }
+      } else if (editForm.owner_type === 'local_group' && editForm.owner_group_id) {
+        const group = localGroups.find(g => g.id === editForm.owner_group_id)
+        ownerTarget = { type: 'local_group', id: editForm.owner_group_id, name: group?.name }
+      } else if (editForm.owner_type === 'ldap_user' && editForm.owner_ldap_dn) {
+        ownerTarget = { type: 'ldap_user', dn: editForm.owner_ldap_dn, name: editForm.owner_ldap_name || editForm.owner_ldap_dn }
+      } else if (editForm.owner_type === 'ldap_group' && editForm.owner_ldap_dn) {
+        ownerTarget = { type: 'ldap_group', dn: editForm.owner_ldap_dn, name: editForm.owner_ldap_name || editForm.owner_ldap_dn }
+      }
+
       await assetsApi.update(id, {
         name: editForm.name,
         category: editForm.category,
         criticality: editForm.criticality,
         description: editForm.description || null,
+        owner_targets: ownerTarget ? [ownerTarget] : [],
+        user_targets: Array.isArray(editForm.user_targets) ? editForm.user_targets : [],
         owner_type: editForm.owner_type,
         owner_id: editForm.owner_type === 'user' ? (editForm.owner_id || null) : null,
         owner_group_id: editForm.owner_type === 'local_group' ? (editForm.owner_group_id || null) : null,
@@ -250,6 +268,7 @@ export default function AssetDetail() {
     (u.username||'').toLowerCase().includes(q) ||
     (u.email||'').toLowerCase().includes(q))
   const visibleUsers = filteredUsers.slice(0, userLimit)
+  const assignedTargets = Array.isArray(asset.user_targets) ? asset.user_targets : []
 
   return (
     <Layout title={asset.name}>
@@ -391,6 +410,32 @@ export default function AssetDetail() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Users / Groups</label>
+              <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+                <div className="text-xs text-gray-600 dark:text-gray-300">
+                  {editForm.user_targets?.length > 0 ? `${editForm.user_targets.length} user/group target(s) selected` : 'No user/group targets selected'}
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  onClick={() => setUserPickerOpen(true)}
+                >
+                  Select users/groups
+                </button>
+              </div>
+              {(editForm.user_targets || []).length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {editForm.user_targets.map((t, idx) => (
+                    <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
+                      {t.name || t.id || t.dn}
+                      <span className="opacity-70">{t.type}</span>
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
@@ -539,8 +584,25 @@ export default function AssetDetail() {
               <input className="input text-sm" placeholder="Search users..."
                 value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserLimit(25) }} />
             </div>
+            {assignedTargets.length > 0 && (
+              <div className="px-4 pt-3 pb-1">
+                <p className="text-xs font-medium text-gray-500 mb-2">Assigned targets</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {assignedTargets.map((t, idx) => (
+                    <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
+                      {t.name || t.id || t.dn}
+                      <span className="opacity-70">{t.type}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {filteredUsers.length === 0 ? (
-              <p className="text-gray-500 text-sm p-5 text-center">No software users assigned to this asset.</p>
+              <p className="text-gray-500 text-sm p-5 text-center">
+                {assignedTargets.length > 0
+                  ? 'Targets are assigned, but no local users were resolved from current mappings.'
+                  : 'No software users assigned to this asset.'}
+              </p>
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -574,6 +636,16 @@ export default function AssetDetail() {
         <ConfirmDialog title="Delete Asset" message={`Delete "${asset.name}"?`} danger confirmLabel="Delete"
           onConfirm={handleDelete} onCancel={() => setDeleteConfirm(false)} />
       )}
+
+      <OwnerPickerModal
+        open={userPickerOpen}
+        onClose={() => setUserPickerOpen(false)}
+        value={editForm?.user_targets || []}
+        onChange={(targets) => setEditForm(f => (f ? { ...f, user_targets: targets } : f))}
+        users={ownerUsers}
+        localGroups={localGroups}
+        ldapEnabled={ldapEnabled}
+      />
     </Layout>
   )
 }
