@@ -718,7 +718,18 @@ function GroupsTab({ roleOptions, roleProfiles }) {
     setGroups(groupsRes.data || [])
     setAllMappings(mappingsRes.data || [])
   }
-  const openDetail = (id) => groupsApi.get(id).then(r => { setDetailGroup(r.data); setEditPerms(false) })
+  const openDetail = (id, startEdit = false) => groupsApi.get(id).then(r => {
+    const group = r.data
+    setDetailGroup(group)
+    if (startEdit) {
+      const role = group?.role || 'viewer'
+      setEditGroupRole(role)
+      setEditPermsData(mergeWithRoleBaseline(role, group?.permissions || {}, roleProfiles))
+      setEditPerms(true)
+    } else {
+      setEditPerms(false)
+    }
+  })
   useEffect(() => { load() }, [])
 
   const ldapGroupIds = new Set((allMappings || []).map(m => String(m.local_group_id || '').toLowerCase()).filter(Boolean))
@@ -927,8 +938,10 @@ function GroupsTab({ roleOptions, roleProfiles }) {
                     </td>
                   )}
                   <td className="px-4 py-3">
-                    <button className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-red-400 hover:text-red-600 transition-colors"
-                      onClick={e => { e.stopPropagation(); setDeleteTarget(g) }}><Trash2 size={14} /></button>
+                    <div className="flex items-center gap-1 justify-end">
+                      <button className="action-icon-btn" onClick={e => { e.stopPropagation(); openDetail(g.id, true) }} title="Edit"><Pencil size={14} /></button>
+                      <button className="action-icon-btn action-icon-btn-danger" onClick={e => { e.stopPropagation(); setDeleteTarget(g) }} title="Delete"><Trash2 size={14} /></button>
+                    </div>
                   </td>
                 </tr>
               ))}
