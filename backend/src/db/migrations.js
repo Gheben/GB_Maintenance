@@ -962,6 +962,122 @@ const MIGRATIONS = [
       await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_maintenance_types_code ON maintenance_types(code)`);
       await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_asset_categories_code ON asset_categories(code)`);
     }
+  },
+  {
+    version: 21,
+    name: 'public_codes_unbounded_defaults',
+    up: async (client) => {
+      await client.query(`ALTER TABLE maintenance_types ALTER COLUMN code TYPE VARCHAR(40)`);
+      await client.query(`ALTER TABLE asset_categories ALTER COLUMN code TYPE VARCHAR(40)`);
+
+      // Avoid fixed-width truncation in the future.
+      await client.query(`
+        ALTER TABLE maintenance_types
+        ALTER COLUMN code SET DEFAULT ('GB' || nextval('maintenance_types_code_seq')::text)
+      `);
+      await client.query(`
+        ALTER TABLE asset_categories
+        ALTER COLUMN code SET DEFAULT ('GB' || nextval('asset_categories_code_seq')::text)
+      `);
+
+      // Align sequences to current max numeric suffix to prevent collisions.
+      await client.query(`
+        SELECT setval(
+          'maintenance_types_code_seq',
+          COALESCE((SELECT MAX((regexp_replace(code, '\\D', '', 'g'))::bigint) FROM maintenance_types WHERE code ~ '^GB[0-9]+$'), 1),
+          true
+        )
+      `);
+      await client.query(`
+        SELECT setval(
+          'asset_categories_code_seq',
+          COALESCE((SELECT MAX((regexp_replace(code, '\\D', '', 'g'))::bigint) FROM asset_categories WHERE code ~ '^GB[0-9]+$'), 1),
+          true
+        )
+      `);
+    }
+  },
+  {
+    version: 22,
+    name: 'assets_services_multi_owner_targets',
+    up: async (client) => {
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS owner_targets JSONB NOT NULL DEFAULT '[]'::jsonb`);
+      await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS owner_targets JSONB NOT NULL DEFAULT '[]'::jsonb`);
+
+      // Backfill assets from legacy owner fields when missing.
+      await client.query(`
+        UPDATE assets a
+        SET owner_targets = jsonb_build_array(
+          jsonb_build_object(
+            'type', 'user',
+            'id', a.owner_id,
+            'name', COALESCE(u.display_name, u.username, 'User'),
+            'email', u.email
+          )
+        )
+        FROM users u
+        WHERE (a.owner_targets IS NULL OR jsonb_array_length(a.owner_targets)=0)
+          AND a.owner_type='user' AND a.owner_id IS NOT NULL AND u.id=a.owner_id
+      `);
+      await client.query(`
+        UPDATE assets a
+        SET owner_targets = jsonb_build_array(
+          jsonb_build_object(
+            'type', 'local_group',
+            'id', a.owner_group_id,
+            'name', lg.name
+          )
+        )
+        FROM local_groups lg
+        WHERE (a.owner_targets IS NULL OR jsonb_array_length(a.owner_targets)=0)
+          AND a.owner_type='local_group' AND a.owner_group_id IS NOT NULL AND lg.id=a.owner_group_id
+      `);
+      await client.query(`
+        UPDATE assets
+        SET owner_targets = jsonb_build_array(
+          jsonb_build_object('type', owner_type, 'dn', owner_ldap_dn, 'name', owner_ldap_name)
+        )
+        WHERE (owner_targets IS NULL OR jsonb_array_length(owner_targets)=0)
+          AND owner_type IN ('ldap_user','ldap_group') AND owner_ldap_dn IS NOT NULL
+      `);
+
+      // Backfill services from legacy owner fields when missing.
+      await client.query(`
+        UPDATE services s
+        SET owner_targets = jsonb_build_array(
+          jsonb_build_object(
+            'type', 'user',
+            'id', s.owner_id,
+            'name', COALESCE(u.display_name, u.username, 'User'),
+            'email', u.email
+          )
+        )
+        FROM users u
+        WHERE (s.owner_targets IS NULL OR jsonb_array_length(s.owner_targets)=0)
+          AND s.owner_type='user' AND s.owner_id IS NOT NULL AND u.id=s.owner_id
+      `);
+      await client.query(`
+        UPDATE services s
+        SET owner_targets = jsonb_build_array(
+          jsonb_build_object(
+            'type', 'local_group',
+            'id', s.owner_group_id,
+            'name', lg.name
+          )
+        )
+        FROM local_groups lg
+        WHERE (s.owner_targets IS NULL OR jsonb_array_length(s.owner_targets)=0)
+          AND s.owner_type='local_group' AND s.owner_group_id IS NOT NULL AND lg.id=s.owner_group_id
+      `);
+      await client.query(`
+        UPDATE services
+        SET owner_targets = jsonb_build_array(
+          jsonb_build_object('type', owner_type, 'dn', owner_ldap_dn, 'name', owner_ldap_name)
+        )
+        WHERE (owner_targets IS NULL OR jsonb_array_length(owner_targets)=0)
+          AND owner_type IN ('ldap_user','ldap_group') AND owner_ldap_dn IS NOT NULL
+      `);
+    }
   }
 ];
 

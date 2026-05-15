@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Search, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Search, X, ChevronUp } from 'lucide-react'
 import { Modal } from './Modal'
 
-export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = 'name', badgeKey, useModal = false, filterKey }) {
+export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = 'name', badgeKey, useModal = false, filterKey, maxResults }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
@@ -18,6 +18,10 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
     const byFilter = filter === 'all' || !activeFilterKey || String(item?.[activeFilterKey] || '') === filter
     return byText && byFilter
   })
+  const visibleLimit = Number.isFinite(Number(maxResults)) && Number(maxResults) > 0
+    ? Number(maxResults)
+    : (useModal ? 120 : 50)
+  const visible = filtered.slice(0, visibleLimit)
   const selected = allItems.filter(i => selectedIds.includes(i.id))
 
   const renderList = () => (
@@ -42,7 +46,7 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
       <div className={`${useModal ? 'max-h-[55vh]' : 'max-h-48'} overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700`}>
         {filtered.length === 0 ? (
           <div className="text-center py-4 text-sm text-gray-500">No results</div>
-        ) : filtered.map(item => (
+        ) : visible.map(item => (
           <label key={item.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-sm">
             <input
               type="checkbox"
@@ -64,6 +68,11 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
           </label>
         ))}
       </div>
+      {filtered.length > visible.length && (
+        <div className="px-3 py-2 text-xs text-gray-500 border-t border-gray-200 dark:border-gray-600">
+          Showing first {visible.length} results of {filtered.length}. Refine search/filter.
+        </div>
+      )}
     </>
   )
 
@@ -72,8 +81,11 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
       <div className="flex items-center justify-between">
         <label className="block text-sm font-medium">{label}</label>
         {useModal ? (
-          <button type="button" onClick={() => setModalOpen(true)} className="action-text-btn">
-            <ChevronDown size={13} /> Select
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+            Select
           </button>
         ) : (
           <button type="button" onClick={() => setOpen(o => !o)} className="action-text-btn">

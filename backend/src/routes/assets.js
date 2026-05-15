@@ -13,6 +13,47 @@ const CATEGORIES = ['application','infrastructure','database','network','hardwar
 const CRITICALITIES = ['critical','high','medium','low'];
 const STATUSES = ['operational','degraded','partial_outage','major_outage','under_maintenance'];
 
+function normalizeOwnerTargets(value) {
+  if (!Array.isArray(value)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const type = String(raw.type || '').trim();
+    if (!['user', 'local_group', 'ldap_user', 'ldap_group'].includes(type)) continue;
+    const id = raw.id ? String(raw.id).trim() : '';
+    const dn = raw.dn ? String(raw.dn).trim() : '';
+    const name = raw.name ? String(raw.name).trim() : '';
+    const email = raw.email ? String(raw.email).trim() : '';
+    const key = `${type}:${id || dn}`;
+    if (!key || key.endsWith(':') || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ type, id: id || undefined, dn: dn || undefined, name: name || undefined, email: email || undefined });
+    if (out.length >= 50) break;
+  }
+  return out;
+}
+
+function primaryOwnerFieldsFromTargets(targets) {
+  const first = Array.isArray(targets) && targets.length > 0 ? targets[0] : null;
+  if (!first) {
+    return { owner_type: 'user', owner_id: null, owner_group_id: null, owner_ldap_dn: null, owner_ldap_name: null };
+  }
+  if (first.type === 'user') {
+    return { owner_type: 'user', owner_id: first.id || null, owner_group_id: null, owner_ldap_dn: null, owner_ldap_name: null };
+  }
+  if (first.type === 'local_group') {
+    return { owner_type: 'local_group', owner_id: null, owner_group_id: first.id || null, owner_ldap_dn: null, owner_ldap_name: null };
+  }
+  return {
+    owner_type: first.type,
+    owner_id: null,
+    owner_group_id: null,
+    owner_ldap_dn: first.dn || null,
+    owner_ldap_name: first.name || first.dn || null,
+  };
+}
+
 // ─── GET /api/assets ──────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   const { search, category, criticality, status, page = 1, limit = 50 } = req.query;
@@ -33,13 +74,19 @@ router.get('/', async (req, res) => {
     `SELECT a.*,
        u.display_name as owner_name,
        lg.name as owner_group_name,
-       COALESCE(
+       (SELECT COUNT(*)::int FROM license_assets la JOIN licenses l ON l.id=la.license_id WHERE la.asset_id=a.id AND l.is_active=true) as license_count,
+       (SELECT COUNT(*)::int FROM license_assets la JOIN licenses l ON l.id=la.license_id WHERE la.asset_id=a.id AND l.is_active=true AND l.expiry_date IS NOT NULL AND l.expiry_date < CURRENT_DATE) as expired_license_count,
+       (SELECT MIN(l.expiry_date) FROM license_assets la JOIN licenses l ON l.id=la.license_id WHERE la.asset_id=a.id AND l.is_active=true AND l.expiry_date IS NOT NULL AND l.expiry_date >= CURRENT_DATE) as next_license_expiry,
+       (SELECT l.name FROM license_assets la JOIN licenses l ON l.id=la.license_id WHERE la.asset_id=a.id AND l.is_active=true ORDER BY l.expiry_date NULLS LAST, l.name LIMIT 1) as primary_license_name,
+       (SELECT s.company FROM license_assets la JOIN licenses l ON l.id=la.license_id LEFT JOIN suppliers s ON s.id=l.supplier_id WHERE la.asset_id=a.id AND l.is_active=true ORDER BY l.expiry_date NULLS LAST, l.name LIMIT 1) as primary_supplier_name,
+       COALESCE(NULLIF(a.owner_targets->0->>'name',''),
          CASE a.owner_type
            WHEN 'local_group' THEN lg.name
+           WHEN 'ldap_user'   THEN a.owner_ldap_name
            WHEN 'ldap_group'  THEN a.owner_ldap_name
            ELSE u.display_name
-         END
-       , '') as owner_label
+         END, '') as owner_label,
+       COALESCE(jsonb_array_length(a.owner_targets), 0)::int as owner_count
      FROM assets a
      LEFT JOIN users u ON u.id=a.owner_id
      LEFT JOIN local_groups lg ON lg.id=a.owner_group_id
@@ -61,6 +108,7 @@ router.get('/:id', async (req, res) => {
        COALESCE(
          CASE a.owner_type
            WHEN 'local_group' THEN lg.name
+           WHEN 'ldap_user'   THEN a.owner_ldap_name
            WHEN 'ldap_group'  THEN a.owner_ldap_name
            ELSE u.display_name
          END
@@ -157,8 +205,10 @@ router.get('/:id/users', async (req, res) => {
 router.get('/:id/licenses', async (req, res) => {
   const rows = await getMany(
     `SELECT l.id, l.name, l.expiry_date, l.approval_status,
+            s.id as supplier_id, s.company as supplier_name,
             CASE WHEN la.asset_id IS NULL THEN false ELSE true END AS assigned
      FROM licenses l
+     LEFT JOIN suppliers s ON s.id=l.supplier_id
      LEFT JOIN license_assets la ON la.license_id=l.id AND la.asset_id=$1
      WHERE l.is_active=true
      ORDER BY l.name`,
@@ -198,10 +248,11 @@ router.post('/', requireOperator, [
   body('criticality').optional().isIn(CRITICALITIES),
   body('description').optional().isString(),
   body('owner_id').optional().isUUID(),
-  body('owner_type').optional().isIn(['user','local_group','ldap_group']),
+  body('owner_type').optional().isIn(['user','local_group','ldap_user','ldap_group']),
   body('owner_group_id').optional({ nullable: true }).isUUID(),
   body('owner_ldap_dn').optional({ nullable: true }).isString(),
   body('owner_ldap_name').optional({ nullable: true }).isString().trim(),
+  body('owner_targets').optional().isArray(),
   body('probe_enabled').optional().isBoolean(),
   body('probe_type').optional().isIn(['http','https','tcp']),
   body('probe_url').optional().isString(),
@@ -216,20 +267,31 @@ router.post('/', requireOperator, [
 
   try {
     const slug = _slugify(req.body.name) + '-' + Date.now().toString(36);
+    const ownerTargets = normalizeOwnerTargets(req.body.owner_targets);
+    const ownerFields = ownerTargets.length > 0
+      ? primaryOwnerFieldsFromTargets(ownerTargets)
+      : {
+        owner_type: req.body.owner_type || 'user',
+        owner_id: req.body.owner_type === 'user' ? (req.body.owner_id || null) : null,
+        owner_group_id: req.body.owner_type === 'local_group' ? (req.body.owner_group_id || null) : null,
+        owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(req.body.owner_type) ? (req.body.owner_ldap_dn || null) : null,
+        owner_ldap_name: ['ldap_user', 'ldap_group'].includes(req.body.owner_type) ? (req.body.owner_ldap_name || null) : null,
+      };
     const result = await query(
       `INSERT INTO assets (name, slug, category, criticality, description, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name,
-         probe_enabled, probe_type, probe_url, probe_interval_seconds, probe_timeout_seconds,
+         owner_targets, probe_enabled, probe_type, probe_url, probe_interval_seconds, probe_timeout_seconds,
          expected_status_code, tags, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [
         req.body.name, slug,
         req.body.category, req.body.criticality || 'medium',
         req.body.description || null,
-        req.body.owner_type === 'user' ? (req.body.owner_id||null) : null,
-        req.body.owner_type || 'user',
-        req.body.owner_type === 'local_group' ? (req.body.owner_group_id||null) : null,
-        req.body.owner_type === 'ldap_group' ? (req.body.owner_ldap_dn||null) : null,
-        req.body.owner_type === 'ldap_group' ? (req.body.owner_ldap_name||null) : null,
+        ownerFields.owner_id,
+        ownerFields.owner_type,
+        ownerFields.owner_group_id,
+        ownerFields.owner_ldap_dn,
+        ownerFields.owner_ldap_name,
+        JSON.stringify(ownerTargets),
         req.body.probe_enabled || false, req.body.probe_type || null,
         req.body.probe_url || null, req.body.probe_interval_seconds || 300,
         req.body.probe_timeout_seconds || 10, req.body.expected_status_code || 200,
@@ -255,15 +317,25 @@ router.put('/:id', requireOperator, async (req, res) => {
 
   const allowed = ['name','category','criticality','description','owner_id','owner_type',
     'owner_group_id','owner_ldap_dn','owner_ldap_name','probe_enabled',
-    'probe_type','probe_url','probe_interval_seconds','probe_timeout_seconds',
+    'owner_targets','probe_type','probe_url','probe_interval_seconds','probe_timeout_seconds',
     'expected_status_code','tags','metadata','is_active'];
   const sets = []; const vals = []; let i = 1;
   for (const field of allowed) {
     if (req.body[field] !== undefined) {
       sets.push(`${field}=$${i++}`);
-      if (['tags','metadata'].includes(field)) vals.push(JSON.stringify(req.body[field]));
+      if (['tags','metadata','owner_targets'].includes(field)) vals.push(JSON.stringify(req.body[field]));
       else vals.push(req.body[field]);
     }
+  }
+
+  if (req.body.owner_targets !== undefined) {
+    const ownerTargets = normalizeOwnerTargets(req.body.owner_targets);
+    const ownerFields = primaryOwnerFieldsFromTargets(ownerTargets);
+    sets.push(`owner_id=$${i++}`); vals.push(ownerFields.owner_id);
+    sets.push(`owner_type=$${i++}`); vals.push(ownerFields.owner_type);
+    sets.push(`owner_group_id=$${i++}`); vals.push(ownerFields.owner_group_id);
+    sets.push(`owner_ldap_dn=$${i++}`); vals.push(ownerFields.owner_ldap_dn);
+    sets.push(`owner_ldap_name=$${i++}`); vals.push(ownerFields.owner_ldap_name);
   }
   if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
   sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);

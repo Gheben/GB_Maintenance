@@ -5,12 +5,38 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
 import { Modal } from '../components/Modal'
 import { ItemPicker } from '../components/ItemPicker'
+import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
-import { servicesApi, usersApi, groupsApi, settingsApi } from '../api'
-import { Plus, Search, RefreshCw, Users, User, Pencil } from 'lucide-react'
+import { servicesApi, usersApi, groupsApi, settingsApi, licensesApi } from '../api'
+import { Plus, Search, RefreshCw, Pencil } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
-const BLANK_FORM = { name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, owner_type: 'user', owner_id: '', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '', system_name: '' }
+const BLANK_FORM = { name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, owner_targets: [], system_name: '' }
+
+function LicenseState({ row }) {
+  const total = Number(row.license_count || 0)
+  const expired = Number(row.expired_license_count || 0)
+  const next = row.next_license_expiry ? new Date(row.next_license_expiry) : null
+
+  if (!total) return <span className="text-gray-400">—</span>
+
+  let badge = <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Active</span>
+  if (expired > 0) badge = <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Expired</span>
+  if (next && !Number.isNaN(next.getTime())) {
+    const days = Math.ceil((next.getTime() - Date.now()) / 86400000)
+    const date = next.toISOString().slice(0, 10)
+    if (days <= 30) badge = <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Expiring {date}</span>
+    else badge = <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Valid {date}</span>
+  }
+
+  return (
+    <div className="space-y-0.5">
+      <div>{badge}</div>
+      {row.primary_license_name && <div className="text-[11px] text-gray-500 leading-tight">{row.primary_license_name}</div>}
+      {row.primary_supplier_name && <div className="text-[11px] text-gray-400 leading-tight">{row.primary_supplier_name}</div>}
+    </div>
+  )
+}
 
 export default function Services() {
   const { hasPermission } = useAuth()
@@ -23,16 +49,17 @@ export default function Services() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
+  const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
   const [users, setUsers] = useState([])
   const [localGroups, setLocalGroups] = useState([])
   const [ldapEnabled, setLdapEnabled] = useState(false)
-  const [groupSearch, setGroupSearch] = useState('')
-  const [groupResults, setGroupResults] = useState([])
-  const [groupLoading, setGroupLoading] = useState(false)
   const [form, setForm] = useState(BLANK_FORM)
   const [createDepIds, setCreateDepIds] = useState([])
   const [editDepIds, setEditDepIds] = useState([])
   const [editOrigDepIds, setEditOrigDepIds] = useState([])
+  const [allLicenses, setAllLicenses] = useState([])
+  const [createLicenseIds, setCreateLicenseIds] = useState([])
+  const [editLicenseIds, setEditLicenseIds] = useState([])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -50,22 +77,30 @@ export default function Services() {
     }).catch(() => {})
     groupsApi.list().then(r => setLocalGroups(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     settingsApi.getLdap().then(r => setLdapEnabled(!!(r.data?.enabled))).catch(() => {})
+    licensesApi.list({ limit: 500 }).then(r => {
+      const rows = Array.isArray(r.data) ? r.data : (r.data.data || [])
+      setAllLicenses(rows)
+    }).catch(() => {})
   }, [])
 
   const handleCreate = async (e) => {
     e.preventDefault()
+    const ownerTargets = Array.isArray(form.owner_targets) ? form.owner_targets : []
+    const firstOwner = ownerTargets[0] || null
     const payload = {
       ...form,
-      owner_id: form.owner_type === 'user' ? (form.owner_id || undefined) : undefined,
-      owner_group_id: form.owner_type === 'local_group' ? (form.owner_group_id || undefined) : undefined,
-      owner_ldap_dn: form.owner_type === 'ldap_group' ? (form.owner_ldap_dn || undefined) : undefined,
-      owner_ldap_name: form.owner_type === 'ldap_group' ? (form.owner_ldap_name || undefined) : undefined,
+      owner_id: firstOwner?.type === 'user' ? firstOwner.id : undefined,
+      owner_type: firstOwner?.type || 'user',
+      owner_group_id: firstOwner?.type === 'local_group' ? firstOwner.id : undefined,
+      owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.dn : undefined,
+      owner_ldap_name: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.name : undefined,
       system_name: form.system_name || undefined,
     }
     try {
       const res = await servicesApi.create(payload)
       const newId = res.data?.id
       if (newId) {
+        await servicesApi.updateLicenses(newId, createLicenseIds).catch(() => {})
         for (const depId of createDepIds) {
           await servicesApi.addDependency(newId, depId).catch(() => {})
         }
@@ -74,42 +109,59 @@ export default function Services() {
       setShowCreate(false)
       setForm(BLANK_FORM)
       setCreateDepIds([])
+      setCreateLicenseIds([])
       load()
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const openEdit = async (s) => {
     setEditTarget(s)
+    const ownerTargets = Array.isArray(s.owner_targets) && s.owner_targets.length > 0
+      ? s.owner_targets
+      : (() => {
+        if (s.owner_type === 'user' && s.owner_id) return [{ type: 'user', id: s.owner_id, name: s.owner_name || s.owner_label || 'User', email: s.owner_email || '' }]
+        if (s.owner_type === 'local_group' && s.owner_group_id) return [{ type: 'local_group', id: s.owner_group_id, name: s.owner_group_name || s.owner_label || 'Group' }]
+        if (['ldap_user', 'ldap_group'].includes(s.owner_type) && s.owner_ldap_dn) return [{ type: s.owner_type, dn: s.owner_ldap_dn, name: s.owner_ldap_name || s.owner_ldap_dn }]
+        return []
+      })()
     setForm({
       name: s.name, description: s.description || '', criticality: s.criticality,
       sla_uptime_percent: s.sla_uptime_percent, is_public: s.is_public,
-      owner_type: s.owner_type || 'user', owner_id: s.owner_id || '',
-      owner_group_id: s.owner_group_id || '', owner_ldap_dn: s.owner_ldap_dn || '',
-      owner_ldap_name: s.owner_ldap_name || '', system_name: s.system_name || ''
+      owner_targets: ownerTargets,
+      system_name: s.system_name || ''
     })
     try {
       const r = await servicesApi.get(s.id)
       const depIds = (r.data.depends_on || []).map(d => d.id)
       setEditDepIds(depIds)
       setEditOrigDepIds(depIds)
+      const lr = await servicesApi.licenses(s.id)
+      const rows = Array.isArray(lr.data) ? lr.data : []
+      setAllLicenses(rows)
+      setEditLicenseIds(rows.filter(l => l.assigned).map(l => l.id))
     } catch {
       setEditDepIds([])
       setEditOrigDepIds([])
+      setEditLicenseIds([])
     }
   }
 
   const handleEdit = async (e) => {
     e.preventDefault()
+    const ownerTargets = Array.isArray(form.owner_targets) ? form.owner_targets : []
+    const firstOwner = ownerTargets[0] || null
     const payload = {
       ...form,
-      owner_id: form.owner_type === 'user' ? (form.owner_id || undefined) : undefined,
-      owner_group_id: form.owner_type === 'local_group' ? (form.owner_group_id || undefined) : undefined,
-      owner_ldap_dn: form.owner_type === 'ldap_group' ? (form.owner_ldap_dn || undefined) : undefined,
-      owner_ldap_name: form.owner_type === 'ldap_group' ? (form.owner_ldap_name || undefined) : undefined,
+      owner_id: firstOwner?.type === 'user' ? firstOwner.id : undefined,
+      owner_type: firstOwner?.type || 'user',
+      owner_group_id: firstOwner?.type === 'local_group' ? firstOwner.id : undefined,
+      owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.dn : undefined,
+      owner_ldap_name: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? firstOwner.name : undefined,
       system_name: form.system_name || undefined,
     }
     try {
       await servicesApi.update(editTarget.id, payload)
+      await servicesApi.updateLicenses(editTarget.id, editLicenseIds).catch(() => {})
       const toAdd = editDepIds.filter(id => !editOrigDepIds.includes(id))
       const toRemove = editOrigDepIds.filter(id => !editDepIds.includes(id))
       for (const depId of toAdd) await servicesApi.addDependency(editTarget.id, depId).catch(() => {})
@@ -120,93 +172,25 @@ export default function Services() {
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
-  const handleGroupSearch = async (q) => {
-    setGroupSearch(q)
-    if (!q || q.length < 2) { setGroupResults([]); return }
-
-    const localMatches = localGroups
-      .filter(g => String(g.name || '').toLowerCase().includes(q.toLowerCase()))
-      .slice(0, 20)
-      .map(g => ({ key: `local:${g.id}`, type: 'local_group', label: g.name, id: g.id }))
-
-    if (!ldapEnabled) {
-      setGroupResults(localMatches)
-      return
-    }
-
-    setGroupLoading(true)
-    try {
-      const r = await settingsApi.searchLdapGroups(q)
-      const ldapMatches = (r.data || []).map(g => ({
-        key: `ldap:${g.dn}`,
-        type: 'ldap_group',
-        label: g.name,
-        description: g.description,
-        dn: g.dn,
-      }))
-      setGroupResults([...localMatches, ...ldapMatches])
-    } catch {
-      setGroupResults(localMatches)
-    } finally {
-      setGroupLoading(false)
-    }
-  }
-
   const ownerFieldsJsx = (
     <div>
       <label className="block text-sm font-medium mb-1">Owner</label>
-      <div className="flex gap-1 mb-2 flex-wrap">
-        {[
-          { key: 'user', label: 'User', icon: <User size={11} /> },
-          { key: 'local_group', label: 'Group', icon: <Users size={11} /> },
-        ].map(t => (
-          <button key={t.key} type="button"
-            onClick={() => setForm(f => ({ ...f, owner_type: t.key, owner_id: '', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))}
-            className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors ${(t.key === 'local_group' ? form.owner_type !== 'user' : form.owner_type === t.key) ? 'bg-brand-600 text-white border-brand-600' : 'border-gray-300 text-gray-600 hover:border-brand-400'}`}>
-            {t.icon}{t.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+        <div className="text-xs text-gray-600 dark:text-gray-300">
+          {form.owner_targets?.length > 0 ? `${form.owner_targets.length} owner(s) selected` : 'No owners selected'}
+        </div>
+        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => setOwnerPickerOpen(true)}>
+          Select owners
+        </button>
       </div>
-      {form.owner_type === 'user' && (
-        <select className="input" value={form.owner_id} onChange={e => setForm(f => ({ ...f, owner_id: e.target.value }))}>
-          <option value="">— None —</option>
-          {users.map(u => <option key={u.id} value={u.id}>{u.display_name || u.username} ({u.auth_type || 'local'})</option>)}
-        </select>
-      )}
-      {form.owner_type !== 'user' && (
-        <div className="relative">
-          <input className="input" placeholder="Search local/LDAP group (min 2 chars)..."
-            value={(form.owner_type === 'local_group' && form.owner_group_id) || (form.owner_type === 'ldap_group' && form.owner_ldap_dn)
-              ? (form.owner_type === 'local_group' ? (localGroups.find(g => g.id === form.owner_group_id)?.name || '') : form.owner_ldap_name)
-              : groupSearch}
-            onChange={e => {
-              if (form.owner_type !== 'user') {
-                setForm(f => ({ ...f, owner_type: 'local_group', owner_group_id: '', owner_ldap_dn: '', owner_ldap_name: '' }))
-              }
-              handleGroupSearch(e.target.value)
-            }} />
-          {(form.owner_group_id || form.owner_ldap_dn) && <span className="absolute right-2 top-2 text-xs text-green-600 font-medium">selected</span>}
-          {groupLoading && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
-          {groupResults.length > 0 && !form.owner_group_id && !form.owner_ldap_dn && (
-            <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
-              {groupResults.map(g => (
-                <button key={g.key} type="button"
-                  onClick={() => {
-                    if (g.type === 'local_group') {
-                      setForm(f => ({ ...f, owner_type: 'local_group', owner_group_id: g.id, owner_ldap_dn: '', owner_ldap_name: '' }))
-                    } else {
-                      setForm(f => ({ ...f, owner_type: 'ldap_group', owner_group_id: '', owner_ldap_dn: g.dn, owner_ldap_name: g.label }))
-                    }
-                    setGroupResults([])
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 dark:hover:bg-gray-700">
-                  <span className="font-medium">{g.label}</span>
-                  <span className="text-xs text-gray-400 ml-2">{g.type === 'local_group' ? 'Local' : 'LDAP'}</span>
-                  {g.description && <span className="text-xs text-gray-400 ml-2">{g.description}</span>}
-                </button>
-              ))}
-            </div>
-          )}
+      {(form.owner_targets || []).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {form.owner_targets.map((o, idx) => (
+            <span key={`${o.type}:${o.id || o.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-100 text-brand-700">
+              {o.name || o.id || o.dn}
+              <span className="opacity-70">{o.type}</span>
+            </span>
+          ))}
         </div>
       )}
     </div>
@@ -246,6 +230,19 @@ export default function Services() {
         <input type="checkbox" id="svc-public" checked={form.is_public} onChange={e => setForm(f => ({ ...f, is_public: e.target.checked }))} />
         <label htmlFor="svc-public" className="text-sm">Visible on public status page</label>
       </div>
+      <ItemPicker
+        label="Assigned licenses"
+        allItems={allLicenses}
+        selectedIds={editTarget ? editLicenseIds : createLicenseIds}
+        onToggle={id => {
+          if (editTarget) setEditLicenseIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])
+          else setCreateLicenseIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])
+        }}
+        nameKey="name"
+        badgeKey="supplier_name"
+        useModal
+        maxResults={120}
+      />
       {extraContent}
       <div className="flex justify-end gap-3">
         <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
@@ -273,10 +270,10 @@ export default function Services() {
           <div className="overflow-x-auto">
             <table className="min-w-[640px] w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
-                <tr>{['Name','System','Criticality','Status','Owner','Assets','SLA %','Public',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                <tr>{['Name','System','Criticality','Status','Licenses','Owner','Assets','SLA %','Public',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {loading ? <tr><td colSpan={9} className="text-center py-8 text-gray-500">Loading...</td></tr>
+                {loading ? <tr><td colSpan={10} className="text-center py-8 text-gray-500">Loading...</td></tr>
                   : services.map(s => (
                     <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                       <td className="px-4 py-3 font-medium">
@@ -285,7 +282,8 @@ export default function Services() {
                       <td className="px-4 py-3 text-xs text-gray-500">{s.system_name ? <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 font-medium">{s.system_name}</span> : '—'}</td>
                       <td className="px-4 py-3"><CriticalityBadge criticality={s.criticality} /></td>
                       <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{s.owner_label || s.owner_name || <span className="text-gray-300">—</span>}</td>
+                      <td className="px-4 py-3"><LicenseState row={s} /></td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{(s.owner_label || s.owner_name || '—')}{(s.owner_count || 0) > 1 ? ` +${s.owner_count - 1}` : ''}</td>
                       <td className="px-4 py-3 text-gray-500">{s.asset_count ?? 0}</td>
                       <td className="px-4 py-3 text-gray-500">{s.sla_uptime_percent}%</td>
                       <td className="px-4 py-3">{s.is_public ? '✅' : '—'}</td>
@@ -313,6 +311,8 @@ export default function Services() {
               allItems={services}
               selectedIds={createDepIds}
               onToggle={id => setCreateDepIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])}
+              useModal
+              maxResults={120}
             />
           )}
         </Modal>
@@ -325,10 +325,22 @@ export default function Services() {
               allItems={services.filter(s => s.id !== editTarget?.id)}
               selectedIds={editDepIds}
               onToggle={id => setEditDepIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])}
+              useModal
+              maxResults={120}
             />
           )}
         </Modal>
       )}
+
+      <OwnerPickerModal
+        open={ownerPickerOpen}
+        onClose={() => setOwnerPickerOpen(false)}
+        value={form.owner_targets || []}
+        onChange={(owners) => setForm(f => ({ ...f, owner_targets: owners }))}
+        users={users}
+        localGroups={localGroups}
+        ldapEnabled={ldapEnabled}
+      />
     </Layout>
   )
 }
