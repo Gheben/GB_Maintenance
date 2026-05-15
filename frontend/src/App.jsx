@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, Suspense, lazy } from 'react'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { NotificationsProvider } from './contexts/NotificationsContext'
@@ -7,34 +7,42 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { ToastContainer } from './components/Toast'
 import { settingsApi } from './api'
 
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Assets from './pages/Assets'
-import AssetDetail from './pages/AssetDetail'
-import Services from './pages/Services'
-import Maintenance from './pages/Maintenance'
-import MaintenanceDetail from './pages/MaintenanceDetail'
-import Incidents from './pages/Incidents'
-import IncidentDetail from './pages/IncidentDetail'
-import StatusPage from './pages/StatusPage'
-import Notifications from './pages/Notifications'
-import Users from './pages/Users'
-import Settings from './pages/Settings'
-import Reports from './pages/Reports'
-import ApiKeys from './pages/ApiKeys'
-import AuditLog from './pages/AuditLog'
-import Templates from './pages/Templates'
-import BlackoutPeriods from './pages/BlackoutPeriods'
-import ServiceDetail from './pages/ServiceDetail'
-import Calendar from './pages/Calendar'
-import LocalGroups from './pages/LocalGroups'
-import Licenses from './pages/Licenses'
-import LicenseApproval from './pages/LicenseApproval'
-import MaintenanceTypes from './pages/MaintenanceTypes'
-import AssetCategories from './pages/AssetCategories'
-import IncidentSeverities from './pages/IncidentSeverities'
+const Login = lazy(() => import('./pages/Login'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Assets = lazy(() => import('./pages/Assets'))
+const AssetDetail = lazy(() => import('./pages/AssetDetail'))
+const Services = lazy(() => import('./pages/Services'))
+const Maintenance = lazy(() => import('./pages/Maintenance'))
+const MaintenanceDetail = lazy(() => import('./pages/MaintenanceDetail'))
+const Incidents = lazy(() => import('./pages/Incidents'))
+const IncidentDetail = lazy(() => import('./pages/IncidentDetail'))
+const StatusPage = lazy(() => import('./pages/StatusPage'))
+const Notifications = lazy(() => import('./pages/Notifications'))
+const Users = lazy(() => import('./pages/Users'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Reports = lazy(() => import('./pages/Reports'))
+const ApiKeys = lazy(() => import('./pages/ApiKeys'))
+const AuditLog = lazy(() => import('./pages/AuditLog'))
+const Templates = lazy(() => import('./pages/Templates'))
+const BlackoutPeriods = lazy(() => import('./pages/BlackoutPeriods'))
+const ServiceDetail = lazy(() => import('./pages/ServiceDetail'))
+const Calendar = lazy(() => import('./pages/Calendar'))
+const LocalGroups = lazy(() => import('./pages/LocalGroups'))
+const Licenses = lazy(() => import('./pages/Licenses'))
+const LicenseApproval = lazy(() => import('./pages/LicenseApproval'))
+const MaintenanceTypes = lazy(() => import('./pages/MaintenanceTypes'))
+const AssetCategories = lazy(() => import('./pages/AssetCategories'))
+const IncidentSeverities = lazy(() => import('./pages/IncidentSeverities'))
 
 const P = ({ children, perm }) => <ProtectedRoute permission={perm}>{children}</ProtectedRoute>
+
+function PageFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
+      <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 export default function App() {
   useEffect(() => {
@@ -110,36 +118,38 @@ export default function App() {
       <AuthProvider>
         <NotificationsProvider>
           <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/status" element={<StatusPage />} />
-              <Route path="/licenses/approval" element={<LicenseApproval />} />
-              <Route path="/" element={<P><Dashboard /></P>} />
-              <Route path="/assets" element={<P perm="assets"><Assets /></P>} />
-              <Route path="/assets/categories" element={<P perm="assets"><AssetCategories /></P>} />
-              <Route path="/assets/:id" element={<P perm="assets"><AssetDetail /></P>} />
-              <Route path="/services" element={<P perm="services"><Services /></P>} />
-              <Route path="/services/:id" element={<P perm="services"><ServiceDetail /></P>} />
-              <Route path="/maintenance" element={<P perm="maintenance"><Maintenance /></P>} />
-              <Route path="/maintenance/types" element={<P perm="maintenance"><MaintenanceTypes /></P>} />
-              <Route path="/calendar" element={<P perm="maintenance"><Calendar /></P>} />
-              <Route path="/maintenance/:id" element={<P perm="maintenance"><MaintenanceDetail /></P>} />
-              <Route path="/incidents" element={<P perm="incidents"><Incidents /></P>} />
-              <Route path="/incidents/severities" element={<P perm="incidents"><IncidentSeverities /></P>} />
-              <Route path="/incidents/:id" element={<P perm="incidents"><IncidentDetail /></P>} />
-              <Route path="/notifications" element={<P perm="notifications"><Notifications /></P>} />
-              <Route path="/users" element={<P perm="users"><Users /></P>} />
-              <Route path="/licenses" element={<P perm="maintenance"><Licenses /></P>} />
-              <Route path="/groups" element={<Navigate to="/users?tab=groups" replace />} />
-              <Route path="/settings" element={<P perm="settings"><Settings /></P>} />
-              <Route path="/reports" element={<P perm="reports"><Reports /></P>} />
-              <Route path="/apikeys" element={<P perm="apikeys"><ApiKeys /></P>} />
-              <Route path="/audit" element={<P perm="audit"><AuditLog /></P>} />
-              <Route path="/templates" element={<P perm="maintenance"><Templates /></P>} />
-              <Route path="/blackout" element={<P perm="maintenance"><BlackoutPeriods /></P>} />
-              <Route path="/groups" element={<P perm="users"><LocalGroups /></P>} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <Suspense fallback={<PageFallback />}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/status" element={<StatusPage />} />
+                <Route path="/licenses/approval" element={<LicenseApproval />} />
+                <Route path="/" element={<P><Dashboard /></P>} />
+                <Route path="/assets" element={<P perm="assets"><Assets /></P>} />
+                <Route path="/assets/categories" element={<P perm="assets"><AssetCategories /></P>} />
+                <Route path="/assets/:id" element={<P perm="assets"><AssetDetail /></P>} />
+                <Route path="/services" element={<P perm="services"><Services /></P>} />
+                <Route path="/services/:id" element={<P perm="services"><ServiceDetail /></P>} />
+                <Route path="/maintenance" element={<P perm="maintenance"><Maintenance /></P>} />
+                <Route path="/maintenance/types" element={<P perm="maintenance"><MaintenanceTypes /></P>} />
+                <Route path="/calendar" element={<P perm="maintenance"><Calendar /></P>} />
+                <Route path="/maintenance/:id" element={<P perm="maintenance"><MaintenanceDetail /></P>} />
+                <Route path="/incidents" element={<P perm="incidents"><Incidents /></P>} />
+                <Route path="/incidents/severities" element={<P perm="incidents"><IncidentSeverities /></P>} />
+                <Route path="/incidents/:id" element={<P perm="incidents"><IncidentDetail /></P>} />
+                <Route path="/notifications" element={<P perm="notifications"><Notifications /></P>} />
+                <Route path="/users" element={<P perm="users"><Users /></P>} />
+                <Route path="/licenses" element={<P perm="maintenance"><Licenses /></P>} />
+                <Route path="/groups" element={<Navigate to="/users?tab=groups" replace />} />
+                <Route path="/settings" element={<P perm="settings"><Settings /></P>} />
+                <Route path="/reports" element={<P perm="reports"><Reports /></P>} />
+                <Route path="/apikeys" element={<P perm="apikeys"><ApiKeys /></P>} />
+                <Route path="/audit" element={<P perm="audit"><AuditLog /></P>} />
+                <Route path="/templates" element={<P perm="maintenance"><Templates /></P>} />
+                <Route path="/blackout" element={<P perm="maintenance"><BlackoutPeriods /></P>} />
+                <Route path="/groups" element={<P perm="users"><LocalGroups /></P>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
             <ToastContainer />
           </BrowserRouter>
         </NotificationsProvider>
