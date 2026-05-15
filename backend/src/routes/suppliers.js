@@ -83,39 +83,61 @@ router.post('/', requireAdmin, [
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-  const result = await query(
-    `INSERT INTO suppliers (
-      first_name, last_name, company, nationality, phone, mobile, email, vat_number, notes, is_active,
-      website, contract_reference, contract_start_date, contract_end_date, availability_hours,
-      emergency_phone, emergency_email, sla_resolution_hours, contract_notes, contract_documents,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
-    RETURNING id`,
-    [
-      req.body.first_name,
-      req.body.last_name,
-      req.body.company,
-      req.body.nationality || null,
-      req.body.phone || null,
-      req.body.mobile || null,
-      req.body.email,
-      req.body.vat_number || null,
-      req.body.notes || null,
-      req.body.is_active !== undefined ? req.body.is_active : true,
-      req.body.website || null,
-      req.body.contract_reference || null,
-      req.body.contract_start_date || null,
-      req.body.contract_end_date || null,
-      req.body.availability_hours || null,
-      req.body.emergency_phone || null,
-      req.body.emergency_email || null,
-      req.body.sla_resolution_hours != null && req.body.sla_resolution_hours !== '' ? parseInt(req.body.sla_resolution_hours, 10) : null,
-      req.body.contract_notes || null,
-      JSON.stringify(Array.isArray(req.body.contract_documents) ? req.body.contract_documents : []),
-    ]
-  );
+  const payload = [
+    req.body.first_name,
+    req.body.last_name,
+    req.body.company,
+    req.body.nationality || null,
+    req.body.phone || null,
+    req.body.mobile || null,
+    req.body.email,
+    req.body.vat_number || null,
+    req.body.notes || null,
+    req.body.is_active !== undefined ? req.body.is_active : true,
+    req.body.website || null,
+    req.body.contract_reference || null,
+    req.body.contract_start_date || null,
+    req.body.contract_end_date || null,
+    req.body.availability_hours || null,
+    req.body.emergency_phone || null,
+    req.body.emergency_email || null,
+    req.body.sla_resolution_hours != null && req.body.sla_resolution_hours !== '' ? parseInt(req.body.sla_resolution_hours, 10) : null,
+    req.body.contract_notes || null,
+    JSON.stringify(Array.isArray(req.body.contract_documents) ? req.body.contract_documents : []),
+  ];
 
-  res.status(201).json({ id: result.rows[0].id });
+  try {
+    const result = await query(
+      `INSERT INTO suppliers (
+        first_name, last_name, company, nationality, phone, mobile, email, vat_number, notes, is_active,
+        website, contract_reference, contract_start_date, contract_end_date, availability_hours,
+        emergency_phone, emergency_email, sla_resolution_hours, contract_notes, contract_documents,
+        updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,NOW())
+      RETURNING id`,
+      payload
+    );
+    return res.status(201).json({ id: result.rows[0].id });
+  } catch (err) {
+    // Fallback for environments still on older supplier schema (without contract columns).
+    if (err?.code === '42703') {
+      const legacyResult = await query(
+        `INSERT INTO suppliers (
+          first_name, last_name, company, nationality, phone, mobile, email, vat_number, notes, is_active, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+        RETURNING id`,
+        payload.slice(0, 10)
+      );
+      return res.status(201).json({ id: legacyResult.rows[0].id, warning: 'Supplier saved on legacy schema' });
+    }
+
+    // Surface invalid values as a client error instead of generic 500.
+    if (err?.code === '22P02' || err?.code === '23502' || err?.code === '23514') {
+      return res.status(400).json({ error: `Invalid supplier data: ${err.message}` });
+    }
+
+    throw err;
+  }
 });
 
 router.put('/:id', requireAdmin, [
