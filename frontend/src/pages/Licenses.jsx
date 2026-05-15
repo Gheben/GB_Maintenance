@@ -184,9 +184,17 @@ function regionCodeToFlag(code) {
 }
 
 const COUNTRY_OPTIONS = (() => {
-  const regionCodes = typeof Intl.supportedValuesOf === 'function'
-    ? Intl.supportedValuesOf('region')
-    : FALLBACK_REGION_CODES
+  let regionCodes = FALLBACK_REGION_CODES
+  if (typeof Intl.supportedValuesOf === 'function') {
+    try {
+      const values = Intl.supportedValuesOf('region')
+      if (Array.isArray(values) && values.length > 0) {
+        regionCodes = values
+      }
+    } catch {
+      regionCodes = FALLBACK_REGION_CODES
+    }
+  }
 
   const displayNames = new Intl.DisplayNames(['en'], { type: 'region' })
   return [...new Set(regionCodes)]
