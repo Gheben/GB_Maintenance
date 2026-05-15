@@ -11,78 +11,6 @@ import { settingsApi } from '../api'
 const DEFAULT_BRANDING = { app_name: 'GB Maintenance', app_brand_image_url: '' }
 let brandingMemoryCache = null
 let brandingFetchedOnce = false
-const preloadedRouteChunks = new Set()
-const routeChunkPromises = new Map()
-
-function prefetchRouteChunk(routePath) {
-  if (!routePath) return Promise.resolve()
-  if (preloadedRouteChunks.has(routePath)) return Promise.resolve()
-  if (routeChunkPromises.has(routePath)) return routeChunkPromises.get(routePath)
-
-  let loader = null
-  switch (routePath) {
-    case '/':
-      loader = () => import('../pages/Dashboard')
-      break
-    case '/assets':
-      loader = () => import('../pages/Assets')
-      break
-    case '/services':
-      loader = () => import('../pages/Services')
-      break
-    case '/maintenance':
-      loader = () => import('../pages/Maintenance')
-      break
-    case '/incidents':
-      loader = () => import('../pages/Incidents')
-      break
-    case '/calendar':
-      loader = () => import('../pages/Calendar')
-      break
-    case '/notifications':
-      loader = () => import('../pages/Notifications')
-      break
-    case '/reports':
-      loader = () => import('../pages/Reports')
-      break
-    case '/licenses':
-      loader = () => import('../pages/Licenses')
-      break
-    case '/users':
-      loader = () => import('../pages/Users')
-      break
-    case '/blackout':
-      loader = () => import('../pages/BlackoutPeriods')
-      break
-    case '/audit':
-      loader = () => import('../pages/AuditLog')
-      break
-    case '/settings':
-      loader = () => import('../pages/Settings')
-      break
-    case '/apikeys':
-      loader = () => import('../pages/ApiKeys')
-      break
-    default:
-      loader = null
-      break
-  }
-
-  if (!loader) return Promise.resolve()
-
-  const promise = loader()
-    .then(() => {
-      preloadedRouteChunks.add(routePath)
-      routeChunkPromises.delete(routePath)
-    })
-    .catch(() => {
-      routeChunkPromises.delete(routePath)
-      throw new Error(`Failed to preload route: ${routePath}`)
-    })
-
-  routeChunkPromises.set(routePath, promise)
-  return promise
-}
 
 function getCachedBranding() {
   try {
@@ -121,7 +49,7 @@ const NAV = [
   { divider: true },
   { to: '/users', icon: Users, label: 'Users & Groups', perm: 'users' },
   { to: '/blackout', icon: Ban, label: 'Blackout', perm: 'maintenance' },
-  { to: '/audit', icon: ScrollText, label: 'Audit Log', perm: 'audit' },
+  { to: '/audit', icon: ScrollText, label: 'Audit Log', perm: 'audit', superadminOnly: true },
   { to: '/settings', icon: Settings, label: 'Settings', perm: 'settings' },
   { href: '/status', icon: Globe, label: 'Status Page', perm: 'status_page' },
   { divider: true },
@@ -186,25 +114,9 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
 
   const handleLogout = async () => { await logout(); navigate('/login') }
 
-  const handleNavIntent = (to) => {
-    prefetchRouteChunk(to).catch(() => {})
-  }
-
-  const handleNavClick = async (e, to) => {
-    onClose()
-    if (preloadedRouteChunks.has(to)) return
-
-    e.preventDefault()
-    try {
-      await prefetchRouteChunk(to)
-    } catch {
-      // If prefetch fails, continue navigation anyway.
-    }
-    navigate(to)
-  }
-
   const isVisible = item => {
     if (item.divider) return false
+    if (item.superadminOnly && user?.role !== 'superadmin') return false
     if (item.perm && !hasPermission(item.perm)) return false
     return true
   }
@@ -267,6 +179,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
                 ? <div key={i} className="my-2 border-t border-gray-700" />
                 : null
             }
+            if (item.superadminOnly && user?.role !== 'superadmin') return null
             if (!hasPermission(item.perm)) return null
             const Icon = item.icon
             if (item.href) {
@@ -282,9 +195,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
             }
             return (
               <NavLink key={item.to} to={item.to} end={item.to === '/'}
-                onClick={(e) => handleNavClick(e, item.to)}
-                onMouseEnter={() => handleNavIntent(item.to)}
-                onFocus={() => handleNavIntent(item.to)}
+                onClick={onClose}
                 title={cl ? item.label : undefined}
                 className={({ isActive }) =>
                   `${itemBase} ${isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}`}>

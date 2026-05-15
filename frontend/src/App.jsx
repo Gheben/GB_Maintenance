@@ -7,57 +7,35 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { ToastContainer } from './components/Toast'
 import { settingsApi } from './api'
 
-let routeChunksPreloaded = false
-
-function preloadRouteChunks() {
-  if (routeChunksPreloaded) return
-  routeChunksPreloaded = true
-  Promise.allSettled([
-    import('./pages/Dashboard'),
-    import('./pages/Assets'),
-    import('./pages/AssetDetail'),
-    import('./pages/Services'),
-    import('./pages/ServiceDetail'),
-    import('./pages/Maintenance'),
-    import('./pages/MaintenanceDetail'),
-    import('./pages/Incidents'),
-    import('./pages/IncidentDetail'),
-    import('./pages/Notifications'),
-    import('./pages/Users'),
-    import('./pages/Licenses'),
-    import('./pages/Reports'),
-    import('./pages/Settings'),
-  ]).catch(() => {})
-}
+import Dashboard from './pages/Dashboard'
+import Assets from './pages/Assets'
+import Services from './pages/Services'
+import Maintenance from './pages/Maintenance'
+import Incidents from './pages/Incidents'
+import Calendar from './pages/Calendar'
+import Notifications from './pages/Notifications'
+import Users from './pages/Users'
+import Licenses from './pages/Licenses'
+import Reports from './pages/Reports'
+import Settings from './pages/Settings'
+import BlackoutPeriods from './pages/BlackoutPeriods'
+import AuditLog from './pages/AuditLog'
+import ApiKeys from './pages/ApiKeys'
 
 const Login = lazy(() => import('./pages/Login'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Assets = lazy(() => import('./pages/Assets'))
 const AssetDetail = lazy(() => import('./pages/AssetDetail'))
-const Services = lazy(() => import('./pages/Services'))
-const Maintenance = lazy(() => import('./pages/Maintenance'))
 const MaintenanceDetail = lazy(() => import('./pages/MaintenanceDetail'))
-const Incidents = lazy(() => import('./pages/Incidents'))
 const IncidentDetail = lazy(() => import('./pages/IncidentDetail'))
 const StatusPage = lazy(() => import('./pages/StatusPage'))
-const Notifications = lazy(() => import('./pages/Notifications'))
-const Users = lazy(() => import('./pages/Users'))
-const Settings = lazy(() => import('./pages/Settings'))
-const Reports = lazy(() => import('./pages/Reports'))
-const ApiKeys = lazy(() => import('./pages/ApiKeys'))
-const AuditLog = lazy(() => import('./pages/AuditLog'))
 const Templates = lazy(() => import('./pages/Templates'))
-const BlackoutPeriods = lazy(() => import('./pages/BlackoutPeriods'))
 const ServiceDetail = lazy(() => import('./pages/ServiceDetail'))
-const Calendar = lazy(() => import('./pages/Calendar'))
 const LocalGroups = lazy(() => import('./pages/LocalGroups'))
-const Licenses = lazy(() => import('./pages/Licenses'))
 const LicenseApproval = lazy(() => import('./pages/LicenseApproval'))
 const MaintenanceTypes = lazy(() => import('./pages/MaintenanceTypes'))
 const AssetCategories = lazy(() => import('./pages/AssetCategories'))
 const IncidentSeverities = lazy(() => import('./pages/IncidentSeverities'))
 
-const P = ({ children, perm }) => <ProtectedRoute permission={perm}>{children}</ProtectedRoute>
+const P = ({ children, perm, roles }) => <ProtectedRoute permission={perm} roles={roles}>{children}</ProtectedRoute>
 
 function PageFallback() {
   return (
@@ -136,30 +114,6 @@ export default function App() {
     return () => window.removeEventListener('app-branding-updated', onBrandingUpdate)
   }, [])
 
-  useEffect(() => {
-    if (!localStorage.getItem('token')) return
-
-    let cancelled = false
-    const preload = () => {
-      if (cancelled) return
-      preloadRouteChunks()
-    }
-
-    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-      const id = window.requestIdleCallback(preload, { timeout: 1200 })
-      return () => {
-        cancelled = true
-        window.cancelIdleCallback(id)
-      }
-    }
-
-    const timer = setTimeout(preload, 300)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [])
-
   return (
     <ThemeProvider>
       <AuthProvider>
@@ -190,7 +144,7 @@ export default function App() {
                 <Route path="/settings" element={<P perm="settings"><Settings /></P>} />
                 <Route path="/reports" element={<P perm="reports"><Reports /></P>} />
                 <Route path="/apikeys" element={<P perm="apikeys"><ApiKeys /></P>} />
-                <Route path="/audit" element={<P perm="audit"><AuditLog /></P>} />
+                <Route path="/audit" element={<P perm="audit" roles={['superadmin']}><AuditLog /></P>} />
                 <Route path="/templates" element={<P perm="maintenance"><Templates /></P>} />
                 <Route path="/blackout" element={<P perm="maintenance"><BlackoutPeriods /></P>} />
                 <Route path="/groups" element={<P perm="users"><LocalGroups /></P>} />

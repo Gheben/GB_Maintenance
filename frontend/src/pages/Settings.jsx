@@ -3,6 +3,7 @@ import { Layout } from '../components/Layout'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { settingsApi, apikeysApi, maintenanceTypesApi, assetCategoriesApi, notificationsApi, uploadsApi } from '../api'
 import { toast } from '../components/Toast'
+import { useAuth } from '../contexts/AuthContext'
 import { format } from 'date-fns'
 import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, Clock, RefreshCw, Pencil, GripVertical, Mail, Network, KeyRound, Tag, Cog, Bell, ChevronDown, ChevronRight, Upload } from 'lucide-react'
 
@@ -17,6 +18,8 @@ function Section({ title, children }) {
 }
 
 export default function Settings() {
+  const { user } = useAuth()
+  const isSuperAdmin = user?.role === 'superadmin'
   const [tab, setTab] = useState('smtp')
   const [smtp, setSmtp] = useState({ host: '', port: 587, secure: false, user: '', pass: '', from: '' })
   const [ldap, setLdap] = useState({
@@ -102,25 +105,33 @@ export default function Settings() {
 
   useEffect(() => {
     settingsApi.getSmtp().then(r => setSmtp(prev => ({ ...prev, ...r.data }))).catch(() => {})
-    settingsApi.getLdap().then(r => {
-      const d = r.data || {}
-      setLdapSavedHasPassword(!!(d.bind_password || d.ldap_service_password))
-      setLdap({
-        enabled: d.enabled || false,
-        url: d.url || d.ldap_server || '',
-        domain: d.domain || d.ldap_domain || '',
-        base_dn: d.base_dn || d.ldap_base_dn || '',
-        bind_username: d.bind_username || d.ldap_service_username || '',
-        bind_password: '',
-        skip_cert_verify: d.skip_cert_verify || false,
-        user_filter: d.user_filter || '(sAMAccountName={{username}})',
-        ad_mode: d.ad_mode !== false,
-      })
-    }).catch(() => {})
-    settingsApi.getSaml().then(r => setSaml(prev => ({ ...prev, ...r.data }))).catch(() => {})
-    settingsApi.getGeneral().then(r => setGeneral(r.data)).catch(() => {})
+    if (isSuperAdmin) {
+      settingsApi.getLdap().then(r => {
+        const d = r.data || {}
+        setLdapSavedHasPassword(!!(d.bind_password || d.ldap_service_password))
+        setLdap({
+          enabled: d.enabled || false,
+          url: d.url || d.ldap_server || '',
+          domain: d.domain || d.ldap_domain || '',
+          base_dn: d.base_dn || d.ldap_base_dn || '',
+          bind_username: d.bind_username || d.ldap_service_username || '',
+          bind_password: '',
+          skip_cert_verify: d.skip_cert_verify || false,
+          user_filter: d.user_filter || '(sAMAccountName={{username}})',
+          ad_mode: d.ad_mode !== false,
+        })
+      }).catch(() => {})
+      settingsApi.getSaml().then(r => setSaml(prev => ({ ...prev, ...r.data }))).catch(() => {})
+      settingsApi.getGeneral().then(r => setGeneral(r.data)).catch(() => {})
+    }
     settingsApi.getNtp().then(r => setNtp(r.data)).catch(() => {})
-  }, [])
+  }, [isSuperAdmin])
+
+  useEffect(() => {
+    if (!isSuperAdmin && ['ldap', 'saml'].includes(tab)) {
+      setTab('smtp')
+    }
+  }, [isSuperAdmin, tab])
 
   useEffect(() => {
     if (tab === 'apikeys') apikeysApi.list().then(r => setKeys(r.data)).catch(() => {})
@@ -324,8 +335,8 @@ export default function Settings() {
   const TABS = [
     { id: 'smtp',     label: 'SMTP & Email',      icon: Mail },
     { id: 'emailtpl', label: 'Email Templates',   icon: Bell },
-    { id: 'ldap',     label: 'LDAP / AD',          icon: Network },
-    { id: 'saml',     label: 'SAML / SSO',         icon: Shield },
+    ...(isSuperAdmin ? [{ id: 'ldap', label: 'LDAP / AD', icon: Network }] : []),
+    ...(isSuperAdmin ? [{ id: 'saml', label: 'SAML / SSO', icon: Shield }] : []),
     { id: 'apikeys',  label: 'API Keys',           icon: KeyRound },
     { id: 'general',  label: 'System',             icon: Cog },
   ]
@@ -1205,6 +1216,7 @@ export default function Settings() {
 
         {tab === 'general' && (
           <div className="space-y-6">
+            {isSuperAdmin && (
             <div className="card p-5 sm:p-6 space-y-4">
               <button
                 type="button"
@@ -1248,7 +1260,9 @@ export default function Settings() {
                 </form>
               )}
             </div>
+            )}
 
+            {isSuperAdmin && (
             <div className="card p-5 sm:p-6 space-y-4">
               <button
                 type="button"
@@ -1296,6 +1310,7 @@ export default function Settings() {
                 </form>
               )}
             </div>
+            )}
 
             <div className="card p-5 sm:p-6 space-y-4">
               <button

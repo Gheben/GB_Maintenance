@@ -1,9 +1,9 @@
 const { Router } = require('express');
-const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
+const { requireAuth, requireSuperAdmin } = require('../middleware/authMiddleware');
 const { getMany, getOne, query } = require('../db/database');
 
 const router = Router();
-router.use(requireAuth, requireAdmin);
+router.use(requireAuth, requireSuperAdmin);
 
 function normalizeRetentionDays(value) {
   const parsed = Number.parseInt(value, 10);

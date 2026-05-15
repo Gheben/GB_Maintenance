@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { body, validationResult } = require('express-validator');
-const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
+const { requireAuth, requireAdmin, requireSuperAdmin } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const { encrypt, isEncrypted } = require('../utils/encryption');
 const ldapService = require('../services/ldapService');
@@ -183,7 +183,7 @@ router.post('/smtp/test', requireAuth, requireAdmin, [
 });
 
 // ─── GET/PUT /api/settings/ldap ───────────────────────────────────────────────
-router.get('/ldap', requireAuth, requireAdmin, async (req, res) => {
+router.get('/ldap', requireAuth, requireSuperAdmin, async (req, res) => {
   const cfg = await ldapService.getLdapSettings();
   if (!cfg) return res.json({});
   const safe = { ...cfg };
@@ -191,13 +191,13 @@ router.get('/ldap', requireAuth, requireAdmin, async (req, res) => {
   res.json(safe);
 });
 
-router.put('/ldap', requireAuth, requireAdmin, async (req, res) => {
+router.put('/ldap', requireAuth, requireSuperAdmin, async (req, res) => {
   await ldapService.saveLdapSettings(req.body);
   await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'ldap_config', null, req.ip);
   res.json({ message: 'Configurazione LDAP salvata' });
 });
 
-router.post('/ldap/test', requireAuth, requireAdmin, async (req, res) => {
+router.post('/ldap/test', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
     const cfg = req.body.url ? req.body : await ldapService.getLdapSettings();
     if (!cfg) return res.status(400).json({ error: 'LDAP non configurato' });
@@ -207,7 +207,7 @@ router.post('/ldap/test', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // ─── GET /api/settings/ldap/groups ───────────────────────────────────────────
-router.get('/ldap/groups', requireAuth, requireAdmin, async (req, res) => {
+router.get('/ldap/groups', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
     const groups = await ldapService.searchGroups(req.query.q || '');
     res.json(groups);
@@ -215,7 +215,7 @@ router.get('/ldap/groups', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // ─── GET /api/settings/ldap/users ────────────────────────────────────────────
-router.get('/ldap/users', requireAuth, requireAdmin, async (req, res) => {
+router.get('/ldap/users', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
     const users = await ldapService.searchUsers(req.query.q || '');
     res.json(users);
@@ -223,7 +223,7 @@ router.get('/ldap/users', requireAuth, requireAdmin, async (req, res) => {
 });
 
 // ─── GET/PUT /api/settings/saml ───────────────────────────────────────────────
-router.get('/saml', requireAuth, requireAdmin, async (req, res) => {
+router.get('/saml', requireAuth, requireSuperAdmin, async (req, res) => {
   const cfg = await samlService.getSamlSettings();
   if (!cfg) return res.json({});
   const safe = { ...cfg };
@@ -231,7 +231,7 @@ router.get('/saml', requireAuth, requireAdmin, async (req, res) => {
   res.json(safe);
 });
 
-router.put('/saml', requireAuth, requireAdmin, async (req, res) => {
+router.put('/saml', requireAuth, requireSuperAdmin, async (req, res) => {
   await samlService.saveSamlSettings(req.body);
   await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'saml_config', null, req.ip);
   res.json({ message: 'Configurazione SAML salvata' });
@@ -257,12 +257,12 @@ router.put('/webhooks', requireAuth, requireAdmin, [
 });
 
 // ─── GET/PUT /api/settings/general ───────────────────────────────────────────
-router.get('/general', requireAuth, requireAdmin, async (req, res) => {
+router.get('/general', requireAuth, requireSuperAdmin, async (req, res) => {
   const row = await getOne("SELECT value FROM settings WHERE key='general_config'");
   res.json(row ? { ...getDefaultGeneralSettings(), ...JSON.parse(row.value) } : getDefaultGeneralSettings());
 });
 
-router.put('/general', requireAuth, requireAdmin, async (req, res) => {
+router.put('/general', requireAuth, requireSuperAdmin, async (req, res) => {
   await query(
     `INSERT INTO settings (key, value, updated_at) VALUES ('general_config', $1, NOW())
      ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
@@ -380,6 +380,11 @@ router.put('/role-presets', requireAuth, requireAdmin, async (req, res) => {
 
 // ─── GET /api/settings/:key — generic fallback, must be LAST ─────────────────
 router.get('/:key', requireAuth, requireAdmin, async (req, res) => {
+  const sensitiveKeys = new Set(['ldap_config', 'saml_config', 'general_config']);
+  if (sensitiveKeys.has(String(req.params.key || '')) && req.user?.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Superadmin role required' });
+  }
+
   const row = await getOne('SELECT value FROM settings WHERE key=$1', [req.params.key]);
   if (!row) return res.status(404).json({ error: 'Chiave non trovata' });
   try {

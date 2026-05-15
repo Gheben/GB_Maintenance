@@ -11,17 +11,6 @@ function warmupAfterLogin() {
   if (warmupDone) return
   warmupDone = true
 
-  // Warm up route chunks so first navigation feels instant.
-  Promise.allSettled([
-    import('./Dashboard'),
-    import('./Assets'),
-    import('./Services'),
-    import('./Maintenance'),
-    import('./Incidents'),
-    import('./Users'),
-    import('./Licenses'),
-  ]).catch(() => {})
-
   // Warm up key API payloads used by landing/primary sections.
   Promise.allSettled([
     reportsApi.dashboard(),
