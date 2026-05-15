@@ -8,7 +8,7 @@ const morgan = require('morgan');
 const { WebSocketServer } = require('ws');
 
 const logger = require('./utils/logger');
-const { initDb } = require('./db/database');
+const { initDb, getOne } = require('./db/database');
 const { runMigrations } = require('./db/migrations');
 const { seedSuperAdmin } = require('./services/authService');
 const wsService = require('./services/wsService');
@@ -81,14 +81,32 @@ app.use('/docs', (req, res, next) => {
 });
 
 // Swagger UI HTML wrapper — must be before express.static catch-all
-app.get(['/docs', '/docs/'], (req, res) => {
+app.get(['/docs', '/docs/'], async (req, res) => {
+  const escHtml = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const escAttr = (v) => String(v || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+
+  let appName = 'GB Maintenance';
+  let appBrandImageUrl = '';
+  try {
+    const row = await getOne("SELECT value FROM settings WHERE key='general_config'");
+    const general = JSON.parse(row?.value || '{}');
+    appName = String(general.app_name || 'GB Maintenance');
+    appBrandImageUrl = String(general.app_brand_image_url || '').trim();
+  } catch {
+    // Keep defaults if branding is unavailable.
+  }
+
+  const faviconUrl = appBrandImageUrl || '/logo.svg';
+  const docsTitle = `${appName} — API Docs`;
+
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html>
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GB Maintenance — API Docs</title>
+  <title>${escHtml(docsTitle)}</title>
+  <link rel="icon" href="${escAttr(faviconUrl)}" />
   <link rel="stylesheet" href="/docs/swagger-ui.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -190,7 +208,7 @@ app.get(['/docs', '/docs/'], (req, res) => {
 <body>
   <div id="docs-header">
     <div class="logo">🔧</div>
-    <h1>GB Maintenance &mdash; API Reference</h1>
+    <h1>${escHtml(appName)} &mdash; API Reference</h1>
     <span class="badge">v1</span>
     <a class="back-btn" id="back-btn" href="/">&#x2190; App</a>
     <button class="download-btn" onclick="downloadPostman()" title="Download OpenAPI 3.0 for Postman">&#x2B07; Postman</button>
