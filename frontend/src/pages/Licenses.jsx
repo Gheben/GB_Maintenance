@@ -167,6 +167,26 @@ function approvalStatusMeta(status, approvalRequired = true) {
   return { label: 'Pending', cls: 'bg-amber-100 text-amber-700' }
 }
 
+function normalizeSupplierPayload(form) {
+  return {
+    ...form,
+    nationality: form.nationality?.trim() || null,
+    phone: form.phone?.trim() || null,
+    mobile: form.mobile?.trim() || null,
+    vat_number: form.vat_number?.trim() || null,
+    notes: form.notes?.trim() || null,
+    website: form.website?.trim() || null,
+    contract_reference: form.contract_reference?.trim() || null,
+    contract_start_date: form.contract_start_date || null,
+    contract_end_date: form.contract_end_date || null,
+    availability_hours: form.availability_hours?.trim() || null,
+    emergency_phone: form.emergency_phone?.trim() || null,
+    emergency_email: form.emergency_email?.trim() || null,
+    sla_resolution_hours: form.sla_resolution_hours === '' ? null : Number(form.sla_resolution_hours),
+    contract_notes: form.contract_notes?.trim() || null,
+  }
+}
+
 function extractContactList(value) {
   if (!value || typeof value !== 'object') return []
   if (Array.isArray(value)) return dedupeContacts(value)
@@ -1037,11 +1057,12 @@ export default function Licenses() {
   const saveSupplier = async (e) => {
     e.preventDefault()
     try {
+      const payload = normalizeSupplierPayload(supplierForm)
       if (editingSupplier?.id) {
-        await suppliersApi.update(editingSupplier.id, supplierForm)
+        await suppliersApi.update(editingSupplier.id, payload)
         toast.success('Supplier updated')
       } else {
-        await suppliersApi.create(supplierForm)
+        await suppliersApi.create(payload)
         toast.success('Supplier created')
       }
       setShowSupplierForm(false)
