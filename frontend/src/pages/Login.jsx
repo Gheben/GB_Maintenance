@@ -1,15 +1,40 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Wrench, Eye, EyeOff, Coffee } from 'lucide-react'
 import { toast } from '../components/Toast'
-import { settingsApi } from '../api'
+import { settingsApi, reportsApi, maintenanceApi, assetsApi, servicesApi, notificationsApi } from '../api'
+
+let warmupDone = false
+
+function warmupAfterLogin() {
+  if (warmupDone) return
+  warmupDone = true
+
+  // Warm up route chunks so first navigation feels instant.
+  Promise.allSettled([
+    import('./Dashboard'),
+    import('./Assets'),
+    import('./Services'),
+    import('./Maintenance'),
+    import('./Incidents'),
+    import('./Users'),
+    import('./Licenses'),
+  ]).catch(() => {})
+
+  // Warm up key API payloads used by landing/primary sections.
+  Promise.allSettled([
+    reportsApi.dashboard(),
+    maintenanceApi.list({ page: 1, limit: 20 }),
+    assetsApi.list({ page: 1, limit: 20 }),
+    servicesApi.list({ page: 1, limit: 20 }),
+    notificationsApi.list({ page: 1, limit: 20 }),
+  ]).catch(() => {})
+}
 
 export default function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
-  const from = location.state?.from?.pathname || '/'
 
   const [form, setForm] = useState({ username: '', password: '', totp_code: '' })
   const [needTotp, setNeedTotp] = useState(false)
@@ -42,7 +67,8 @@ export default function Login() {
       }
       const result = await login(payload)
       if (result.totp_required) { setNeedTotp(true); setLoading(false); return }
-      navigate(from, { replace: true })
+      warmupAfterLogin()
+      navigate('/', { replace: true })
     } catch (err) {
       toast.error(err.response?.data?.error || 'Credenziali non valide')
     } finally {

@@ -50,10 +50,18 @@ const ChartTip = ({ active, payload }) => {
 
 export default function Dashboard() {
   const [data, setData] = useState(null)
+  const [upcomingPage, setUpcomingPage] = useState(1)
+  const [recentPage, setRecentPage] = useState(1)
+  const maintenancePageSize = 5
 
   useEffect(() => {
     reportsApi.dashboard().then(r => setData(r.data)).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    setUpcomingPage(1)
+    setRecentPage(1)
+  }, [data])
 
   const assetStatusData = (data?.assets_by_status || []).map(s => ({
     name: s.status.replace(/_/g, ' '), value: s.count, color: ASSET_STATUS_COLORS[s.status] || '#6b7280'
@@ -67,6 +75,12 @@ export default function Dashboard() {
   const mStatusData = (data?.maintenance_by_status || []).map(s => ({
     name: s.status.replace(/_/g, ' '), value: s.count, fill: STATUS_BAR_COLORS[s.status] || '#6b7280'
   }))
+  const upcomingList = data?.upcoming_maintenance || []
+  const recentList = data?.recent_completed || []
+  const upcomingTotalPages = Math.max(1, Math.ceil(upcomingList.length / maintenancePageSize))
+  const recentTotalPages = Math.max(1, Math.ceil(recentList.length / maintenancePageSize))
+  const pagedUpcoming = upcomingList.slice((upcomingPage - 1) * maintenancePageSize, upcomingPage * maintenancePageSize)
+  const pagedRecent = recentList.slice((recentPage - 1) * maintenancePageSize, recentPage * maintenancePageSize)
 
   return (
     <Layout title="Dashboard">
@@ -152,9 +166,9 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="card p-5">
             <h2 className="font-semibold mb-4">Upcoming Maintenances</h2>
-            {data?.upcoming_maintenance?.length === 0 && <p className="text-gray-500 text-sm">No scheduled maintenances</p>}
+            {upcomingList.length === 0 && <p className="text-gray-500 text-sm">No scheduled maintenances</p>}
             <div className="space-y-3">
-              {data?.upcoming_maintenance?.map(m => (
+              {pagedUpcoming.map(m => (
                 <Link key={m.id} to={`/maintenance/${m.id}`} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700">
                   <div>
                     <p className="text-sm font-medium">{m.title}</p>
@@ -167,19 +181,61 @@ export default function Dashboard() {
                 </Link>
               ))}
             </div>
+            {upcomingTotalPages > 1 && (
+              <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 text-xs">
+                <button
+                  type="button"
+                  className="btn-secondary px-2 py-1"
+                  disabled={upcomingPage <= 1}
+                  onClick={() => setUpcomingPage(p => Math.max(1, p - 1))}
+                >
+                  Prev
+                </button>
+                <span className="text-gray-500">Page {upcomingPage} / {upcomingTotalPages}</span>
+                <button
+                  type="button"
+                  className="btn-secondary px-2 py-1"
+                  disabled={upcomingPage >= upcomingTotalPages}
+                  onClick={() => setUpcomingPage(p => Math.min(upcomingTotalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="card p-5">
             <h2 className="font-semibold mb-4">Recently Completed</h2>
-            {data?.recent_completed?.length === 0 && <p className="text-gray-500 text-sm">None yet</p>}
+            {recentList.length === 0 && <p className="text-gray-500 text-sm">None yet</p>}
             <div className="space-y-3">
-              {data?.recent_completed?.map(m => (
+              {pagedRecent.map(m => (
                 <Link key={m.id} to={`/maintenance/${m.id}`} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700">
                   <p className="text-sm font-medium">{m.title}</p>
                   <StatusBadge status={m.status} />
                 </Link>
               ))}
             </div>
+            {recentTotalPages > 1 && (
+              <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 text-xs">
+                <button
+                  type="button"
+                  className="btn-secondary px-2 py-1"
+                  disabled={recentPage <= 1}
+                  onClick={() => setRecentPage(p => Math.max(1, p - 1))}
+                >
+                  Prev
+                </button>
+                <span className="text-gray-500">Page {recentPage} / {recentTotalPages}</span>
+                <button
+                  type="button"
+                  className="btn-secondary px-2 py-1"
+                  disabled={recentPage >= recentTotalPages}
+                  onClick={() => setRecentPage(p => Math.min(recentTotalPages, p + 1))}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
