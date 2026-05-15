@@ -30,6 +30,43 @@ const ALL_PERMS = [
   { key: 'audit',         label: 'Audit Log' },
 ]
 
+const PASSWORD_RULES = [
+  { key: 'len', label: 'At least 8 characters', test: (v) => String(v || '').length >= 8 },
+  { key: 'upper', label: 'At least 1 uppercase letter (A-Z)', test: (v) => /[A-Z]/.test(String(v || '')) },
+  { key: 'num', label: 'At least 1 number (0-9)', test: (v) => /[0-9]/.test(String(v || '')) },
+  { key: 'special', label: 'At least 1 special character', test: (v) => /[^A-Za-z0-9]/.test(String(v || '')) },
+]
+
+function passwordPolicyOk(password) {
+  return PASSWORD_RULES.every((r) => r.test(password))
+}
+
+function PasswordRequirements({ password, optional = false }) {
+  const value = String(password || '')
+  const checks = PASSWORD_RULES.map((r) => ({ ...r, ok: r.test(value) }))
+  const showChecks = !optional || value.length > 0
+
+  return (
+    <div className="mt-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/60 px-3 py-2">
+      <p className="text-xs font-medium text-gray-600 dark:text-gray-300">
+        Password requirements {optional && <span className="font-normal text-gray-400">(applied only if you set a new password)</span>}
+      </p>
+      {showChecks ? (
+        <ul className="mt-1 space-y-1">
+          {checks.map((r) => (
+            <li key={r.key} className={`text-xs flex items-center gap-1.5 ${r.ok ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+              {r.ok ? <CheckCircle size={12} /> : <XCircle size={12} />}
+              <span>{r.label}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-gray-400 mt-1">Leave empty to keep the current password.</p>
+      )}
+    </div>
+  )
+}
+
 function AuthBadge({ authType }) {
   if (authType === 'ldap') return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">LDAP</span>
   return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">Local</span>
@@ -201,7 +238,10 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
     if (!email.trim()) { toast.error('Email is required'); return }
     if (!role) { toast.error('Role is required'); return }
     if (!groupId) { toast.error('Group is required'); return }
-    if (password && password.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    if (password && !passwordPolicyOk(password)) {
+      toast.error('Password does not meet minimum security requirements')
+      return
+    }
     setSaving(true)
     try {
       await usersApi.update(u.id, {
@@ -240,6 +280,7 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
         <div>
           <label className="block text-sm font-medium mb-1">New password</label>
           <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Leave empty to keep current password" />
+          <PasswordRequirements password={password} optional />
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Local group *</label>
@@ -316,6 +357,10 @@ function UsersTab({ roleOptions, roleProfiles }) {
   const handleCreate = async (e) => {
     e.preventDefault()
     if (!form.group_id) { toast.error('Group is required'); return }
+    if (!passwordPolicyOk(form.password)) {
+      toast.error('Password does not meet minimum security requirements')
+      return
+    }
     try {
       const payload = { ...form, permissions: mergeWithRoleBaseline(form.role, form.permissions, roleProfiles) }
       if (form.role === 'admin') payload.permissions = {}
@@ -430,7 +475,9 @@ function UsersTab({ roleOptions, roleProfiles }) {
             <div><label className="block text-sm font-medium mb-1">Email *</label>
               <input className="input" type="email" required value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
             <div><label className="block text-sm font-medium mb-1">Password *</label>
-              <input className="input" type="password" required value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></div>
+              <input className="input" type="password" required value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+              <PasswordRequirements password={form.password} />
+            </div>
             <div><label className="block text-sm font-medium mb-1">Local group *</label>
               <select className="input" required value={form.group_id} onChange={e => setForm(f => ({ ...f, group_id: e.target.value }))}>
                 <option value="">— Select group —</option>
