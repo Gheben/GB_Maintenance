@@ -277,6 +277,10 @@ router.post('/', requireOperator, [
         owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(req.body.owner_type) ? (req.body.owner_ldap_dn || null) : null,
         owner_ldap_name: ['ldap_user', 'ldap_group'].includes(req.body.owner_type) ? (req.body.owner_ldap_name || null) : null,
       };
+    const hasOwner = ownerTargets.length > 0 || !!(ownerFields.owner_id || ownerFields.owner_group_id || ownerFields.owner_ldap_dn);
+    if (!hasOwner) {
+      return res.status(400).json({ error: 'At least one owner is required' });
+    }
     const result = await query(
       `INSERT INTO assets (name, slug, category, criticality, description, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name,
          owner_targets, probe_enabled, probe_type, probe_url, probe_interval_seconds, probe_timeout_seconds,
@@ -312,7 +316,12 @@ router.post('/', requireOperator, [
 
 // ─── PUT /api/assets/:id ──────────────────────────────────────────────────────
 router.put('/:id', requireOperator, async (req, res) => {
-  const asset = await getOne('SELECT id FROM assets WHERE id=$1', [req.params.id]);
+  const asset = await getOne(
+    `SELECT id, owner_id, owner_group_id, owner_ldap_dn, owner_targets
+     FROM assets
+     WHERE id=$1`,
+    [req.params.id]
+  );
   if (!asset) return res.status(404).json({ error: 'Asset non trovato' });
 
   const allowed = ['name','category','criticality','description','owner_id','owner_type',
@@ -330,12 +339,21 @@ router.put('/:id', requireOperator, async (req, res) => {
 
   if (req.body.owner_targets !== undefined) {
     const ownerTargets = normalizeOwnerTargets(req.body.owner_targets);
+    if (ownerTargets.length < 1) {
+      return res.status(400).json({ error: 'At least one owner is required' });
+    }
     const ownerFields = primaryOwnerFieldsFromTargets(ownerTargets);
     sets.push(`owner_id=$${i++}`); vals.push(ownerFields.owner_id);
     sets.push(`owner_type=$${i++}`); vals.push(ownerFields.owner_type);
     sets.push(`owner_group_id=$${i++}`); vals.push(ownerFields.owner_group_id);
     sets.push(`owner_ldap_dn=$${i++}`); vals.push(ownerFields.owner_ldap_dn);
     sets.push(`owner_ldap_name=$${i++}`); vals.push(ownerFields.owner_ldap_name);
+  } else {
+    const currentTargets = Array.isArray(asset.owner_targets) ? asset.owner_targets : [];
+    const hasOwner = currentTargets.length > 0 || !!(asset.owner_id || asset.owner_group_id || asset.owner_ldap_dn);
+    if (!hasOwner) {
+      return res.status(400).json({ error: 'At least one owner is required' });
+    }
   }
   if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
   sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);

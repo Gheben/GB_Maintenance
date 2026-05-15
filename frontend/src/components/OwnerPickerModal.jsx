@@ -5,6 +5,19 @@ import { settingsApi } from '../api'
 
 const MAX_VISIBLE = 120
 
+function sourceLabel(type) {
+  if (type === 'ldap_user' || type === 'ldap_group') return 'LDAP'
+  return 'Local'
+}
+
+function typeLabel(type) {
+  if (type === 'user') return 'User'
+  if (type === 'local_group') return 'Group'
+  if (type === 'ldap_user') return 'LDAP user'
+  if (type === 'ldap_group') return 'LDAP group'
+  return String(type || 'owner')
+}
+
 function ownerKey(owner) {
   return `${owner.type}:${owner.id || owner.dn || ''}`
 }
@@ -122,7 +135,16 @@ export function OwnerPickerModal({
         if (!q) return true
         return String(g.name || '').toLowerCase().includes(q)
       })
-      .map(g => ({ type: 'local_group', id: g.id, name: g.name || 'Group', email: '' }))
+      .map(g => {
+        const isLdapGroup = String(g.type || '').toLowerCase() === 'ldap_group' || Number(g.ldap_mapping_count || 0) > 0
+        return {
+          type: isLdapGroup ? 'ldap_group' : 'local_group',
+          id: g.id,
+          dn: g.ldap_group_dn || undefined,
+          name: g.name || 'Group',
+          email: '',
+        }
+      })
   }, [tab, search, users, localGroups])
 
   const mergedCandidates = useMemo(() => {
@@ -181,7 +203,7 @@ export function OwnerPickerModal({
             {selected.map(owner => (
               <span key={ownerKey(owner)} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-100 text-brand-700">
                 {owner.name || owner.id || owner.dn}
-                <span className="opacity-70">{owner.type}</span>
+                <span className="opacity-70">{typeLabel(owner.type)}</span>
                 <button type="button" onClick={() => updateSelection(owner)} className="hover:text-red-600"><X size={11} /></button>
               </span>
             ))}
@@ -198,9 +220,14 @@ export function OwnerPickerModal({
               return (
                 <label key={key} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-sm">
                   <input type="checkbox" checked={selectedKeys.has(key)} onChange={() => updateSelection(owner)} className="rounded" />
-                  <span className="flex-1">{owner.name || owner.id || owner.dn}</span>
-                  <span className="text-xs text-gray-500">{owner.type}</span>
-                  {owner.email && <span className="text-xs text-gray-400">{owner.email}</span>}
+                  <span className="flex-1 min-w-0">
+                    <span className="block truncate">{owner.name || owner.id || owner.dn}</span>
+                    {owner.email && <span className="block truncate text-xs text-gray-400">{owner.email}</span>}
+                  </span>
+                  <span className="text-xs text-gray-500 hidden sm:inline">{typeLabel(owner.type)}</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full ${sourceLabel(owner.type) === 'LDAP' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {sourceLabel(owner.type)}
+                  </span>
                 </label>
               )
             })}

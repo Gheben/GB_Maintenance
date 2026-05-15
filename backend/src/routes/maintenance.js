@@ -342,9 +342,12 @@ router.get('/:id', async (req, res) => {
 // ─── GET /api/maintenance/:id/approval-status ───────────────────────────────
 router.get('/:id/approval-status', async (req, res) => {
   const maint = await getOne(
-    `SELECT id, title, created_by, owner_approval_required, owner_approval_status, owner_approval_updated_at,
-            scheduled_start, scheduled_end
-     FROM maintenance_windows WHERE id=$1`,
+    `SELECT mw.id, mw.title, mw.created_by, mw.owner_approval_required, mw.owner_approval_status, mw.owner_approval_updated_at,
+            mw.scheduled_start, mw.scheduled_end,
+            COALESCE(u.display_name, u.username) AS created_by_name
+     FROM maintenance_windows mw
+     LEFT JOIN users u ON u.id = mw.created_by
+     WHERE mw.id=$1`,
     [req.params.id]
   );
   if (!maint) return res.status(404).json({ error: 'Manutenzione non trovata' });

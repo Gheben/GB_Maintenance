@@ -18,6 +18,21 @@ function toDatetimeLocal(iso) {
   return format(d, "yyyy-MM-dd'T'HH:mm")
 }
 
+function ownerActionLabel(status) {
+  if (status === 'approved' || status === 'creator_accepted') return 'Approved'
+  if (status === 'rejected' || status === 'creator_rejected') return 'Rejected'
+  if (status === 'reschedule_proposed') return 'Requested reschedule'
+  if (status === 'counter_proposed') return 'Counter proposal pending'
+  return 'Pending'
+}
+
+function creatorActionLabel(status) {
+  if (status === 'creator_accepted') return 'Accepted owner proposal'
+  if (status === 'creator_rejected') return 'Rejected owner proposal'
+  if (status === 'counter_proposed') return 'Sent counter proposal'
+  return 'No decision yet'
+}
+
 export default function MaintenanceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -465,20 +480,33 @@ export default function MaintenanceDetail() {
                   {(approvalData.requests || []).map((row) => {
                     const ownerForm = ownerFormFor(row)
                     const creatorForm = creatorFormFor(row)
+                    const creatorName = approvalData.maintenance?.created_by_name || 'Maintenance creator'
                     return (
                       <div key={row.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold">{row.owner_label}</span>
+                          <span className="text-sm font-semibold">Request sent to: {row.owner_label}</span>
                           <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{row.owner_source_type}: {row.owner_source_name || '-'}</span>
                           <span className={`text-xs px-2 py-0.5 rounded-full ${['approved', 'creator_accepted'].includes(row.status) ? 'bg-green-100 text-green-700' : ['rejected', 'creator_rejected'].includes(row.status) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
                             {row.status}
                           </span>
                         </div>
 
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                          <div className="rounded border border-gray-200 px-2 py-1.5">
+                            <p className="text-gray-500">Owner action</p>
+                            <p className="font-semibold text-gray-800 dark:text-gray-100">{row.owner_label}: {ownerActionLabel(row.status)}</p>
+                          </div>
+                          <div className="rounded border border-gray-200 px-2 py-1.5">
+                            <p className="text-gray-500">Creator action</p>
+                            <p className="font-semibold text-gray-800 dark:text-gray-100">{creatorName}: {creatorActionLabel(row.status)}</p>
+                          </div>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600">
                           <p>Requested: {row.requested_at ? format(new Date(row.requested_at), 'MM/dd/yyyy HH:mm') : '-'}</p>
                           <p>Responded: {row.responded_at ? format(new Date(row.responded_at), 'MM/dd/yyyy HH:mm') : '-'}</p>
                           <p>Proposed: {row.proposed_start ? `${format(new Date(row.proposed_start), 'MM/dd/yyyy HH:mm')} - ${format(new Date(row.proposed_end), 'MM/dd/yyyy HH:mm')}` : '-'}</p>
+                          <p>Creator decision: {row.creator_responded_at ? format(new Date(row.creator_responded_at), 'MM/dd/yyyy HH:mm') : '-'}</p>
                           <p>Counter: {row.creator_proposed_start ? `${format(new Date(row.creator_proposed_start), 'MM/dd/yyyy HH:mm')} - ${format(new Date(row.creator_proposed_end), 'MM/dd/yyyy HH:mm')}` : '-'}</p>
                         </div>
 

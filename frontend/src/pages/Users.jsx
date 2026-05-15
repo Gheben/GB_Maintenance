@@ -686,11 +686,15 @@ function GroupsTab({ roleOptions, roleProfiles }) {
   const openDetail = (id) => groupsApi.get(id).then(r => { setDetailGroup(r.data); setEditPerms(false) })
   useEffect(() => { load() }, [])
 
-  const ldapGroupIds = new Set((allMappings || []).map(m => m.local_group_id).filter(Boolean))
-  const groupsWithType = groups.map(g => ({ ...g, type: ldapGroupIds.has(g.id) ? 'ldap' : 'local' }))
+  const ldapGroupIds = new Set((allMappings || []).map(m => String(m.local_group_id || '').toLowerCase()).filter(Boolean))
+  const groupsWithType = groups.map(g => {
+    const fromMappings = ldapGroupIds.has(String(g.id || '').toLowerCase())
+    const fromCount = Number(g.ldap_mapping_count || 0) > 0
+    return { ...g, type: (fromMappings || fromCount) ? 'ldap' : 'local' }
+  })
   const filteredGroups = groupType === 'all' ? groupsWithType : groupsWithType.filter(g => g.type === groupType)
   const pagedGroups = filteredGroups.slice((page - 1) * limit, page * limit)
-  const detailGroupType = detailGroup && ldapGroupIds.has(detailGroup.id) ? 'ldap' : 'local'
+  const detailGroupType = detailGroup && (ldapGroupIds.has(String(detailGroup.id || '').toLowerCase()) || Number(detailGroup.ldap_mapping_count || 0) > 0) ? 'ldap' : 'local'
   const mappingsByGroup = (groupId) => (allMappings || []).filter(m => m.local_group_id === groupId)
 
   const handleCreate = async (e) => {
@@ -856,13 +860,13 @@ function GroupsTab({ roleOptions, roleProfiles }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
-                {['Name','Description','Type','Role','Members/Mapping','Permissions','']
+                {['Name','Description','Type','Role','Members/Mapping','']
                   .map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {pagedGroups.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-8 text-gray-500">No groups</td></tr>
+                <tr><td colSpan={6} className="text-center py-8 text-gray-500">No groups</td></tr>
               )}
               {pagedGroups.map(g => (
                 <tr key={g.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={() => openDetail(g.id)}>
@@ -881,11 +885,6 @@ function GroupsTab({ roleOptions, roleProfiles }) {
                       {mappingsByGroup(g.id).map(m => m.ldap_group_dn).join(', ') || <span className="italic text-gray-400">No mapping</span>}
                     </td>
                   )}
-                  <td className="px-4 py-3 text-xs text-gray-500">
-                    {g.permissions && Object.values(g.permissions).some(Boolean)
-                      ? ALL_PERMS.filter(p => g.permissions?.[p.key]).map(p => p.label).join(', ')
-                      : <span className="italic text-gray-400">No permissions</span>}
-                  </td>
                   <td className="px-4 py-3">
                     <button className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-red-400 hover:text-red-600 transition-colors"
                       onClick={e => { e.stopPropagation(); setDeleteTarget(g) }}><Trash2 size={14} /></button>

@@ -7,7 +7,7 @@ import { Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { ItemPicker } from '../components/ItemPicker'
 import { maintenanceApi, maintenanceTypesApi, assetsApi, servicesApi, blackoutApi } from '../api'
-import { Plus, RefreshCw, Pencil, ChevronDown, ChevronRight as ChevronRight2, CheckCircle2, Ban, AlertTriangle } from 'lucide-react'
+import { Plus, RefreshCw, Pencil, ChevronDown, ChevronRight as ChevronRight2, CheckCircle2, Ban, AlertTriangle, ClipboardCheck } from 'lucide-react'
 import { format } from 'date-fns'
 
 const IMPACTS = ['critical','high','medium','low']
@@ -148,10 +148,22 @@ export default function Maintenance() {
                           {isCompleted ? (
                             <span className="flex items-center gap-1">
                               <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
+                              {m.owner_approval_required && (
+                                <span title="Owner approval workflow enabled" className="inline-flex items-center justify-center text-amber-600">
+                                  <ClipboardCheck size={13} />
+                                </span>
+                              )}
                               <Link to={`/maintenance/${m.id}`} className="action-link text-sm" onClick={e => e.stopPropagation()}>{m.title}</Link>
                             </span>
                           ) : (
-                            <Link to={`/maintenance/${m.id}`} className="action-link text-sm">{m.title}</Link>
+                            <span className="inline-flex items-center gap-1">
+                              {m.owner_approval_required && (
+                                <span title="Owner approval workflow enabled" className="inline-flex items-center justify-center text-amber-600">
+                                  <ClipboardCheck size={13} />
+                                </span>
+                              )}
+                              <Link to={`/maintenance/${m.id}`} className="action-link text-sm">{m.title}</Link>
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-gray-500">{m.type}</td>

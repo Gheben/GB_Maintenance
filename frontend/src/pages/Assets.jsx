@@ -77,7 +77,13 @@ export default function Assets() {
 
   useEffect(() => {
     usersApi.list({ limit: 200 }).then(r => setUsers(Array.isArray(r.data) ? r.data : (r.data.data || []))).catch(() => {})
-    groupsApi.list().then(r => setLocalGroups(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    groupsApi.list().then(r => {
+      const rows = Array.isArray(r.data) ? r.data : []
+      setLocalGroups(rows.map(g => ({
+        ...g,
+        type: Number(g.ldap_mapping_count || 0) > 0 ? 'ldap_group' : 'local_group',
+      })))
+    }).catch(() => {})
     settingsApi.getLdap().then(r => setLdapEnabled(!!(r.data?.enabled))).catch(() => {})
     licensesApi.list({ limit: 500 }).then(r => {
       const rows = Array.isArray(r.data) ? r.data : (r.data.data || [])
@@ -88,6 +94,10 @@ export default function Assets() {
   const handleCreate = async (e) => {
     e.preventDefault()
     const ownerTargets = Array.isArray(form.owner_targets) ? form.owner_targets : []
+    if (ownerTargets.length < 1) {
+      toast.error('At least one owner is required')
+      return
+    }
     const firstOwner = ownerTargets[0] || null
     const payload = {
       ...form,
@@ -147,7 +157,7 @@ export default function Assets() {
 
   const ownerFieldsJsx = (
     <div>
-      <label className="block text-sm font-medium mb-1">Owner</label>
+      <label className="block text-sm font-medium mb-1">Owner *</label>
       <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
         <div className="text-xs text-gray-600 dark:text-gray-300">
           {form.owner_targets?.length > 0 ? `${form.owner_targets.length} owner(s) selected` : 'No owners selected'}
@@ -172,6 +182,10 @@ export default function Assets() {
   const handleEdit = async (e) => {
     e.preventDefault()
     const ownerTargets = Array.isArray(form.owner_targets) ? form.owner_targets : []
+    if (ownerTargets.length < 1) {
+      toast.error('At least one owner is required')
+      return
+    }
     const firstOwner = ownerTargets[0] || null
     const payload = {
       ...form,

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, X, ChevronUp } from 'lucide-react'
+import { Search, X, ChevronUp, ChevronDown } from 'lucide-react'
 import { Modal } from './Modal'
 
 export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = 'name', badgeKey, useModal = false, filterKey, maxResults }) {
