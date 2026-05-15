@@ -1459,7 +1459,7 @@ export default function Licenses() {
                 onSearch={searchOwnerLocalOrLdap}
                 onChange={(items) => setLicenseForm(f => ({ ...f, owner_contacts: items }))}
                 createActions={[
-                  { label: 'New user', onClick: () => openQuickCreateUserFor('owner_contacts') },
+                  { label: '+ New user', onClick: () => openQuickCreateUserFor('owner_contacts') },
                 ]}
               />
               <ContactPicker
@@ -1472,7 +1472,7 @@ export default function Licenses() {
                 onChange={(items) => setLicenseForm(f => ({ ...f, maintainer_contacts: items }))}
                 createActions={[
                   { label: '+ New supplier', onClick: openCreateSupplierFromPicker },
-                  { label: 'New user', onClick: () => openQuickCreateUserFor('maintainer_contacts') },
+                  { label: '+ New user', onClick: () => openQuickCreateUserFor('maintainer_contacts') },
                 ]}
               />
               <ContactPicker
@@ -1485,7 +1485,7 @@ export default function Licenses() {
                 onChange={(items) => setLicenseForm(f => ({ ...f, approver_contacts: items }))}
                 createActions={[
                   { label: '+ New supplier', onClick: openCreateSupplierFromPicker },
-                  { label: 'New user', onClick: () => openQuickCreateUserFor('approver_contacts') },
+                  { label: '+ New user', onClick: () => openQuickCreateUserFor('approver_contacts') },
                 ]}
               />
             </div>

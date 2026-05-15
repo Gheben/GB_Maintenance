@@ -260,7 +260,7 @@ function LocalGroupPicker({ groups, value, onChange, required }) {
               <input className="input" placeholder="Search group..." value={q} onChange={e => setQ(e.target.value)} />
             </div>
             <div className="flex justify-start">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreateGroup(true)}>New group</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreateGroup(true)}>+ New group</button>
             </div>
             <div className="max-h-[50vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
               {filtered.map(g => (
