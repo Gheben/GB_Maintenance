@@ -461,7 +461,7 @@ function ContactPicker({ label, placeholder, value, onChange, onSearch, loading,
     if (!open) return
     const t = setTimeout(() => {
       const cleaned = q.trim()
-      if (cleaned.length >= 2) onSearch(cleaned)
+      if (cleaned.length >= 1) onSearch(cleaned)
       else onSearch('')
     }, 250)
     return () => clearTimeout(t)
@@ -524,8 +524,8 @@ function ContactPicker({ label, placeholder, value, onChange, onSearch, loading,
             )}
 
             <div className="max-h-[52vh] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
-              {!loading && q.trim().length < 2 && <div className="px-3 py-3 text-sm text-gray-500">Type at least 2 characters.</div>}
-              {!loading && q.trim().length >= 2 && (!Array.isArray(results) || results.length === 0) && <div className="px-3 py-3 text-sm text-gray-500">No results found.</div>}
+              {!q.trim() && <div className="px-3 py-3 text-sm text-gray-500">Start typing to search.</div>}
+              {!!q.trim() && (!Array.isArray(results) || results.length === 0) && <div className="px-3 py-3 text-sm text-gray-500">No results found.</div>}
               {(results || []).map((r, idx) => {
                 const key = `${contactKey(r)}-${idx}`
                 return (
@@ -1135,7 +1135,7 @@ export default function Licenses() {
   }
 
   const searchOwnerLocalOrLdap = async (q) => {
-    if (!q || q.length < 2) {
+    if (!q || q.length < 1) {
       setOwnerSearching(false)
       setOwnerResults([])
       return
@@ -1163,7 +1163,7 @@ export default function Licenses() {
   }
 
   const searchMaintOrApprover = async (q, setLoading, setResults) => {
-    if (!q || q.length < 2) {
+    if (!q || q.length < 1) {
       setLoading(false)
       setResults([])
       return

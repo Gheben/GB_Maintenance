@@ -80,7 +80,7 @@ export default function AssetDetail() {
 
   const handleGroupSearch = async (q) => {
     setGroupSearch(q)
-    if (!q || q.length < 2) { setGroupResults([]); return }
+    if (!q || q.length < 1) { setGroupResults([]); return }
 
     const localMatches = localGroups
       .filter(g => String(g.name || '').toLowerCase().includes(q.toLowerCase()))
@@ -113,7 +113,7 @@ export default function AssetDetail() {
   const handleOwnerUserSearch = async (q) => {
     setOwnerUserSearch(q)
     const qq = String(q || '').trim().toLowerCase()
-    if (qq.length < 2) { setOwnerUserResults([]); return }
+    if (qq.length < 1) { setOwnerUserResults([]); return }
 
     const localMatches =
       ownerUsers
@@ -320,7 +320,7 @@ export default function AssetDetail() {
                 <div className="relative">
                   <input
                     className="input"
-                    placeholder="Search user in AD/local (min 2 chars)..."
+                    placeholder="Search user in AD/local..."
                     value={editForm.owner_type === 'user' && editForm.owner_id
                       ? (ownerUsers.find(u => u.id === editForm.owner_id)?.display_name || ownerUsers.find(u => u.id === editForm.owner_id)?.username || '')
                       : (editForm.owner_type === 'ldap_user' && editForm.owner_ldap_dn ? (editForm.owner_ldap_name || editForm.owner_ldap_dn) : ownerUserSearch)}
@@ -359,7 +359,7 @@ export default function AssetDetail() {
               )}
               {(editForm.owner_type === 'local_group' || editForm.owner_type === 'ldap_group') && (
                 <div className="relative">
-                  <input className="input" placeholder="Search local/LDAP group (min 2 chars)..."
+                  <input className="input" placeholder="Search local/LDAP group..."
                     value={(editForm.owner_type === 'local_group' && editForm.owner_group_id) || (editForm.owner_type === 'ldap_group' && editForm.owner_ldap_dn)
                       ? (editForm.owner_type === 'local_group' ? (localGroups.find(g => g.id === editForm.owner_group_id)?.name || '') : editForm.owner_ldap_name)
                       : groupSearch}

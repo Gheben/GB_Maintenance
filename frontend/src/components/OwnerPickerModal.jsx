@@ -56,6 +56,8 @@ export function OwnerPickerModal({
   const [loading, setLoading] = useState(false)
   const [showCreateUser, setShowCreateUser] = useState(false)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
+  const [pickerUsers, setPickerUsers] = useState(users || [])
+  const [pickerGroups, setPickerGroups] = useState(localGroups || [])
 
   const selected = useMemo(() => {
     const list = Array.isArray(value) ? value.map(normalizeOwner).filter(Boolean) : []
@@ -78,11 +80,19 @@ export function OwnerPickerModal({
   }, [open])
 
   useEffect(() => {
+    setPickerUsers(users || [])
+  }, [users])
+
+  useEffect(() => {
+    setPickerGroups(localGroups || [])
+  }, [localGroups])
+
+  useEffect(() => {
     let cancelled = false
     const run = async () => {
       if (!ldapEnabled) return
       const q = String(search || '').trim()
-      if (q.length < 2) {
+      if (q.length < 1) {
         setLdapResults([])
         return
       }
@@ -127,7 +137,7 @@ export function OwnerPickerModal({
   const localCandidates = useMemo(() => {
     const q = String(search || '').trim().toLowerCase()
     if (tab === 'users') {
-      return (users || [])
+      return (pickerUsers || [])
         .filter(u => {
           if (!q) return true
           return String(u.display_name || u.username || '').toLowerCase().includes(q)
@@ -143,7 +153,7 @@ export function OwnerPickerModal({
         }))
     }
 
-    return (localGroups || [])
+    return (pickerGroups || [])
       .filter(g => {
         if (!q) return true
         return String(g.name || '').toLowerCase().includes(q)
@@ -159,7 +169,7 @@ export function OwnerPickerModal({
           source: isLdapGroup ? 'ldap' : 'local',
         }
       })
-  }, [tab, search, users, localGroups])
+  }, [tab, search, pickerUsers, pickerGroups])
 
   const mergedCandidates = useMemo(() => {
     const map = new Map()
@@ -206,7 +216,7 @@ export function OwnerPickerModal({
           <Search size={15} className="absolute left-3 top-2.5 text-gray-400" />
           <input
             className="input pl-9"
-            placeholder={ldapEnabled ? 'Search local + LDAP (min 2 chars for LDAP)...' : 'Search local owners...'}
+              placeholder={ldapEnabled ? 'Search local + LDAP owners...' : 'Search local owners...'}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -231,7 +241,6 @@ export function OwnerPickerModal({
 
         <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
           <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
-            {loading && <div className="px-3 py-2 text-xs text-gray-500">Searching LDAP...</div>}
             {visible.length === 0 ? (
               <div className="text-center py-6 text-sm text-gray-500">No owners found</div>
             ) : visible.map(owner => {
@@ -265,8 +274,9 @@ export function OwnerPickerModal({
         <QuickCreateUserModal
           open={showCreateUser}
           onClose={() => setShowCreateUser(false)}
-          localGroups={localGroups}
+          localGroups={pickerGroups}
           onCreated={(createdUser) => {
+            setPickerUsers(prev => [...prev, createdUser])
             const normalized = normalizeOwner({ type: 'user', id: createdUser.id, name: createdUser.display_name || createdUser.username, email: createdUser.email, source: 'local' })
             if (normalized) onChange([...(selected || []), normalized])
           }}
@@ -276,6 +286,7 @@ export function OwnerPickerModal({
           open={showCreateGroup}
           onClose={() => setShowCreateGroup(false)}
           onCreated={(createdGroup) => {
+            setPickerGroups(prev => [...prev, createdGroup])
             const normalized = normalizeOwner({ type: 'local_group', id: createdGroup.id, name: createdGroup.name, source: 'local' })
             if (normalized) onChange([...(selected || []), normalized])
           }}

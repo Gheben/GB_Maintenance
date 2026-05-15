@@ -6,7 +6,7 @@ import { Pagination } from '../components/Pagination'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { Plus, Trash2, Users as UsersIcon, X, User, Shield, CheckCircle, XCircle, Pencil, Save, ShieldCheck, Wand2, Eye, EyeOff } from 'lucide-react'
-import { QuickCreateLocalGroupModal } from '../components/QuickCreateModals'
+import { QuickCreateLocalGroupModal, QuickCreateUserModal } from '../components/QuickCreateModals'
 
 const DEFAULT_ROLES = ['admin','change_manager','operator','viewer','subscriber']
 const TABS = [
@@ -629,71 +629,17 @@ function UsersTab({ roleOptions, roleProfiles }) {
         <EditPermissionsModal user={editTarget} roleOptions={roleOptions} roleProfiles={roleProfiles} localGroups={localGroups} onClose={() => setEditTarget(null)} onSaved={load} />
       )}
 
-      {showCreate && (
-        <Modal title="New local user" onClose={() => setShowCreate(false)}>
-          <form onSubmit={handleCreate} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">Username *</label>
-                <input className="input" required value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} /></div>
-              <div><label className="block text-sm font-medium mb-1">Display name *</label>
-                <input className="input" required value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} /></div>
-            </div>
-            <div><label className="block text-sm font-medium mb-1">Email *</label>
-              <input className="input" type="email" required value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} /></div>
-            <div><label className="block text-sm font-medium mb-1">Password *</label>
-              <div className="flex items-center gap-2">
-                <input className="input" type={showCreatePassword ? 'text' : 'password'} required value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setShowCreatePassword(v => !v)}
-                  title={showCreatePassword ? 'Hide password' : 'Show password'}
-                  aria-label={showCreatePassword ? 'Hide password' : 'Show password'}>
-                  {showCreatePassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-                <button type="button" className="btn-secondary whitespace-nowrap" onClick={handleGenerateCreatePassword}>
-                  <Wand2 size={14} />
-                  Generate
-                </button>
-              </div>
-              <PasswordRequirements password={form.password} />
-            </div>
-            <div><label className="block text-sm font-medium mb-1">Confirm password *</label>
-              <div className="flex items-center gap-2">
-                <input className="input" type={showCreateConfirmPassword ? 'text' : 'password'} required value={form.confirm_password} onChange={e => setForm(f => ({ ...f, confirm_password: e.target.value }))} />
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setShowCreateConfirmPassword(v => !v)}
-                  title={showCreateConfirmPassword ? 'Hide password' : 'Show password'}
-                  aria-label={showCreateConfirmPassword ? 'Hide password' : 'Show password'}>
-                  {showCreateConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-            </div>
-            <LocalGroupPicker groups={localGroups} value={form.group_id} onChange={v => setForm(f => ({ ...f, group_id: v }))} required />
-            <div><label className="block text-sm font-medium mb-1">Role *</label>
-              <select className="input" required value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value, permissions: rebaseRolePermissions(f.role, e.target.value, f.permissions, roleProfiles) }))}>
-                {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
-              </select></div>
-            <div>
-              <label className="block text-sm font-medium mb-1">
-                Permissions {form.role === 'admin' && <span className="text-gray-400 font-normal ml-1">(full access for admin)</span>}
-              </label>
-              <PermissionsEditor
-                value={form.permissions}
-                onChange={p => setForm(f => ({ ...f, permissions: p }))}
-                disabled={form.role === 'admin'}
-                lockedKeys={roleBaselineLockedKeys(form.role, roleProfiles)}
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
-              <button type="submit" className="btn-primary">Crea</button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      <QuickCreateUserModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={() => {
+          setShowCreate(false)
+          load()
+        }}
+        localGroups={localGroups}
+        initialRoleOptions={roleOptions}
+        initialRoleProfiles={roleProfiles}
+      />
 
       {deleteTarget && (
         <ConfirmDialog title="Delete user" message={`Delete "${deleteTarget.display_name}"?`} danger confirmLabel="Delete"
@@ -1117,27 +1063,16 @@ function GroupsTab({ roleOptions, roleProfiles }) {
         </Modal>
       )}
 
-      {showCreate && createType === 'local' && (
-        <Modal title="New Group" onClose={() => setShowCreate(false)} size="sm">
-          <form onSubmit={handleCreate} className="space-y-4">
-            <div><label className="block text-sm font-medium mb-1">Name *</label><input className="input" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div><label className="block text-sm font-medium mb-1">Description</label><input className="input" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-            <div><label className="block text-sm font-medium mb-1">Role *</label>
-              <select className="input" required value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value, permissions: rebaseRolePermissions(f.role, e.target.value, f.permissions, roleProfiles) }))}>
-                {roleOptions.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Permissions</label>
-              <PermissionsEditor value={form.permissions} onChange={p => setForm(f => ({ ...f, permissions: p }))} disabled={false} lockedKeys={roleBaselineLockedKeys(form.role, roleProfiles)} />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
-              <button type="submit" className="btn-primary">Create</button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      <QuickCreateLocalGroupModal
+        open={showCreate && createType === 'local'}
+        onClose={() => setShowCreate(false)}
+        onCreated={() => {
+          setShowCreate(false)
+          load()
+        }}
+        initialRoleOptions={roleOptions}
+        initialRoleProfiles={roleProfiles}
+      />
 
       {showCreate && createType === 'ldap' && (
         <Modal title="New LDAP Group" onClose={() => setShowCreate(false)}>
