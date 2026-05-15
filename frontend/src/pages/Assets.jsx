@@ -157,13 +157,13 @@ export default function Assets() {
 
   const ownerFieldsJsx = (
     <div>
-      <label className="block text-sm font-medium mb-1">Owner *</label>
+      <label className="block text-sm font-medium mb-1">Utilizzatori *</label>
       <div className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
         <div className="text-xs text-gray-600 dark:text-gray-300">
-          {form.owner_targets?.length > 0 ? `${form.owner_targets.length} owner(s) selected` : 'No owners selected'}
+          {form.owner_targets?.length > 0 ? `${form.owner_targets.length} utilizzatore/i selezionati` : 'Nessun utilizzatore selezionato'}
         </div>
         <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => setOwnerPickerOpen(true)}>
-          Select owners
+          Seleziona utilizzatori
         </button>
       </div>
       {(form.owner_targets || []).length > 0 && (

@@ -131,6 +131,47 @@ async function getMaintenanceSubscribers(maintenanceId) {
     [serviceIds]
   );
 
+  // Owners from owner_targets (services)
+  const targetServiceOwners = await getMany(
+    `SELECT DISTINCT u.id AS user_id, u.email AS user_email
+     FROM services s
+     JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
+     JOIN users u ON (
+       (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
+       OR (
+         ot->>'type'='local_group'
+         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+         AND EXISTS (
+           SELECT 1 FROM user_group_members ugm
+           WHERE ugm.group_id=(ot->>'id')::uuid AND ugm.user_id=u.id
+         )
+       )
+     )
+     WHERE s.id = ANY($1::uuid[]) AND u.is_active=true`,
+    [serviceIds]
+  ).catch(() => []);
+
+  // Owners from owner_targets (assets linked to maintenance)
+  const targetAssetOwners = await getMany(
+    `SELECT DISTINCT u.id AS user_id, u.email AS user_email
+     FROM maintenance_assets ma
+     JOIN assets a ON a.id=ma.asset_id
+     JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+     JOIN users u ON (
+       (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
+       OR (
+         ot->>'type'='local_group'
+         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+         AND EXISTS (
+           SELECT 1 FROM user_group_members ugm
+           WHERE ugm.group_id=(ot->>'id')::uuid AND ugm.user_id=u.id
+         )
+       )
+     )
+     WHERE ma.maintenance_id = $1 AND u.is_active=true`,
+    [maintenanceId]
+  ).catch(() => []);
+
   for (const sub of subs) {
     if (sub.email) emails.add(sub.email);
     if (sub.user_email) emails.add(sub.user_email);
@@ -141,6 +182,14 @@ async function getMaintenanceSubscribers(maintenanceId) {
     if (ss.user_id) userIds.add(ss.user_id);
   }
   for (const o of owners) {
+    if (o.user_email) emails.add(o.user_email);
+    if (o.user_id) userIds.add(o.user_id);
+  }
+  for (const o of targetServiceOwners) {
+    if (o.user_email) emails.add(o.user_email);
+    if (o.user_id) userIds.add(o.user_id);
+  }
+  for (const o of targetAssetOwners) {
     if (o.user_email) emails.add(o.user_email);
     if (o.user_id) userIds.add(o.user_id);
   }
@@ -236,7 +285,53 @@ async function notifyIncident(incidentId, eventType) {
           if (o.user_email) emails.add(o.user_email);
           if (o.user_id) userIds.add(o.user_id);
         });
+
+        const targetServiceOwners = await getMany(
+          `SELECT DISTINCT u.id AS user_id, u.email AS user_email
+           FROM services s
+           JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
+           JOIN users u ON (
+             (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
+             OR (
+               ot->>'type'='local_group'
+               AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+               AND EXISTS (
+                 SELECT 1 FROM user_group_members ugm
+                 WHERE ugm.group_id=(ot->>'id')::uuid AND ugm.user_id=u.id
+               )
+             )
+           )
+           WHERE s.id = ANY($1::uuid[]) AND u.is_active=true`,
+          [serviceIds]
+        ).catch(() => []);
+        targetServiceOwners.forEach(o => {
+          if (o.user_email) emails.add(o.user_email);
+          if (o.user_id) userIds.add(o.user_id);
+        });
       }
+
+      const targetAssetOwners = await getMany(
+        `SELECT DISTINCT u.id AS user_id, u.email AS user_email
+         FROM assets a
+         JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+         JOIN users u ON (
+           (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
+           OR (
+             ot->>'type'='local_group'
+             AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+             AND EXISTS (
+               SELECT 1 FROM user_group_members ugm
+               WHERE ugm.group_id=(ot->>'id')::uuid AND ugm.user_id=u.id
+             )
+           )
+         )
+         WHERE a.id = ANY($1::uuid[]) AND u.is_active=true`,
+        [assetIds]
+      ).catch(() => []);
+      targetAssetOwners.forEach(o => {
+        if (o.user_email) emails.add(o.user_email);
+        if (o.user_id) userIds.add(o.user_id);
+      });
     }
 
     const vars = {

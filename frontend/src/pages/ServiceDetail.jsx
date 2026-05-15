@@ -185,6 +185,26 @@ export default function ServiceDetail() {
 
   const saveEdit = async () => {
     if (!editForm.name.trim()) { toast.error('Name is required'); return }
+
+    const ownerTarget = (() => {
+      if (editForm.owner_type === 'user' && editForm.owner_id) {
+        const u = ownerUsers.find(x => x.id === editForm.owner_id)
+        return { type: 'user', id: editForm.owner_id, name: u?.display_name || u?.username || 'User', email: u?.email || '' }
+      }
+      if (editForm.owner_type === 'local_group' && editForm.owner_group_id) {
+        const g = localGroups.find(x => x.id === editForm.owner_group_id)
+        return { type: 'local_group', id: editForm.owner_group_id, name: g?.name || 'Group' }
+      }
+      if (editForm.owner_type === 'ldap_user' && editForm.owner_ldap_dn) {
+        return { type: 'ldap_user', dn: editForm.owner_ldap_dn, name: editForm.owner_ldap_name || editForm.owner_ldap_dn }
+      }
+      if (editForm.owner_type === 'ldap_group' && editForm.owner_ldap_dn) {
+        return { type: 'ldap_group', dn: editForm.owner_ldap_dn, name: editForm.owner_ldap_name || editForm.owner_ldap_dn }
+      }
+      return null
+    })()
+    if (!ownerTarget) { toast.error('Owner is required'); return }
+
     setSaving(true)
     try {
       await servicesApi.update(id, {
@@ -198,6 +218,7 @@ export default function ServiceDetail() {
         owner_group_id: editForm.owner_type === 'local_group' ? (editForm.owner_group_id || null) : null,
         owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(editForm.owner_type) ? (editForm.owner_ldap_dn || null) : null,
         owner_ldap_name: ['ldap_user', 'ldap_group'].includes(editForm.owner_type) ? (editForm.owner_ldap_name || null) : null,
+        owner_targets: [ownerTarget],
       })
       toast.success('Service updated')
       setEditMode(false); setEditForm(null); load()
@@ -284,7 +305,7 @@ export default function ServiceDetail() {
             </div>
             {/* Owner Selection */}
             <div>
-              <label className="block text-sm font-medium mb-2">Owner</label>
+              <label className="block text-sm font-medium mb-2">Utilizzatore</label>
               <div className="flex gap-1 mb-2 flex-wrap">
                 {[
                   { key: 'user', label: 'User', icon: <User size={11} /> },
@@ -392,7 +413,7 @@ export default function ServiceDetail() {
             {(service.owner_label || service.owner_name) && (
               <div className="mt-3 flex items-center gap-2 text-sm">
                 <User size={14} className="text-gray-400" />
-                <span className="font-medium text-gray-700 dark:text-gray-300">Owner:</span>
+                <span className="font-medium text-gray-700 dark:text-gray-300">Utilizzatore:</span>
                 <span>{service.owner_label || service.owner_name}</span>
                 {service.owner_email && <a href={`mailto:${service.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs"><Mail size={12} />{service.owner_email}</a>}
               </div>

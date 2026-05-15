@@ -224,6 +224,42 @@ router.get('/:id/users', async (req, res) => {
      JOIN incident_assets ia ON ia.asset_id = sa.asset_id
      LEFT JOIN users u ON u.id = ss.user_id
      WHERE ia.incident_id = $1 AND u.id IS NOT NULL
+     UNION
+     SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
+     FROM incident_assets ia
+     JOIN assets a ON a.id = ia.asset_id
+     JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+     JOIN users u ON (
+       (ot->>'type' = 'user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid)
+       OR (
+         ot->>'type' = 'local_group'
+         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+         AND EXISTS (
+           SELECT 1 FROM user_group_members ugm
+           WHERE ugm.group_id = (ot->>'id')::uuid
+             AND ugm.user_id = u.id
+         )
+       )
+     )
+     WHERE ia.incident_id = $1 AND u.is_active = true
+     UNION
+     SELECT DISTINCT u.id, u.username, u.display_name, u.email, u.role, u.auth_type
+     FROM incident_services is2
+     JOIN services s ON s.id = is2.service_id
+     JOIN LATERAL jsonb_array_elements(COALESCE(s.owner_targets, '[]'::jsonb)) ot ON true
+     JOIN users u ON (
+       (ot->>'type' = 'user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid)
+       OR (
+         ot->>'type' = 'local_group'
+         AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+         AND EXISTS (
+           SELECT 1 FROM user_group_members ugm
+           WHERE ugm.group_id = (ot->>'id')::uuid
+             AND ugm.user_id = u.id
+         )
+       )
+     )
+     WHERE is2.incident_id = $1 AND u.is_active = true
      ORDER BY display_name`,
     [req.params.id]
   );
