@@ -332,7 +332,6 @@ export default function AssetDetail() {
                     }}
                   />
                   {(editForm.owner_id || editForm.owner_ldap_dn) && <span className="absolute right-2 top-2 text-xs text-green-600 font-medium">selected</span>}
-                  {ownerUserSearching && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
                   {ownerUserResults.length > 0 && !editForm.owner_id && !editForm.owner_ldap_dn && (
                     <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                       {ownerUserResults.map(u => (
@@ -371,7 +370,6 @@ export default function AssetDetail() {
                       handleGroupSearch(e.target.value)
                     }} />
                   {(editForm.owner_group_id || editForm.owner_ldap_dn) && <span className="absolute right-2 top-2 text-xs text-green-600 font-medium">selected</span>}
-                  {groupLoading && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
                   {groupResults.length > 0 && !editForm.owner_group_id && !editForm.owner_ldap_dn && (
                     <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                       {groupResults.map(g => (

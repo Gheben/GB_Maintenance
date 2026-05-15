@@ -1053,7 +1053,6 @@ function GroupsTab({ roleOptions, roleProfiles }) {
                   <input className="input text-sm" placeholder="Search LDAP group (name, sAMAccountName or DN)..."
                     value={ldapMappingSearch}
                     onChange={e => handleLdapMappingSearch(e.target.value)} />
-                  {ldapMappingLoading && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
                   {ldapMappingResults.length > 0 && (
                     <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                       {ldapMappingResults.map(g => (
@@ -1123,7 +1122,6 @@ function GroupsTab({ roleOptions, roleProfiles }) {
               <label className="block text-sm font-medium mb-1">LDAP Group Mapping *</label>
               <div className="relative">
                 <input className="input text-sm" placeholder="Search LDAP group (name, sAMAccountName or DN)..." value={ldapCreateSearch} onChange={e => handleLdapCreateSearch(e.target.value)} />
-                {ldapCreateLoading && <p className="text-xs text-gray-400 mt-1">Searching...</p>}
                 {ldapCreateResults.length > 0 && (
                   <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                     {ldapCreateResults.map(g => (
