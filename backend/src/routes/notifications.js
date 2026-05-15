@@ -9,16 +9,27 @@ router.use(requireAuth);
 // ─── GET /api/notifications ─── In-app for current user ──────────────────────
 router.get('/', async (req, res) => {
   const { unread, page = 1, limit = 30 } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const pageNum = Math.max(1, Number.parseInt(page, 10) || 1);
+  const limitNum = Math.min(200, Math.max(1, Number.parseInt(limit, 10) || 30));
+  const offset = (pageNum - 1) * limitNum;
   const filters = [`user_id=$1`]; const params = [req.user.id]; let i = 2;
   if (unread === 'true') { filters.push(`is_read=false`); }
   const where = `WHERE ${filters.join(' AND ')}`;
-  const total = parseInt((await query(`SELECT COUNT(*) FROM in_app_notifications ${where}`, params)).rows[0].count);
-  const rows = await getMany(
-    `SELECT * FROM in_app_notifications ${where} ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`,
-    [...params, parseInt(limit), offset]
-  );
-  res.json({ data: rows, total, unread_count: parseInt((await query(`SELECT COUNT(*) FROM in_app_notifications WHERE user_id=$1 AND is_read=false`, [req.user.id])).rows[0].count) });
+  const [totalRes, rows, unreadRes] = await Promise.all([
+    query(`SELECT COUNT(*) FROM in_app_notifications ${where}`, params),
+    getMany(
+      `SELECT * FROM in_app_notifications ${where} ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`,
+      [...params, limitNum, offset]
+    ),
+    query(`SELECT COUNT(*) FROM in_app_notifications WHERE user_id=$1 AND is_read=false`, [req.user.id]),
+  ]);
+  res.json({
+    data: rows,
+    total: Number.parseInt(totalRes.rows[0].count, 10) || 0,
+    page: pageNum,
+    limit: limitNum,
+    unread_count: Number.parseInt(unreadRes.rows[0].count, 10) || 0,
+  });
 });
 
 // ─── POST /api/notifications/read ────────────────────────────────────────────
@@ -35,18 +46,27 @@ router.post('/read', async (req, res) => {
 // ─── GET /api/notifications/log ──────────────────────────────────────────────
 router.get('/log', requireAdmin, async (req, res) => {
   const { event_type, status, page = 1, limit = 50 } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const pageNum = Math.max(1, Number.parseInt(page, 10) || 1);
+  const limitNum = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 50));
+  const offset = (pageNum - 1) * limitNum;
   const params = []; let i = 1;
   const filters = [];
   if (event_type) { filters.push(`event_type=$${i++}`); params.push(event_type); }
   if (status)     { filters.push(`status=$${i++}`); params.push(status); }
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-  const total = parseInt((await query(`SELECT COUNT(*) FROM notification_log ${where}`, params)).rows[0].count);
-  const rows = await getMany(
-    `SELECT * FROM notification_log ${where} ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`,
-    [...params, parseInt(limit), offset]
-  );
-  res.json({ data: rows, total });
+  const [totalRes, rows] = await Promise.all([
+    query(`SELECT COUNT(*) FROM notification_log ${where}`, params),
+    getMany(
+      `SELECT * FROM notification_log ${where} ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`,
+      [...params, limitNum, offset]
+    ),
+  ]);
+  res.json({
+    data: rows,
+    total: Number.parseInt(totalRes.rows[0].count, 10) || 0,
+    page: pageNum,
+    limit: limitNum,
+  });
 });
 
 // ─── GET /api/notifications/templates ────────────────────────────────────────

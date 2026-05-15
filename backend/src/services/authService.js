@@ -154,6 +154,48 @@ async function getAllUsers() {
   return users.map(u => ({ ...u, permissions: normalizePermissions(u.role, u.permissions) }));
 }
 
+async function getUsersPage({ page = 1, limit = 50, q = '' } = {}) {
+  const pageNum = Math.max(1, Number.parseInt(page, 10) || 1);
+  const limitNum = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 50));
+  const offset = (pageNum - 1) * limitNum;
+  const qText = String(q || '').trim();
+
+  const params = [];
+  const where = [];
+  let idx = 1;
+
+  if (qText) {
+    where.push(`(
+      LOWER(username) LIKE $${idx}
+      OR LOWER(COALESCE(display_name, '')) LIKE $${idx}
+      OR LOWER(COALESCE(email, '')) LIKE $${idx}
+    )`);
+    params.push(`%${qText.toLowerCase()}%`);
+    idx += 1;
+  }
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const totalRow = await getOne(`SELECT COUNT(*)::int AS c FROM users ${whereSql}`, params);
+  const total = totalRow?.c || 0;
+
+  const rows = await getMany(
+    `SELECT id, username, display_name, email, office, role, auth_type, permissions,
+            totp_enabled, totp_verified, is_active, last_login_at,
+            failed_login_count, locked_until, avatar_color, created_at, updated_at
+     FROM users ${whereSql}
+     ORDER BY username
+     LIMIT $${idx} OFFSET $${idx + 1}`,
+    [...params, limitNum, offset]
+  );
+
+  return {
+    data: rows.map(u => ({ ...u, permissions: normalizePermissions(u.role, u.permissions) })),
+    total,
+    page: pageNum,
+    limit: limitNum,
+  };
+}
+
 async function getUserById(id) {
   const user = await getOne(
     `SELECT id, username, display_name, email, office, role, auth_type, permissions,
@@ -268,6 +310,6 @@ module.exports = {
   safeUser,
   seedSuperAdmin,
   loginLocal,
-  getAllUsers, getUserById, getUserWithHash, createUser, updateUser, deleteUser,
+  getAllUsers, getUsersPage, getUserById, getUserWithHash, createUser, updateUser, deleteUser,
   createSession, revokeSession, revokeAllUserSessions, isSessionRevoked, getUserSessions,
 };

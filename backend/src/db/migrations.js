@@ -1229,6 +1229,24 @@ const MIGRATIONS = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_expiry_name ON licenses(expiry_date, name)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_supplier_id ON licenses(supplier_id)`);
     }
+  },
+  {
+    version: 28,
+    name: 'list_performance_indexes',
+    up: async (client) => {
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_users_is_active_username ON users(is_active, username)`);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_log(created_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_audit_entity_created_at ON audit_log(entity_type, created_at DESC)`);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_inapp_user_created_at ON in_app_notifications(user_id, created_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_inapp_user_unread_created_at ON in_app_notifications(user_id, is_read, created_at DESC)`);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_notif_log_created_at ON notification_log(created_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_notif_log_event_created_at ON notification_log(event_type, created_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_notif_log_status_created_at ON notification_log(status, created_at DESC)`);
+    }
   }
 ];
 

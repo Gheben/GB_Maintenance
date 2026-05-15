@@ -21,9 +21,19 @@ async function getAllowedRoles() {
 }
 
 // ─── GET /api/users ───────────────────────────────────────────────────────────
-router.get('/', requireAdmin, async (req, res) => {
-  const users = await authService.getAllUsers();
-  res.json(users);
+router.get('/', requireAdmin, [
+  qv('page').optional().isInt({ min: 1 }),
+  qv('limit').optional().isInt({ min: 1, max: 500 }),
+  qv('q').optional().isString(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const page = req.query.page || 1;
+  const limit = req.query.limit || 50;
+  const q = req.query.q || '';
+  const result = await authService.getUsersPage({ page, limit, q });
+  res.json(result);
 });
 
 // ─── GET /api/users/permissions ───────────────────────────────────────────────

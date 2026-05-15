@@ -42,11 +42,14 @@ router.get('/', async (req, res) => {
   if (to)          { filters.push(`created_at <= $${i++}`); params.push(to); }
 
   const where = `WHERE ${filters.join(' AND ')}`;
-  const total = Number.parseInt((await query(`SELECT COUNT(*) FROM audit_log ${where}`, params)).rows[0].count, 10) || 0;
-  const rows = await getMany(
-    `SELECT * FROM audit_log ${where} ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`,
-    [...params, limitNum, offset]
-  );
+  const [totalRes, rows] = await Promise.all([
+    query(`SELECT COUNT(*) FROM audit_log ${where}`, params),
+    getMany(
+      `SELECT * FROM audit_log ${where} ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`,
+      [...params, limitNum, offset]
+    ),
+  ]);
+  const total = Number.parseInt(totalRes.rows[0].count, 10) || 0;
   res.json({
     data: rows,
     total,
