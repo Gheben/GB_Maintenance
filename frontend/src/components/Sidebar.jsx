@@ -12,9 +12,12 @@ const DEFAULT_BRANDING = { app_name: 'GB Maintenance', app_brand_image_url: '' }
 let brandingMemoryCache = null
 let brandingFetchedOnce = false
 const preloadedRouteChunks = new Set()
+const routeChunkPromises = new Map()
 
 function prefetchRouteChunk(routePath) {
-  if (!routePath || preloadedRouteChunks.has(routePath)) return
+  if (!routePath) return Promise.resolve()
+  if (preloadedRouteChunks.has(routePath)) return Promise.resolve()
+  if (routeChunkPromises.has(routePath)) return routeChunkPromises.get(routePath)
 
   let loader = null
   switch (routePath) {
@@ -65,11 +68,20 @@ function prefetchRouteChunk(routePath) {
       break
   }
 
-  if (!loader) return
-  preloadedRouteChunks.add(routePath)
-  loader().catch(() => {
-    preloadedRouteChunks.delete(routePath)
-  })
+  if (!loader) return Promise.resolve()
+
+  const promise = loader()
+    .then(() => {
+      preloadedRouteChunks.add(routePath)
+      routeChunkPromises.delete(routePath)
+    })
+    .catch(() => {
+      routeChunkPromises.delete(routePath)
+      throw new Error(`Failed to preload route: ${routePath}`)
+    })
+
+  routeChunkPromises.set(routePath, promise)
+  return promise
 }
 
 function getCachedBranding() {
@@ -174,6 +186,23 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
 
   const handleLogout = async () => { await logout(); navigate('/login') }
 
+  const handleNavIntent = (to) => {
+    prefetchRouteChunk(to).catch(() => {})
+  }
+
+  const handleNavClick = async (e, to) => {
+    onClose()
+    if (preloadedRouteChunks.has(to)) return
+
+    e.preventDefault()
+    try {
+      await prefetchRouteChunk(to)
+    } catch {
+      // If prefetch fails, continue navigation anyway.
+    }
+    navigate(to)
+  }
+
   const isVisible = item => {
     if (item.divider) return false
     if (item.perm && !hasPermission(item.perm)) return false
@@ -253,9 +282,9 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
             }
             return (
               <NavLink key={item.to} to={item.to} end={item.to === '/'}
-                onClick={onClose}
-                onMouseEnter={() => prefetchRouteChunk(item.to)}
-                onFocus={() => prefetchRouteChunk(item.to)}
+                onClick={(e) => handleNavClick(e, item.to)}
+                onMouseEnter={() => handleNavIntent(item.to)}
+                onFocus={() => handleNavIntent(item.to)}
                 title={cl ? item.label : undefined}
                 className={({ isActive }) =>
                   `${itemBase} ${isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}`}>
