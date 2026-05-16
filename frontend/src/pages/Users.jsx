@@ -512,6 +512,7 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
 }
 
 function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
+  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -546,9 +547,22 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
     setUsers(list); setTotal(tot)
   })
   useEffect(() => { load() }, [page, limit])
+
+  const canDeleteUser = (targetUser) => {
+    if (!targetUser || !currentUser) return false
+    if (targetUser.id === currentUser.id) return false
+
+    const actorRole = currentUser.role
+    const targetRole = targetUser.role
+
+    if (actorRole === 'superadmin') return true
+    if (actorRole === 'admin') return targetRole !== 'superadmin'
+    return targetRole !== 'admin' && targetRole !== 'superadmin'
+  }
+
   useEffect(() => {
-    setSelectedLocalUserIds(prev => prev.filter(id => users.some(u => u.id === id && u.auth_type !== 'ldap')))
-  }, [users])
+    setSelectedLocalUserIds(prev => prev.filter(id => users.some(u => u.id === id && u.auth_type !== 'ldap' && canDeleteUser(u))))
+  }, [users, currentUser])
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -576,18 +590,25 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
   }
 
   const handleDelete = async () => {
+    if (!canDeleteUser(deleteTarget)) {
+      toast.error('You cannot delete this user')
+      setDeleteTarget(null)
+      return
+    }
     try { await usersApi.delete(deleteTarget.id); toast.success('User deleted'); setDeleteTarget(null); load() }
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const toggleUserSelection = (id) => {
     if (!canBulkDelete) return
+    const target = users.find(u => u.id === id)
+    if (!target || target.auth_type === 'ldap' || !canDeleteUser(target)) return
     setSelectedLocalUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
   const toggleSelectAllVisibleLocalUsers = (checked) => {
     if (!canBulkDelete) return
-    const visibleLocalIds = filtered.filter(u => u.auth_type !== 'ldap').map(u => u.id)
+    const visibleLocalIds = filtered.filter(u => u.auth_type !== 'ldap' && canDeleteUser(u)).map(u => u.id)
     if (checked) {
       setSelectedLocalUserIds(visibleLocalIds)
       return
@@ -599,7 +620,16 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
     if (!canBulkDelete || selectedLocalUserIds.length === 0) return
     setBulkDeleting(true)
     try {
-      const results = await Promise.allSettled(selectedLocalUserIds.map((id) => usersApi.delete(id)))
+      const deletableSelectedIds = selectedLocalUserIds.filter((id) => {
+        const target = users.find(u => u.id === id)
+        return target && target.auth_type !== 'ldap' && canDeleteUser(target)
+      })
+      if (deletableSelectedIds.length === 0) {
+        setBulkDeleteConfirm(false)
+        setSelectedLocalUserIds([])
+        return
+      }
+      const results = await Promise.allSettled(deletableSelectedIds.map((id) => usersApi.delete(id)))
       const ok = results.filter(r => r.status === 'fulfilled').length
       const ko = results.length - ok
       if (ok > 0) toast.success(`${ok} user(s) deleted`)
@@ -613,7 +643,7 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
   }
 
   const filtered = authFilter === 'all' ? users : users.filter(u => u.auth_type === authFilter)
-  const visibleLocalUsers = filtered.filter(u => u.auth_type !== 'ldap')
+  const visibleLocalUsers = filtered.filter(u => u.auth_type !== 'ldap' && canDeleteUser(u))
   const allVisibleLocalSelected = visibleLocalUsers.length > 0 && visibleLocalUsers.every(u => selectedLocalUserIds.includes(u.id))
   const hasFullAccess = (u) => u.role === 'admin' || u.role === 'superadmin'
   const formatLastLogin = (value) => {
@@ -682,7 +712,7 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
                       type="checkbox"
                       checked={selectedLocalUserIds.includes(u.id)}
                       onChange={() => toggleUserSelection(u.id)}
-                      disabled={u.auth_type === 'ldap'}
+                      disabled={u.auth_type === 'ldap' || !canDeleteUser(u)}
                       aria-label={`Select user ${u.username}`}
                     />
                   </td>
@@ -711,7 +741,9 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
                     {u.role !== 'superadmin' && u.auth_type !== 'ldap' && (
                       <button className="action-icon-btn" onClick={e => { e.stopPropagation(); setEditTarget(u) }} title="Edit"><Pencil size={14} /></button>
                     )}
-                    <button className="action-icon-btn action-icon-btn-danger" onClick={e => { e.stopPropagation(); setDeleteTarget(u) }}><Trash2 size={14} /></button>
+                    {canDeleteUser(u) && (
+                      <button className="action-icon-btn action-icon-btn-danger" onClick={e => { e.stopPropagation(); setDeleteTarget(u) }}><Trash2 size={14} /></button>
+                    )}
                   </div>
                 </td>
               </tr>
