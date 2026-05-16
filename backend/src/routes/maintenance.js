@@ -38,6 +38,14 @@ async function getAppBaseUrl() {
   return String(process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:4681').replace(/\/$/, '');
 }
 
+async function appendMaintenanceStatusHistory(maintenanceId, status, changedBy, reason = null) {
+  await query(
+    `INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason)
+     VALUES ('maintenance', $1, $2, $3, $4)`,
+    [maintenanceId, status, changedBy || 'system', reason || null]
+  ).catch(() => {});
+}
+
 async function userCanAccessMaintenance(user, maintenanceId) {
   if (isPrivilegedRole(user.role)) return true;
   const accessible = await getOne(
@@ -493,7 +501,15 @@ router.get('/:id', async (req, res) => {
     );
   }
 
-  res.json({ ...maint, assets, services: directServices, affectedServices: assetDerivedServices, affectedAssets: serviceDerivedAssets });
+  const statusHistory = await getMany(
+    `SELECT sh.id, sh.status, sh.changed_by, sh.reason, sh.created_at
+     FROM status_history sh
+     WHERE sh.entity_type='maintenance' AND sh.entity_id=$1
+     ORDER BY sh.created_at ASC`,
+    [req.params.id]
+  ).catch(() => []);
+
+  res.json({ ...maint, assets, services: directServices, affectedServices: assetDerivedServices, affectedAssets: serviceDerivedAssets, statusHistory });
 });
 
 // ─── GET /api/maintenance/:id/approval-status ───────────────────────────────
@@ -595,6 +611,8 @@ router.post('/', requireOperator, [
   for (const sid of expandedLinks.service_ids) {
     await query(`INSERT INTO maintenance_services (maintenance_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, sid]);
   }
+
+  await appendMaintenanceStatusHistory(id, status, req.user.username || req.user.id || 'system', 'Maintenance created');
 
   await auditService.log(req.user.id, req.user.username, 'maintenance:create', 'maintenance', id, req.body.title, req.ip, req.get('user-agent'));
 
@@ -870,6 +888,7 @@ router.post('/:id/approve', requireChangeManager, async (req, res) => {
     `UPDATE maintenance_windows SET status='scheduled', approved_by=$1, approved_at=NOW(), updated_at=NOW() WHERE id=$2`,
     [req.user.id, req.params.id]
   );
+  await appendMaintenanceStatusHistory(req.params.id, 'scheduled', req.user.username || req.user.id || 'system', 'Approved and scheduled');
   await auditService.log(req.user.id, req.user.username, 'maintenance:approve', 'maintenance', req.params.id, null, req.ip);
   await notifyMaintenance(req.params.id, 'maintenance_scheduled');
   wsService.broadcast({ type: 'maintenance_approved', id: req.params.id });
@@ -887,6 +906,7 @@ router.post('/:id/reject', requireChangeManager, [
     `UPDATE maintenance_windows SET status='cancelled', rejection_reason=$1, updated_at=NOW() WHERE id=$2`,
     [req.body.reason, req.params.id]
   );
+  await appendMaintenanceStatusHistory(req.params.id, 'cancelled', req.user.username || req.user.id || 'system', req.body.reason || 'Rejected');
   await auditService.log(req.user.id, req.user.username, 'maintenance:reject', 'maintenance', req.params.id, req.body.reason, req.ip);
   await notifyMaintenance(req.params.id, 'maintenance_rejected', { reason: req.body.reason });
   wsService.broadcast({ type: 'maintenance_rejected', id: req.params.id });
@@ -903,6 +923,7 @@ router.post('/:id/start', requireOperator, async (req, res) => {
   }
 
   await query(`UPDATE maintenance_windows SET status='in_progress', actual_start=NOW(), updated_at=NOW() WHERE id=$1`, [req.params.id]);
+  await appendMaintenanceStatusHistory(req.params.id, 'in_progress', req.user.username || req.user.id || 'system', 'Maintenance started');
   await notifyMaintenance(req.params.id, 'maintenance_started');
   wsService.broadcast({ type: 'maintenance_started', id: req.params.id });
   await auditService.log(req.user.id, req.user.username, 'maintenance:start', 'maintenance', req.params.id, null, req.ip);
@@ -921,10 +942,51 @@ router.post('/:id/complete', requireOperator, [
     `UPDATE maintenance_windows SET status='completed', actual_end=NOW(), notes=$1, updated_at=NOW() WHERE id=$2`,
     [req.body.notes || null, req.params.id]
   );
+  await appendMaintenanceStatusHistory(req.params.id, 'completed', req.user.username || req.user.id || 'system', req.body.notes || 'Maintenance completed');
   await notifyMaintenance(req.params.id, 'maintenance_completed');
   wsService.broadcast({ type: 'maintenance_completed', id: req.params.id });
   await auditService.log(req.user.id, req.user.username, 'maintenance:complete', 'maintenance', req.params.id, null, req.ip);
   res.json({ message: 'Manutenzione completata' });
+});
+
+// ─── POST /api/maintenance/:id/reopen ───────────────────────────────────────
+router.post('/:id/reopen', requireOperator, [
+  body('reason').trim().isLength({ min: 10 }).withMessage('Reopen reason must be at least 10 characters'),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const maint = await getOne('SELECT id, title, status, reopen_count FROM maintenance_windows WHERE id=$1', [req.params.id]);
+  if (!maint) return res.status(404).json({ error: 'Maintenance not found' });
+  if (maint.status !== 'completed') {
+    return res.status(400).json({ error: 'Only completed maintenance can be reopened' });
+  }
+
+  await query(
+    `UPDATE maintenance_windows
+     SET status='in_progress',
+         actual_end=NULL,
+         actual_start=NOW(),
+         reopened_at=NOW(),
+         reopened_by=$1,
+         reopen_reason=$2,
+         reopen_count=COALESCE(reopen_count, 0) + 1,
+         updated_at=NOW()
+     WHERE id=$3`,
+    [req.user.id, req.body.reason, req.params.id]
+  );
+
+  await appendMaintenanceStatusHistory(req.params.id, 'reopened', req.user.username || req.user.id || 'system', req.body.reason);
+  await appendMaintenanceStatusHistory(req.params.id, 'in_progress', req.user.username || req.user.id || 'system', 'Maintenance reopened');
+
+  await notifyMaintenance(req.params.id, 'maintenance_reopened', {
+    reopen_reason: req.body.reason,
+    reopened_at: formatItDate(new Date()),
+  });
+
+  wsService.broadcast({ type: 'maintenance_reopened', id: req.params.id });
+  await auditService.log(req.user.id, req.user.username, 'maintenance:reopen', 'maintenance', req.params.id, req.body.reason, req.ip);
+  res.json({ message: 'Maintenance reopened' });
 });
 
 // ─── POST /api/maintenance/:id/cancel ────────────────────────────────────────
@@ -945,6 +1007,7 @@ router.post('/:id/cancel', requireOperator, [
     `UPDATE maintenance_windows SET status='cancelled', rejection_reason=$1, updated_at=NOW() WHERE id=$2`,
     [req.body.reason, req.params.id]
   );
+  await appendMaintenanceStatusHistory(req.params.id, 'cancelled', req.user.username || req.user.id || 'system', req.body.reason);
 
   // Notify maintenance creator and subscribers about cancellation
   await notifyMaintenance(req.params.id, 'maintenance_cancelled', { reason: req.body.reason });

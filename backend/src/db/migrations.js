@@ -1275,6 +1275,36 @@ const MIGRATIONS = [
     up: async (client) => {
       await client.query(`TRUNCATE maintenance_involved_users_cache`);
     }
+  },
+  {
+    version: 31,
+    name: 'maintenance_reopen_flow_and_notification_template',
+    up: async (client) => {
+      await client.query(`ALTER TABLE maintenance_windows ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE maintenance_windows ADD COLUMN IF NOT EXISTS reopened_by UUID REFERENCES users(id) ON DELETE SET NULL`);
+      await client.query(`ALTER TABLE maintenance_windows ADD COLUMN IF NOT EXISTS reopen_reason TEXT`);
+      await client.query(`ALTER TABLE maintenance_windows ADD COLUMN IF NOT EXISTS reopen_count INTEGER NOT NULL DEFAULT 0`);
+
+      await client.query(
+        `INSERT INTO notification_templates (name, event_type, subject_template, body_html_template)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (event_type) DO NOTHING`,
+        [
+          'Manutenzione Riaperta',
+          'maintenance_reopened',
+          '[RIAPERTA] Manutenzione: {{title}}',
+          `<h2 style="color:#b45309">↩️ Manutenzione Riaperta</h2>
+<p>Una manutenzione precedentemente completata è stata riaperta per ulteriori attività correttive.</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Titolo</td><td style="padding:8px;border:1px solid #e5e7eb">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Impatto</td><td style="padding:8px;border:1px solid #e5e7eb">{{impact_level}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Riaperta alle</td><td style="padding:8px;border:1px solid #e5e7eb">{{reopened_at}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:bold">Motivo</td><td style="padding:8px;border:1px solid #e5e7eb">{{reopen_reason}}</td></tr>
+</table>
+<p style="margin-top:16px"><a href="{{app_url}}/maintenance/{{id}}" style="background:#4f46e5;color:white;padding:8px 16px;border-radius:4px;text-decoration:none">Visualizza Dettagli</a></p>`
+        ]
+      );
+    }
   }
 ];
 

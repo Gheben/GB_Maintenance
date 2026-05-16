@@ -239,6 +239,7 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
         maintenance_reminder: `Reminder: ${maint.title} starts in ${extraVars.time_before || ''}`,
         maintenance_started: `Maintenance Started: ${maint.title}`,
         maintenance_completed: `Maintenance Completed: ${maint.title}`,
+        maintenance_reopened: `Maintenance Reopened: ${maint.title}`,
         maintenance_cancelled: `Maintenance Cancelled: ${maint.title}`,
         maintenance_rejected: `Maintenance Rejected: ${maint.title}`,
       };

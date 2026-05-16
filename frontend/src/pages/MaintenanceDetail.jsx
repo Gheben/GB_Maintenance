@@ -7,7 +7,7 @@ import { ItemPicker } from '../components/ItemPicker'
 import { toast } from '../components/Toast'
 import { maintenanceApi, assetsApi, servicesApi, maintenanceTypesApi } from '../api'
 import { format } from 'date-fns'
-import { ArrowLeft, CheckCircle, XCircle, Play, Square, Ban, Pencil, Save, X, ClipboardCheck } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, Play, Square, Ban, Pencil, Save, X, ClipboardCheck, RotateCcw } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const IMPACTS = ['critical','high','medium','low']
@@ -43,6 +43,9 @@ export default function MaintenanceDetail() {
   const [cancelModal, setCancelModal] = useState(false)
   const [cancelNotes, setCancelNotes] = useState('')
   const [cancelLoading, setCancelLoading] = useState(false)
+  const [reopenModal, setReopenModal] = useState(false)
+  const [reopenReason, setReopenReason] = useState('')
+  const [reopenLoading, setReopenLoading] = useState(false)
 
   // Edit mode
   const [editMode, setEditMode] = useState(false)
@@ -225,6 +228,7 @@ export default function MaintenanceDetail() {
   if (!mw) return <Layout title="Maintenance"><div className="text-center py-16 text-gray-500">Loading...</div></Layout>
 
   const canEdit = hasRole('superadmin','admin','change_manager') && !['completed','cancelled'].includes(mw.status)
+  const canReopen = hasRole('superadmin','admin','change_manager','operator') && mw.status === 'completed'
 
   return (
     <Layout title={editMode ? 'Edit Maintenance' : mw.title}>
@@ -259,6 +263,7 @@ export default function MaintenanceDetail() {
               </>}
               {mw.status === 'scheduled' && <button className="btn-primary flex items-center gap-1" onClick={() => action(() => maintenanceApi.start(id), 'Started')}><Play size={14} />Start</button>}
               {mw.status === 'in_progress' && <button className="btn-primary flex items-center gap-1" onClick={() => action(() => maintenanceApi.complete(id), 'Completed')}><Square size={14} />Complete</button>}
+              {canReopen && <button className="btn-secondary flex items-center gap-1" onClick={() => setReopenModal(true)}><RotateCcw size={14} />Reopen</button>}
               {['scheduled','in_progress','pending_approval'].includes(mw.status) && (
                 <button className="btn-secondary flex items-center gap-1" onClick={() => setCancelModal(true)}><Ban size={14} />Cancel</button>
               )}
@@ -355,10 +360,13 @@ export default function MaintenanceDetail() {
               <div><span className="text-gray-500">End:</span> <strong>{format(new Date(mw.scheduled_end), 'MM/dd/yyyy HH:mm')}</strong></div>
               {mw.actual_start && <div><span className="text-gray-500">Actual start:</span> <strong>{format(new Date(mw.actual_start), 'MM/dd HH:mm')}</strong></div>}
               {mw.actual_end && <div><span className="text-gray-500">Actual end:</span> <strong>{format(new Date(mw.actual_end), 'MM/dd HH:mm')}</strong></div>}
+              {mw.reopened_at && <div><span className="text-gray-500">Reopened at:</span> <strong>{format(new Date(mw.reopened_at), 'MM/dd HH:mm')}</strong></div>}
+              {mw.reopen_count > 0 && <div><span className="text-gray-500">Reopen count:</span> <strong>{mw.reopen_count}</strong></div>}
             </div>
 
             {mw.description && <p className="text-gray-600 dark:text-gray-300 text-sm">{mw.description}</p>}
             {mw.notes && <p className="text-gray-600 dark:text-gray-300 text-sm"><strong>Notes:</strong> {mw.notes}</p>}
+            {mw.reopen_reason && <p className="text-amber-700 text-sm"><strong>Reopen reason:</strong> {mw.reopen_reason}</p>}
             {mw.rejection_reason && <p className="text-red-600 text-sm"><strong>Rejection reason:</strong> {mw.rejection_reason}</p>}
           </div>
 
@@ -432,6 +440,26 @@ export default function MaintenanceDetail() {
               )}
             </div>
           )}
+
+          <div className="card p-5">
+            <h3 className="font-medium mb-3">Status Timeline</h3>
+            {(mw.statusHistory || []).length === 0 ? (
+              <p className="text-sm text-gray-500">No status history available.</p>
+            ) : (
+              <div className="space-y-2">
+                {(mw.statusHistory || []).map((h) => (
+                  <div key={h.id} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold capitalize">{String(h.status || '').replace(/_/g, ' ')}</span>
+                      <span className="text-xs text-gray-500">{h.created_at ? format(new Date(h.created_at), 'MM/dd/yyyy HH:mm') : '-'}</span>
+                      <span className="text-xs text-gray-400">by {h.changed_by || 'system'}</span>
+                    </div>
+                    {h.reason && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{h.reason}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </>
         )}
 
@@ -719,6 +747,50 @@ export default function MaintenanceDetail() {
                   setCancelLoading(false)
                 }
               }}>{cancelLoading ? 'Cancelling...' : 'Cancel Maintenance'}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {reopenModal && (
+        <Modal title="Reopen Maintenance" onClose={() => { setReopenModal(false); setReopenReason('') }} size="sm">
+          <div className="space-y-4">
+            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              Reopening will set the maintenance back to <strong>in progress</strong> and notify subscribed users.
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Reopen reason *</label>
+              <textarea
+                className="input"
+                rows={4}
+                placeholder="Describe why this maintenance must be reopened..."
+                value={reopenReason}
+                onChange={e => setReopenReason(e.target.value)}
+              />
+              <p className="text-xs text-gray-500 mt-1">Minimum 10 characters.</p>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button className="btn-secondary" onClick={() => { setReopenModal(false); setReopenReason('') }}>Cancel</button>
+              <button
+                className="btn-primary"
+                disabled={reopenLoading || reopenReason.trim().length < 10}
+                onClick={async () => {
+                  try {
+                    setReopenLoading(true)
+                    await maintenanceApi.reopen(id, reopenReason)
+                    toast.success('Maintenance reopened and subscribers notified')
+                    setReopenModal(false)
+                    setReopenReason('')
+                    load()
+                  } catch (err) {
+                    toast.error(err.response?.data?.error || 'Error')
+                  } finally {
+                    setReopenLoading(false)
+                  }
+                }}
+              >
+                {reopenLoading ? 'Reopening...' : 'Reopen Maintenance'}
+              </button>
             </div>
           </div>
         </Modal>

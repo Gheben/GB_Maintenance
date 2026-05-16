@@ -124,6 +124,7 @@ export const maintenanceApi = {
   creatorDecision: (id, approvalId, data) => api.post(`/maintenance/${id}/owner-approvals/${approvalId}/creator-decision`, data),
   start: (id) => api.post(`/maintenance/${id}/start`),
   complete: (id, notes) => api.post(`/maintenance/${id}/complete`, { notes }),
+  reopen: (id, reason) => api.post(`/maintenance/${id}/reopen`, { reason }),
   cancel: (id, reason) => api.post(`/maintenance/${id}/cancel`, { reason }),
   users: (id) => api.get(`/maintenance/${id}/users`),
 }

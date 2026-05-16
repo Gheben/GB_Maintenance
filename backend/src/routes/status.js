@@ -153,7 +153,7 @@ router.get('/', async (req, res) => {
   // In-progress maintenance (currently running)
   const in_progress_maintenance = await getMany(
     `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
-            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.description,
+            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.reopened_at, mw.reopen_reason, mw.reopen_count, mw.description,
             mw.created_at, mw.approved_at
      FROM maintenance_windows mw
      WHERE mw.status = 'in_progress'
@@ -163,7 +163,7 @@ router.get('/', async (req, res) => {
   // Upcoming maintenance (scheduled, not yet started)
   const upcoming_maintenance = await getMany(
     `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
-            mw.scheduled_start, mw.scheduled_end, mw.description,
+            mw.scheduled_start, mw.scheduled_end, mw.reopened_at, mw.reopen_reason, mw.reopen_count, mw.description,
             mw.created_at, mw.approved_at
      FROM maintenance_windows mw
      WHERE mw.status = 'scheduled'
@@ -174,7 +174,7 @@ router.get('/', async (req, res) => {
   // Recently completed maintenance (last 7 days)
   const recent_maintenance = await getMany(
     `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
-            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.actual_end, mw.notes, mw.description,
+            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.actual_end, mw.reopened_at, mw.reopen_reason, mw.reopen_count, mw.notes, mw.description,
             mw.created_at, mw.approved_at
      FROM maintenance_windows mw
      WHERE mw.status = 'completed'

@@ -88,6 +88,7 @@ function MaintenanceCard({ m, colorClass }) {
   const steps = [
     { label: 'Created',   ts: m.created_at,   color: 'bg-gray-400' },
     { label: 'Approved',  ts: m.approved_at,  color: 'bg-blue-500' },
+    { label: 'Reopened',  ts: m.reopened_at,  color: 'bg-amber-500' },
     { label: 'Started',   ts: m.actual_start, color: 'bg-orange-500' },
     { label: 'Completed', ts: m.actual_end,   color: 'bg-green-500' },
   ]
@@ -121,6 +122,7 @@ function MaintenanceCard({ m, colorClass }) {
       </div>
       {m.description && <p className="text-xs text-gray-400 mt-1">{m.description}</p>}
       {m.notes && <p className="text-xs text-gray-400 mt-1 italic">{m.notes}</p>}
+      {m.reopen_reason && <p className="text-xs text-amber-700 mt-1"><strong>Reopen reason:</strong> {m.reopen_reason}</p>}
 
       <div className="mt-2 flex flex-wrap gap-3">
         {hasHistory && (
