@@ -47,6 +47,8 @@ function PageFallback() {
 
 export default function App() {
   useEffect(() => {
+    let dynamicManifestUrl = null
+
     const getCachedBranding = () => {
       try {
         const raw = localStorage.getItem('public_branding_cache')
@@ -66,12 +68,55 @@ export default function App() {
       }
     }
 
+    const applyPwaBrandingFromAppName = async (appName) => {
+      if (!appName) return
+
+      let appleTitleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+      if (!appleTitleMeta) {
+        appleTitleMeta = document.createElement('meta')
+        appleTitleMeta.setAttribute('name', 'apple-mobile-web-app-title')
+        document.head.appendChild(appleTitleMeta)
+      }
+      appleTitleMeta.setAttribute('content', appName)
+
+      const manifestLink = document.querySelector('link[rel="manifest"]')
+      if (!manifestLink) return
+
+      const savedOriginalHref = manifestLink.getAttribute('data-original-href')
+      const currentHref = manifestLink.getAttribute('href') || '/manifest.json'
+      const originalHref = savedOriginalHref || currentHref
+      if (!savedOriginalHref) manifestLink.setAttribute('data-original-href', originalHref)
+
+      try {
+        const response = await fetch(originalHref, { cache: 'no-store' })
+        if (!response.ok) return
+        const manifest = await response.json()
+        const updatedManifest = {
+          ...manifest,
+          name: appName,
+          short_name: appName,
+        }
+
+        const blob = new Blob([JSON.stringify(updatedManifest)], { type: 'application/manifest+json' })
+        const nextManifestUrl = URL.createObjectURL(blob)
+        manifestLink.setAttribute('href', nextManifestUrl)
+
+        if (dynamicManifestUrl) URL.revokeObjectURL(dynamicManifestUrl)
+        dynamicManifestUrl = nextManifestUrl
+      } catch {
+        // Keep the static manifest if dynamic generation fails.
+      }
+    }
+
     const applyBrandingFromPayload = (b) => {
       if (!b || typeof b !== 'object') return
       const appName = String(b.app_name || 'GB Maintenance').trim()
       const appImage = String(b.app_brand_image_url || '').trim()
 
-      if (appName) document.title = appName
+      if (appName) {
+        document.title = appName
+        applyPwaBrandingFromAppName(appName)
+      }
       if (appImage) {
         // Add timestamp to force browser cache busting
         const ts = Date.now()
@@ -111,7 +156,10 @@ export default function App() {
     applyBrandingFromPayload(getCachedBranding())
     applyBranding()
     window.addEventListener('app-branding-updated', onBrandingUpdate)
-    return () => window.removeEventListener('app-branding-updated', onBrandingUpdate)
+    return () => {
+      window.removeEventListener('app-branding-updated', onBrandingUpdate)
+      if (dynamicManifestUrl) URL.revokeObjectURL(dynamicManifestUrl)
+    }
   }, [])
 
   return (
