@@ -14,16 +14,27 @@ const OVERALL_ICONS = {
 }
 
 const OVERALL_LABELS = {
-  operational: 'All systems operational',
-  degraded: 'Degraded — Some systems have issues',
-  major_outage: 'Major outage',
-  under_maintenance: 'Maintenance in progress',
+  operational: 'All systems are operational',
+  degraded: 'Degraded performance on some services',
+  major_outage: 'Major outage in progress',
+  under_maintenance: 'Maintenance activity in progress',
 }
 
 const STATUS_DOT = {
   operational: 'bg-green-500 animate-pulse', degraded: 'bg-yellow-500',
   partial_outage: 'bg-orange-500', major_outage: 'bg-red-500',
   under_maintenance: 'bg-blue-500', unknown: 'bg-gray-400',
+}
+
+const IMPACT_BADGE = {
+  critical: 'bg-red-100 text-red-800 border-red-200',
+  high: 'bg-orange-100 text-orange-800 border-orange-200',
+  medium: 'bg-amber-100 text-amber-800 border-amber-200',
+  low: 'bg-blue-100 text-blue-800 border-blue-200',
+}
+
+function impactLabel(v) {
+  return String(v || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Unknown'
 }
 
 function fmt(dt, f = 'MM/dd/yyyy HH:mm') {
@@ -87,7 +98,11 @@ function MaintenanceCard({ m, colorClass }) {
         {m.status === 'scheduled' && m.scheduled_start && (
           <span>{fmt(m.scheduled_start)} → {fmt(m.scheduled_end, 'HH:mm MM/dd')}</span>
         )}
-        {m.impact_level && <span className="capitalize">Impact: {m.impact_level.replace(/_/g, ' ')}</span>}
+        {m.impact_level && (
+          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-medium ${IMPACT_BADGE[m.impact_level] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+            Impact: {impactLabel(m.impact_level)}
+          </span>
+        )}
       </div>
       {m.description && <p className="text-xs text-gray-400 mt-1">{m.description}</p>}
       {m.notes && <p className="text-xs text-gray-400 mt-1 italic">{m.notes}</p>}
@@ -361,6 +376,7 @@ export default function StatusPage() {
           )}
           <h1 className="text-2xl sm:text-3xl font-bold mb-2">{data.app_name}</h1>
           <p className="text-sm text-gray-500">Last updated: {fmt(data.last_updated)}</p>
+          <p className="text-xs text-gray-400 mt-1">Live service health, incidents, and maintenance updates.</p>
         </div>
 
         {/* Active blackout — full red alert above everything */}
@@ -426,7 +442,7 @@ export default function StatusPage() {
                 )}
               </div>
             ))}
-            {data.services.length === 0 && <p className="text-center text-gray-500 py-6 text-sm">No public services</p>}
+            {data.services.length === 0 && <p className="text-center text-gray-500 py-6 text-sm">No public services are currently published.</p>}
           </div>
         </div>
 
@@ -457,7 +473,7 @@ export default function StatusPage() {
         <MaintenanceList
           items={upcoming}
           colorClass="bg-blue-100 text-blue-800"
-          title="Scheduled Maintenances"
+          title="Scheduled Maintenance Windows"
           headerClass="text-blue-600"
           icon={<Clock size={16} />}
         />
