@@ -15,7 +15,7 @@ Most endpoints require a **JWT Bearer token**.
 
 \`\`\`
 POST /api/auth/login
-{ "username": "sysadmin", "password": "Ballarini1993!" }
+{ "username": "sysadmin", "password": "sysadminpassword!" }
 \`\`\`
 
 Copy the \`token\` field from the response, click **"Authorize"** (🔓) at the top of this page, and paste it.
@@ -222,7 +222,7 @@ API keys are created from **Settings -> API Keys**.
           content: { 'application/json': { schema: { type: 'object', required: ['username','password'],
             properties: {
               username:  { type: 'string', example: 'sysadmin' },
-              password:  { type: 'string', example: 'Ballarini1993!' },
+              password:  { type: 'string', example: 'sysadminpassword!' },
               totp_code: { type: 'string', example: '123456', description: 'Required if TOTP is enabled' },
             },
           }}},

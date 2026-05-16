@@ -110,7 +110,7 @@ After restore, restart backend and frontend.
 If you recreated the dev database from scratch, default credentials come from `.env`:
 
 - username: `sysadmin`
-- password: value of `SUPERADMIN_PASSWORD` (default in this repo: `Ballarini1993!`)
+- password: value of `SUPERADMIN_PASSWORD` (example: `sysadminpassword!`)
 
 If frontend is reachable at `http://localhost:5173` but login fails, verify backend is running on `http://localhost:4680/health`.
 
