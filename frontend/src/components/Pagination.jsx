@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 const PAGE_SIZES = [10, 25, 50, 100]
 
-export function Pagination({ page, limit, total, onChange, onLimitChange }) {
+export function Pagination({ page, limit, total, onChange, onLimitChange, pageSizes = PAGE_SIZES }) {
   const totalPages = Math.ceil(total / limit)
   if (total === 0) return null
   const from = (page - 1) * limit + 1
@@ -20,7 +20,7 @@ export function Pagination({ page, limit, total, onChange, onLimitChange }) {
               value={limit}
               onChange={e => { onLimitChange(parseInt(e.target.value)); onChange(1) }}
             >
-              {PAGE_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+              {pageSizes.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         )}

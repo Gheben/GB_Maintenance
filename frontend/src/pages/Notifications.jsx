@@ -4,14 +4,28 @@ import { notificationsApi } from '../api'
 import { useNotifications } from '../contexts/NotificationsContext'
 import { Pagination } from '../components/Pagination'
 import { format } from 'date-fns'
+import { toast } from '../components/Toast'
 
 export default function Notifications() {
-  const { notifications, unreadCount, markRead, markAllRead, fetchNotifications } = useNotifications()
+  const { unreadCount, markRead, markAllRead, fetchNotifications, clearAll } = useNotifications()
+  const [inapp, setInapp] = useState([])
+  const [inappTotal, setInappTotal] = useState(0)
+  const [inappPage, setInappPage] = useState(1)
+  const [inappLimit, setInappLimit] = useState(25)
   const [log, setLog] = useState([])
   const [logTotal, setLogTotal] = useState(0)
   const [logPage, setLogPage] = useState(1)
   const [logLimit, setLogLimit] = useState(25)
   const [tab, setTab] = useState('inapp')
+
+  useEffect(() => {
+    if (tab === 'inapp') {
+      notificationsApi.list({ page: inappPage, limit: inappLimit }).then(r => {
+        setInapp(r.data.data || [])
+        setInappTotal(r.data.total || 0)
+      }).catch(() => {})
+    }
+  }, [tab, inappPage, inappLimit])
 
   useEffect(() => { fetchNotifications() }, [])
   useEffect(() => {
@@ -19,6 +33,40 @@ export default function Notifications() {
       notificationsApi.log({ page: logPage, limit: logLimit }).then(r => { setLog(r.data.data); setLogTotal(r.data.total) })
     }
   }, [tab, logPage, logLimit])
+
+  const refreshInApp = async () => {
+    const r = await notificationsApi.list({ page: inappPage, limit: inappLimit })
+    setInapp(r.data.data || [])
+    setInappTotal(r.data.total || 0)
+  }
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllRead()
+      await Promise.all([fetchNotifications(), refreshInApp()])
+    } catch {
+      toast.error('Failed to mark notifications as read')
+    }
+  }
+
+  const handleClearAll = async () => {
+    try {
+      await clearAll()
+      await Promise.all([fetchNotifications(), refreshInApp()])
+      toast.success('All notifications deleted')
+    } catch {
+      toast.error('Failed to delete notifications')
+    }
+  }
+
+  const handleMarkOneRead = async (id) => {
+    try {
+      await markRead([id])
+      await Promise.all([fetchNotifications(), refreshInApp()])
+    } catch {
+      toast.error('Failed to update notification')
+    }
+  }
 
   return (
     <Layout title="Notifications">
@@ -38,15 +86,18 @@ export default function Notifications() {
           <div className="card overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
               <span className="text-sm font-medium">{unreadCount} unread</span>
-              {unreadCount > 0 && <button className="action-text-btn" onClick={markAllRead}>Mark all read</button>}
+              <div className="flex items-center gap-3">
+                {unreadCount > 0 && <button className="action-text-btn" onClick={handleMarkAllRead}>Mark all read</button>}
+                {inappTotal > 0 && <button className="action-text-btn text-red-600 hover:text-red-700" onClick={handleClearAll}>Delete all</button>}
+              </div>
             </div>
             <div className="p-2 space-y-2">
-              {notifications.length === 0 && <p className="text-center text-gray-500 py-8 text-sm">No notifications</p>}
-              {notifications.map(n => {
+              {inapp.length === 0 && <p className="text-center text-gray-500 py-8 text-sm">No notifications</p>}
+              {inapp.map(n => {
                 const message = String(n.message || '').trim()
                 const showMessage = message && message !== '-'
                 return (
-                  <div key={n.id} onClick={() => !n.is_read && markRead([n.id])}
+                  <div key={n.id} onClick={() => !n.is_read && handleMarkOneRead(n.id)}
                     className={`px-3 py-2.5 rounded-xl border cursor-pointer transition-colors ${!n.is_read ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900/40' : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700'} hover:bg-gray-50 dark:hover:bg-gray-700/50`}>
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-semibold leading-5">{n.title}</p>
@@ -56,6 +107,16 @@ export default function Notifications() {
                   </div>
                 )
               })}
+            </div>
+            <div className="p-4 border-t border-gray-100 dark:border-gray-700">
+              <Pagination
+                page={inappPage}
+                limit={inappLimit}
+                total={inappTotal}
+                onChange={setInappPage}
+                onLimitChange={(v) => setInappLimit(Math.min(25, v))}
+                pageSizes={[10, 25]}
+              />
             </div>
           </div>
         )}

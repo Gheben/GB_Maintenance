@@ -9,7 +9,7 @@ export function NotificationsProvider({ children }) {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const res = await notificationsApi.list({ limit: 25 })
+      const res = await notificationsApi.list({ unread: true, page: 1, limit: 25 })
       setNotifications(res.data.data)
       setUnreadCount(res.data.unread_count)
     } catch { /* ignore */ }
@@ -17,13 +17,19 @@ export function NotificationsProvider({ children }) {
 
   const markRead = async (ids) => {
     await notificationsApi.markRead(ids)
-    setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, is_read: true } : n))
+    setNotifications(prev => prev.filter(n => !ids.includes(n.id)))
     setUnreadCount(prev => Math.max(0, prev - ids.length))
   }
 
   const markAllRead = async () => {
     await notificationsApi.markAllRead()
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+    setNotifications([])
+    setUnreadCount(0)
+  }
+
+  const clearAll = async () => {
+    await notificationsApi.deleteAll()
+    setNotifications([])
     setUnreadCount(0)
   }
 
@@ -33,7 +39,7 @@ export function NotificationsProvider({ children }) {
   }
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, fetchNotifications, markRead, markAllRead, addNotification }}>
+    <NotificationsContext.Provider value={{ notifications, unreadCount, fetchNotifications, markRead, markAllRead, clearAll, addNotification }}>
       {children}
     </NotificationsContext.Provider>
   )

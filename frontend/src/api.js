@@ -168,6 +168,7 @@ export const notificationsApi = {
   list: (params) => api.get('/notifications', { params }),
   markRead: (ids) => api.post('/notifications/read', { ids }),
   markAllRead: () => api.post('/notifications/read', {}),
+  deleteAll: () => api.delete('/notifications'),
   log: (params) => api.get('/notifications/log', { params }),
   templates: () => api.get('/notifications/templates'),
   updateTemplate: (id, data) => api.put(`/notifications/templates/${id}`, data),

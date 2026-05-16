@@ -43,6 +43,18 @@ router.post('/read', async (req, res) => {
   res.json({ message: 'Notifiche segnate come lette' });
 });
 
+// ─── DELETE /api/notifications ───────────────────────────────────────────────
+router.delete('/', async (req, res) => {
+  const { ids } = req.body || {};
+  if (Array.isArray(ids) && ids.length > 0) {
+    await query(`DELETE FROM in_app_notifications WHERE id=ANY($1::uuid[]) AND user_id=$2`, [ids, req.user.id]);
+    return res.json({ message: 'Notifiche eliminate', deleted: ids.length });
+  }
+
+  const deletedRes = await query(`DELETE FROM in_app_notifications WHERE user_id=$1`, [req.user.id]);
+  res.json({ message: 'Tutte le notifiche eliminate', deleted: deletedRes.rowCount || 0 });
+});
+
 // ─── GET /api/notifications/log ──────────────────────────────────────────────
 router.get('/log', requireAdmin, async (req, res) => {
   const { event_type, status, page = 1, limit = 50 } = req.query;

@@ -5,7 +5,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { it } from 'date-fns/locale'
 
 export function NotificationBell() {
-  const { notifications, unreadCount, fetchNotifications, markAllRead, markRead } = useNotifications()
+  const { notifications, unreadCount, fetchNotifications, markAllRead, markRead, clearAll } = useNotifications()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -32,9 +32,14 @@ export function NotificationBell() {
         <div className="absolute right-0 mt-2 w-80 card shadow-xl z-50">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
             <span className="font-medium text-sm">Notifiche</span>
-            {unreadCount > 0 && (
-              <button onClick={markAllRead} className="action-text-btn">Segna tutte lette</button>
-            )}
+            <div className="flex items-center gap-3">
+              {unreadCount > 0 && (
+                <button onClick={markAllRead} className="action-text-btn">Segna tutte lette</button>
+              )}
+              {notifications.length > 0 && (
+                <button onClick={clearAll} className="action-text-btn text-red-600 hover:text-red-700">Cancella tutte</button>
+              )}
+            </div>
           </div>
           <div className="max-h-80 overflow-y-auto p-2 space-y-1.5">
             {notifications.length === 0 ? (
