@@ -70,35 +70,9 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
     return `${normalizedBase}${cleanPath}`
   }
 
-  const openApiDocs = async () => {
-    const candidates = Array.from(new Set([
-      withAppBase('/docs/'),
-      withAppBase('/api/docs/'),
-      '/docs/',
-      '/api/docs/',
-    ]))
-
-    const isSwaggerHtml = (html) => /swagger-ui|SwaggerUIBundle/i.test(String(html || ''))
-
-    for (const url of candidates) {
-      try {
-        const res = await fetch(url, {
-          method: 'GET',
-          credentials: 'include',
-          headers: { Accept: 'text/html' },
-        })
-        if (!res.ok) continue
-        const html = await res.text()
-        if (!isSwaggerHtml(html)) continue
-        window.location.assign(url)
-        onClose?.()
-        return
-      } catch {
-        // Try next candidate.
-      }
-    }
-
-    window.location.assign(candidates[0])
+  const openApiDocs = () => {
+    // Keep navigation synchronous to preserve user gesture behavior on tablets/iOS.
+    window.location.assign('/docs/')
     onClose?.()
   }
 
