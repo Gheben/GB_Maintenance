@@ -1,6 +1,6 @@
 {
   "name": "GB Maintenance",
-  "short_name": "GBMaint",
+  "short_name": "GB Maintenance",
   "description": "Management of scheduled maintenance, assets, and business services",
   "start_url": "/",
   "display": "standalone",

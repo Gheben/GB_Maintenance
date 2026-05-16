@@ -12,11 +12,29 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="GBMaint" />
+    <meta name="apple-mobile-web-app-title" content="GB Maintenance" />
     <!-- General -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Gestione manutenzioni programmate e non, asset e servizi aziendali" />
     <title>GB Maintenance</title>
+    <script>
+      // Apply cached branding name as early as possible for iOS/PWA title resolution.
+      (function () {
+        try {
+          var raw = localStorage.getItem('public_branding_cache');
+          if (!raw) return;
+          var parsed = JSON.parse(raw);
+          var appName = String((parsed && parsed.app_name) || '').trim();
+          if (!appName) return;
+
+          document.title = appName;
+          var appleTitleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+          if (appleTitleMeta) appleTitleMeta.setAttribute('content', appName);
+        } catch (_) {
+          // Ignore cache parsing/runtime errors.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
