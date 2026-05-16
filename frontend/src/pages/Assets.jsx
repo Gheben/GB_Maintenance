@@ -53,7 +53,7 @@ export default function Assets() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
-  const [form, setForm] = useState({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [] })
+  const [form, setForm] = useState({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [], probe_enabled: false, probe_type: 'https', probe_url: '', probe_interval_seconds: 300, probe_timeout_seconds: 10, expected_status_code: 200, failure_threshold: 2, recovery_threshold: 2, pause_during_maintenance: true })
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
   const [pickerTarget, setPickerTarget] = useState('owner')
   const [users, setUsers] = useState([])
@@ -128,7 +128,7 @@ export default function Assets() {
       }
       toast.success('Asset created')
       setShowCreate(false)
-      setForm({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [] })
+      setForm({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [], probe_enabled: false, probe_type: 'https', probe_url: '', probe_interval_seconds: 300, probe_timeout_seconds: 10, expected_status_code: 200, failure_threshold: 2, recovery_threshold: 2, pause_during_maintenance: true })
       setCreateDepIds([])
       setCreateLicenseIds([])
       load()
@@ -149,6 +149,15 @@ export default function Assets() {
       name: a.name, category: a.category, criticality: a.criticality, description: a.description || '',
       owner_targets: ownerTargets,
       user_targets: Array.isArray(a.user_targets) ? a.user_targets : [],
+      probe_enabled: a.probe_enabled || false,
+      probe_type: a.probe_type || 'https',
+      probe_url: a.probe_url || '',
+      probe_interval_seconds: a.probe_interval_seconds ?? 300,
+      probe_timeout_seconds: a.probe_timeout_seconds ?? 10,
+      expected_status_code: a.expected_status_code ?? 200,
+      failure_threshold: a.failure_threshold ?? 2,
+      recovery_threshold: a.recovery_threshold ?? 2,
+      pause_during_maintenance: a.pause_during_maintenance !== false,
     })
     try {
       const r = await assetsApi.get(a.id)
@@ -407,6 +416,77 @@ export default function Assets() {
             </div>
             {ownerFieldsJsx}
             {usersFieldsJsx}
+
+            {/* Probe Configuration */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Probe Configuration</span>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={form.probe_enabled}
+                    onChange={e => setForm(f => ({...f, probe_enabled: e.target.checked}))} />
+                  <div className="relative w-9 h-5 bg-gray-300 peer-checked:bg-brand-500 rounded-full transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:w-4 after:h-4 after:transition-all peer-checked:after:translate-x-4" />
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{form.probe_enabled ? 'Enabled' : 'Disabled'}</span>
+                </label>
+              </div>
+              {form.probe_enabled && (
+                <div className="p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Type</label>
+                      <select className="input text-sm" value={form.probe_type} onChange={e => setForm(f => ({...f, probe_type: e.target.value}))}>
+                        <option value="https">HTTPS</option>
+                        <option value="http">HTTP</option>
+                        <option value="tcp">TCP</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{form.probe_type === 'tcp' ? 'Host:Port' : 'URL'}</label>
+                      <input className="input text-sm"
+                        placeholder={form.probe_type === 'tcp' ? 'hostname:443' : 'https://example.com/health'}
+                        value={form.probe_url} onChange={e => setForm(f => ({...f, probe_url: e.target.value}))} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Interval (s)</label>
+                      <input type="number" min="30" className="input text-sm" value={form.probe_interval_seconds}
+                        onChange={e => setForm(f => ({...f, probe_interval_seconds: e.target.value}))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Timeout (s)</label>
+                      <input type="number" min="1" max="60" className="input text-sm" value={form.probe_timeout_seconds}
+                        onChange={e => setForm(f => ({...f, probe_timeout_seconds: e.target.value}))} />
+                    </div>
+                    {form.probe_type !== 'tcp' && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Expected HTTP</label>
+                        <input type="number" min="100" max="599" className="input text-sm" value={form.expected_status_code}
+                          onChange={e => setForm(f => ({...f, expected_status_code: e.target.value}))} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Failure threshold</label>
+                      <input type="number" min="1" max="10" className="input text-sm" value={form.failure_threshold}
+                        onChange={e => setForm(f => ({...f, failure_threshold: e.target.value}))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Recovery threshold</label>
+                      <input type="number" min="1" max="10" className="input text-sm" value={form.recovery_threshold}
+                        onChange={e => setForm(f => ({...f, recovery_threshold: e.target.value}))} />
+                    </div>
+                  </div>
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" className="rounded border-gray-300 text-brand-600"
+                      checked={form.pause_during_maintenance}
+                      onChange={e => setForm(f => ({...f, pause_during_maintenance: e.target.checked}))} />
+                    <span className="text-xs text-gray-600 dark:text-gray-300">Pause probing during maintenance windows</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
             <ItemPicker
               label="Assigned licenses"
               allItems={allLicenses}
@@ -463,6 +543,77 @@ export default function Assets() {
             </div>
             {ownerFieldsJsx}
             {usersFieldsJsx}
+
+            {/* Probe Configuration */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Probe Configuration</span>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={form.probe_enabled}
+                    onChange={e => setForm(f => ({...f, probe_enabled: e.target.checked}))} />
+                  <div className="relative w-9 h-5 bg-gray-300 peer-checked:bg-brand-500 rounded-full transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:w-4 after:h-4 after:transition-all peer-checked:after:translate-x-4" />
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{form.probe_enabled ? 'Enabled' : 'Disabled'}</span>
+                </label>
+              </div>
+              {form.probe_enabled && (
+                <div className="p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Type</label>
+                      <select className="input text-sm" value={form.probe_type} onChange={e => setForm(f => ({...f, probe_type: e.target.value}))}>
+                        <option value="https">HTTPS</option>
+                        <option value="http">HTTP</option>
+                        <option value="tcp">TCP</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{form.probe_type === 'tcp' ? 'Host:Port' : 'URL'}</label>
+                      <input className="input text-sm"
+                        placeholder={form.probe_type === 'tcp' ? 'hostname:443' : 'https://example.com/health'}
+                        value={form.probe_url} onChange={e => setForm(f => ({...f, probe_url: e.target.value}))} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Interval (s)</label>
+                      <input type="number" min="30" className="input text-sm" value={form.probe_interval_seconds}
+                        onChange={e => setForm(f => ({...f, probe_interval_seconds: e.target.value}))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Timeout (s)</label>
+                      <input type="number" min="1" max="60" className="input text-sm" value={form.probe_timeout_seconds}
+                        onChange={e => setForm(f => ({...f, probe_timeout_seconds: e.target.value}))} />
+                    </div>
+                    {form.probe_type !== 'tcp' && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Expected HTTP</label>
+                        <input type="number" min="100" max="599" className="input text-sm" value={form.expected_status_code}
+                          onChange={e => setForm(f => ({...f, expected_status_code: e.target.value}))} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Failure threshold</label>
+                      <input type="number" min="1" max="10" className="input text-sm" value={form.failure_threshold}
+                        onChange={e => setForm(f => ({...f, failure_threshold: e.target.value}))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Recovery threshold</label>
+                      <input type="number" min="1" max="10" className="input text-sm" value={form.recovery_threshold}
+                        onChange={e => setForm(f => ({...f, recovery_threshold: e.target.value}))} />
+                    </div>
+                  </div>
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" className="rounded border-gray-300 text-brand-600"
+                      checked={form.pause_during_maintenance}
+                      onChange={e => setForm(f => ({...f, pause_during_maintenance: e.target.checked}))} />
+                    <span className="text-xs text-gray-600 dark:text-gray-300">Pause probing during maintenance windows</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
             <ItemPicker
               label="Assigned licenses"
               allItems={allLicenses}
