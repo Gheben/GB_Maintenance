@@ -7,7 +7,7 @@ import { ItemPicker } from '../components/ItemPicker'
 import { toast } from '../components/Toast'
 import { maintenanceApi, assetsApi, servicesApi, maintenanceTypesApi } from '../api'
 import { format } from 'date-fns'
-import { ArrowLeft, CheckCircle, XCircle, Play, Square, Ban, Pencil, Save, X, ClipboardCheck, RotateCcw, Users, Building2, Search } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, Play, Square, Ban, Pencil, Save, X, ClipboardCheck, RotateCcw, Users, Building2, Search, Boxes, Server } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const IMPACTS = ['critical','high','medium','low']
@@ -233,6 +233,7 @@ export default function MaintenanceDetail() {
 
   const canEdit = hasRole('superadmin','admin','change_manager') && !['completed','cancelled'].includes(mw.status)
   const canReopen = hasRole('superadmin','admin','change_manager','operator') && mw.status === 'completed'
+  const involvedServicesCount = (mw.services?.length || 0) + (mw.affectedServices?.length || 0)
 
   return (
     <Layout title={editMode ? 'Edit Maintenance' : mw.title}>
@@ -376,7 +377,10 @@ export default function MaintenanceDetail() {
 
           {/* Assets */}
           <div className="card p-5">
-            <h3 className="font-medium mb-3">Involved Assets ({mw.assets?.length || 0})</h3>
+            <h3 className="font-semibold text-blue-700 dark:text-blue-300 mb-3 flex items-center gap-2">
+              <Boxes size={16} />
+              Involved Assets ({mw.assets?.length || 0})
+            </h3>
             <div className="space-y-2">
               {mw.assets?.length === 0 && <p className="text-gray-500 text-sm">No assets</p>}
               {mw.assets?.map(a => (
@@ -410,7 +414,10 @@ export default function MaintenanceDetail() {
           {/* Services */}
           {(mw.services?.length > 0 || mw.affectedServices?.length > 0) && (
             <div className="card p-5">
-              <h3 className="font-medium mb-3">Involved Services</h3>
+              <h3 className="font-semibold text-blue-700 dark:text-blue-300 mb-3 flex items-center gap-2">
+                <Server size={16} />
+                Involved Services ({involvedServicesCount})
+              </h3>
               {mw.services?.length > 0 && (
                 <>
                   <div className="space-y-2 mb-4">
@@ -446,30 +453,6 @@ export default function MaintenanceDetail() {
           )}
 
           <div className="card p-5">
-            <h3 className="font-medium mb-3">Status Timeline</h3>
-            {(mw.statusHistory || []).length === 0 ? (
-              <p className="text-sm text-gray-500">No status history available.</p>
-            ) : (
-              <div className="space-y-2">
-                {(mw.statusHistory || []).map((h) => (
-                  <div key={h.id} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold capitalize">{String(h.status || '').replace(/_/g, ' ')}</span>
-                      <span className="text-xs text-gray-500">{h.created_at ? format(new Date(h.created_at), 'MM/dd/yyyy HH:mm') : '-'}</span>
-                      <span className="text-xs text-gray-400">by {h.changed_by || 'system'}</span>
-                    </div>
-                    {h.reason && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{h.reason}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-        )}
-
-        {/* Users */}
-        {!editMode && (
-          <div className="card p-5">
             <h3 className="font-medium mb-3">Impacted Audience</h3>
             <div className="flex flex-wrap gap-2">
               <button
@@ -496,7 +479,29 @@ export default function MaintenanceDetail() {
               </button>
             </div>
           </div>
+
+          <div className="card p-5">
+            <h3 className="font-medium mb-3">Status Timeline</h3>
+            {(mw.statusHistory || []).length === 0 ? (
+              <p className="text-sm text-gray-500">No status history available.</p>
+            ) : (
+              <div className="space-y-2">
+                {(mw.statusHistory || []).map((h) => (
+                  <div key={h.id} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold capitalize">{String(h.status || '').replace(/_/g, ' ')}</span>
+                      <span className="text-xs text-gray-500">{h.created_at ? format(new Date(h.created_at), 'MM/dd/yyyy HH:mm') : '-'}</span>
+                      <span className="text-xs text-gray-400">by {h.changed_by || 'system'}</span>
+                    </div>
+                    {h.reason && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{h.reason}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
         )}
+
       </div>
 
       {showUsersModal && (
