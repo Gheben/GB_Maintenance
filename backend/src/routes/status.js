@@ -7,39 +7,79 @@ const router = Router();
 async function computeInvolvedUsersRows(maintenanceIds) {
   if (!Array.isArray(maintenanceIds) || maintenanceIds.length === 0) return [];
   return getMany(
-    `SELECT DISTINCT mwa.maintenance_id,
-            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
-     FROM maintenance_assets mwa
-     JOIN service_assets sa ON sa.asset_id = mwa.asset_id
-     LEFT JOIN service_subscribers ss ON ss.service_id = sa.service_id
-     LEFT JOIN users u ON u.id = ss.user_id
-     WHERE mwa.maintenance_id = ANY($1::uuid[])
-       AND u.id IS NOT NULL
-     UNION
+    `-- Direct users in asset.user_targets linked via maintenance_assets
      SELECT DISTINCT mwa.maintenance_id,
-            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
+            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office
+     FROM maintenance_assets mwa
+     JOIN assets a ON a.id = mwa.asset_id
+     JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
+     JOIN users u ON u.id = (ot->>'id')::uuid
+     WHERE mwa.maintenance_id = ANY($1::uuid[])
+       AND ot->>'type' = 'user'
+       AND u.is_active = true
+     UNION
+     -- Local group members in asset.user_targets linked via maintenance_assets
+     SELECT DISTINCT mwa.maintenance_id,
+            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office
+     FROM maintenance_assets mwa
+     JOIN assets a ON a.id = mwa.asset_id
+     JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
+     JOIN user_group_members ugm ON ugm.group_id = (ot->>'id')::uuid
+     JOIN users u ON u.id = ugm.user_id
+     WHERE mwa.maintenance_id = ANY($1::uuid[])
+       AND ot->>'type' = 'local_group'
+       AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+       AND u.is_active = true
+     UNION
+     -- Direct users in service.user_targets linked via maintenance_assets → service_assets
+     SELECT DISTINCT mwa.maintenance_id,
+            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office
      FROM maintenance_assets mwa
      JOIN service_assets sa ON sa.asset_id = mwa.asset_id
      JOIN services sv ON sv.id = sa.service_id
-     LEFT JOIN users u ON u.id = sv.owner_id
+     JOIN LATERAL jsonb_array_elements(COALESCE(sv.user_targets, '[]'::jsonb)) ot ON true
+     JOIN users u ON u.id = (ot->>'id')::uuid
      WHERE mwa.maintenance_id = ANY($1::uuid[])
-       AND u.id IS NOT NULL
+       AND ot->>'type' = 'user'
+       AND u.is_active = true
      UNION
-     SELECT DISTINCT ms.maintenance_id,
-            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
-     FROM maintenance_services ms
-     LEFT JOIN service_subscribers ss ON ss.service_id = ms.service_id
-     LEFT JOIN users u ON u.id = ss.user_id
-     WHERE ms.maintenance_id = ANY($1::uuid[])
-       AND u.id IS NOT NULL
+     -- Local group members in service.user_targets linked via maintenance_assets → service_assets
+     SELECT DISTINCT mwa.maintenance_id,
+            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office
+     FROM maintenance_assets mwa
+     JOIN service_assets sa ON sa.asset_id = mwa.asset_id
+     JOIN services sv ON sv.id = sa.service_id
+     JOIN LATERAL jsonb_array_elements(COALESCE(sv.user_targets, '[]'::jsonb)) ot ON true
+     JOIN user_group_members ugm ON ugm.group_id = (ot->>'id')::uuid
+     JOIN users u ON u.id = ugm.user_id
+     WHERE mwa.maintenance_id = ANY($1::uuid[])
+       AND ot->>'type' = 'local_group'
+       AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+       AND u.is_active = true
      UNION
+     -- Direct users in service.user_targets linked via maintenance_services
      SELECT DISTINCT ms.maintenance_id,
-            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
+            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office
      FROM maintenance_services ms
      JOIN services sv ON sv.id = ms.service_id
-     LEFT JOIN users u ON u.id = sv.owner_id
+     JOIN LATERAL jsonb_array_elements(COALESCE(sv.user_targets, '[]'::jsonb)) ot ON true
+     JOIN users u ON u.id = (ot->>'id')::uuid
      WHERE ms.maintenance_id = ANY($1::uuid[])
-       AND u.id IS NOT NULL`,
+       AND ot->>'type' = 'user'
+       AND u.is_active = true
+     UNION
+     -- Local group members in service.user_targets linked via maintenance_services
+     SELECT DISTINCT ms.maintenance_id,
+            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office
+     FROM maintenance_services ms
+     JOIN services sv ON sv.id = ms.service_id
+     JOIN LATERAL jsonb_array_elements(COALESCE(sv.user_targets, '[]'::jsonb)) ot ON true
+     JOIN user_group_members ugm ON ugm.group_id = (ot->>'id')::uuid
+     JOIN users u ON u.id = ugm.user_id
+     WHERE ms.maintenance_id = ANY($1::uuid[])
+       AND ot->>'type' = 'local_group'
+       AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
+       AND u.is_active = true`,
     [maintenanceIds]
   ).catch(() => []);
 }
