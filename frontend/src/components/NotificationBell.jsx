@@ -9,6 +9,12 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
+  const handleClearAll = async () => {
+    const ok = window.confirm('Delete all notifications? This action cannot be undone.')
+    if (!ok) return
+    await clearAll()
+  }
+
   useEffect(() => { fetchNotifications() }, [])
 
   useEffect(() => {
@@ -37,7 +43,7 @@ export function NotificationBell() {
                 <button onClick={markAllRead} className="action-text-btn">Segna tutte lette</button>
               )}
               {notifications.length > 0 && (
-                <button onClick={clearAll} className="action-text-btn text-red-600 hover:text-red-700">Cancella tutte</button>
+                <button onClick={handleClearAll} className="action-text-btn text-red-600 hover:text-red-700">Cancella tutte</button>
               )}
             </div>
           </div>
