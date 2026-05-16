@@ -253,6 +253,7 @@ export default function Maintenance() {
                               {[
                                 { label: 'Created', ts: m.created_at, color: 'bg-gray-400' },
                                 { label: 'Approved', ts: m.approved_at, color: 'bg-blue-500' },
+                                { label: 'Reopened', ts: m.reopened_at, color: 'bg-amber-500' },
                                 { label: 'Started', ts: m.actual_start, color: 'bg-orange-500' },
                                 { label: 'Completed', ts: m.actual_end, color: 'bg-green-500' },
                               ].map((step, idx, arr) => (
@@ -268,6 +269,11 @@ export default function Maintenance() {
                                 </div>
                               ))}
                             </div>
+                            {m.reopen_reason && (
+                              <p className="text-xs text-amber-700 mt-2">
+                                <strong>Reopen reason:</strong> {m.reopen_reason}
+                              </p>
+                            )}
                           </td>
                         </tr>
                       )}
