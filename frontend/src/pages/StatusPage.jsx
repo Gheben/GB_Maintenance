@@ -360,16 +360,23 @@ export default function StatusPage() {
       <div className="max-w-3xl mx-auto space-y-6 sm:space-y-8">
         {/* Header */}
         <div className="relative text-center">
-          {isLoggedIn && (
-            <div className="absolute top-0 right-0">
+          <div className="absolute top-0 right-0">
+            {isLoggedIn ? (
               <Link
                 to="/"
                 className="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 px-2.5 py-1 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 Back to app
               </Link>
-            </div>
-          )}
+            ) : (
+              <Link
+                to="/login"
+                className="inline-flex items-center rounded-md border border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2.5 py-1 text-xs text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-800/40"
+              >
+                Login
+              </Link>
+            )}
+          </div>
           {String(data.app_brand_image_url || '').trim() ? (
             <img
               src={String(data.app_brand_image_url || '').trim()}

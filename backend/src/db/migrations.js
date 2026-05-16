@@ -1268,6 +1268,13 @@ const MIGRATIONS = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_miuc_name ON maintenance_involved_users_cache(name)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_miuc_office ON maintenance_involved_users_cache(office)`);
     }
+  },
+  {
+    version: 30,
+    name: 'clear_involved_users_cache_for_user_targets_fix',
+    up: async (client) => {
+      await client.query(`TRUNCATE maintenance_involved_users_cache`);
+    }
   }
 ];
 
