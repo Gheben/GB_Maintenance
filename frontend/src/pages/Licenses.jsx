@@ -1836,12 +1836,12 @@ export default function Licenses() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4">
+              <div className="min-w-0">
                 <label className="block text-sm font-medium mb-1">Activation date</label>
                 <input className="input" type="date" value={licenseForm.activation_date} onChange={e => setLicenseForm(f => ({ ...f, activation_date: e.target.value }))} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="block text-sm font-medium mb-1">Expiry mode</label>
                 <select className="input" value={licenseForm.expiry_mode} onChange={e => setLicenseForm(f => ({ ...f, expiry_mode: e.target.value }))}>
                   <option value="duration">Duration from activation</option>
@@ -1849,23 +1849,23 @@ export default function Licenses() {
                 </select>
               </div>
               {licenseForm.expiry_mode === 'duration' ? (
-                <div>
+                <div className="min-w-0">
                   <label className="block text-sm font-medium mb-1">Duration months</label>
                   <select className="input" value={licenseForm.duration_months} onChange={e => setLicenseForm(f => ({ ...f, duration_months: e.target.value }))}>
                     {[12, 24, 36, 48, 60].map(months => <option key={months} value={String(months)}>{months} months</option>)}
                   </select>
                 </div>
               ) : (
-                <div>
+                <div className="min-w-0">
                   <label className="block text-sm font-medium mb-1">Custom expiry date</label>
                   <input className="input" type="date" value={licenseForm.expiry_date} onChange={e => setLicenseForm(f => ({ ...f, expiry_date: e.target.value }))} />
                 </div>
               )}
-              <div>
+              <div className="min-w-0">
                 <label className="block text-sm font-medium mb-1">Reminder days</label>
                 <input className="input" type="number" min="1" max="365" value={licenseForm.reminder_days} onChange={e => setLicenseForm(f => ({ ...f, reminder_days: e.target.value }))} />
               </div>
-              <div>
+              <div className="min-w-0 sm:col-span-2 2xl:col-span-1">
                 <label className="block text-sm font-medium mb-1">Approval status</label>
                 <div className="input flex items-center">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${approvalStatusMeta(licenseForm.approval_status, licenseForm.approval_required !== false).cls}`}>
