@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
-import { Modal } from '../components/Modal'
+import { ConfirmDialog, Modal } from '../components/Modal'
 import { ItemPicker } from '../components/ItemPicker'
 import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { servicesApi, usersApi, groupsApi, settingsApi, licensesApi } from '../api'
-import { Plus, Search, RefreshCw, Pencil } from 'lucide-react'
+import { Plus, Search, RefreshCw, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const BLANK_FORM = { name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, owner_targets: [], user_targets: [], system_name: '' }
@@ -39,8 +39,9 @@ function LicenseState({ row }) {
 }
 
 export default function Services() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, hasRole } = useAuth()
   const canEdit = hasPermission('services')
+  const canBulkDelete = hasRole('superadmin', 'admin')
   const [services, setServices] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -61,6 +62,9 @@ export default function Services() {
   const [allLicenses, setAllLicenses] = useState([])
   const [createLicenseIds, setCreateLicenseIds] = useState([])
   const [editLicenseIds, setEditLicenseIds] = useState([])
+  const [selectedServiceIds, setSelectedServiceIds] = useState([])
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -70,6 +74,10 @@ export default function Services() {
   }, [search, page, limit])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    setSelectedServiceIds(prev => prev.filter(id => services.some(s => s.id === id)))
+  }, [services])
 
   useEffect(() => {
     usersApi.list({ limit: 200 }).then(r => {
@@ -294,6 +302,39 @@ export default function Services() {
     </form>
   )
 
+  const toggleServiceSelection = (id) => {
+    if (!canBulkDelete) return
+    setSelectedServiceIds((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const toggleSelectAllVisible = (checked) => {
+    if (!canBulkDelete) return
+    if (checked) {
+      setSelectedServiceIds(services.map(s => s.id))
+      return
+    }
+    setSelectedServiceIds([])
+  }
+
+  const handleBulkDelete = async () => {
+    if (!canBulkDelete || selectedServiceIds.length === 0) return
+    setBulkDeleting(true)
+    try {
+      const results = await Promise.allSettled(selectedServiceIds.map((id) => servicesApi.delete(id)))
+      const ok = results.filter(r => r.status === 'fulfilled').length
+      const ko = results.length - ok
+      if (ok > 0) toast.success(`${ok} service deleted`)
+      if (ko > 0) toast.error(`${ko} service not deleted`)
+      setConfirmBulkDelete(false)
+      setSelectedServiceIds([])
+      load()
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  const allVisibleSelected = services.length > 0 && services.every(s => selectedServiceIds.includes(s.id))
+
   return (
     <Layout title="Services">
       <div className="space-y-4">
@@ -305,6 +346,15 @@ export default function Services() {
           </div>
           <div className="flex gap-2">
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
+            {canBulkDelete && (
+              <button
+                className="btn-danger"
+                disabled={selectedServiceIds.length === 0 || bulkDeleting}
+                onClick={() => setConfirmBulkDelete(true)}
+              >
+                <Trash2 size={15} />Delete selected ({selectedServiceIds.length})
+              </button>
+            )}
             {canEdit && <button className="btn-primary" onClick={() => { setForm(BLANK_FORM); setShowCreate(true) }}><Plus size={15} />New Service</button>}
           </div>
         </div>
@@ -313,10 +363,22 @@ export default function Services() {
           <div className="overflow-x-auto">
             <table className="min-w-[640px] w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
-                <tr>{['Name','System','Criticality','Status','Licenses','Owner','Assets','SLA %','Public',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                <tr>
+                  {canBulkDelete && (
+                    <th className="text-left px-4 py-3 font-medium text-gray-600 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={(e) => toggleSelectAllVisible(e.target.checked)}
+                        aria-label="Select all visible services"
+                      />
+                    </th>
+                  )}
+                  {['Name','System','Criticality','Status','Licenses','Owner','Assets','SLA %','Public',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
+                </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {loading ? <tr><td colSpan={10} className="text-center py-8 text-gray-500">Loading...</td></tr>
+                {loading ? <tr><td colSpan={canBulkDelete ? 11 : 10} className="text-center py-8 text-gray-500">Loading...</td></tr>
                   : services.map(s => (
                     <tr
                       key={s.id}
@@ -324,6 +386,16 @@ export default function Services() {
                       onDoubleClick={canEdit ? () => openEdit(s) : undefined}
                       title={canEdit ? 'Double click to edit' : undefined}
                     >
+                      {canBulkDelete && (
+                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedServiceIds.includes(s.id)}
+                            onChange={() => toggleServiceSelection(s.id)}
+                            aria-label={`Select service ${s.name}`}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3 font-medium">
                         <Link to={`/services/${s.id}`} className="text-brand-600 hover:underline">{s.name}</Link>
                       </td>
@@ -389,6 +461,17 @@ export default function Services() {
         localGroups={localGroups}
         ldapEnabled={ldapEnabled}
       />
+
+      {confirmBulkDelete && (
+        <ConfirmDialog
+          title="Delete Selected Services"
+          message={`Delete ${selectedServiceIds.length} selected service(s)? This action cannot be undone.`}
+          danger
+          confirmLabel={bulkDeleting ? 'Deleting...' : 'Delete'}
+          onConfirm={handleBulkDelete}
+          onCancel={() => !bulkDeleting && setConfirmBulkDelete(false)}
+        />
+      )}
     </Layout>
   )
 }

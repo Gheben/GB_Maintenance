@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
-import { Modal } from '../components/Modal'
+import { ConfirmDialog, Modal } from '../components/Modal'
 import { ItemPicker } from '../components/ItemPicker'
 import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { assetsApi, assetCategoriesApi, usersApi, groupsApi, settingsApi, licensesApi } from '../api'
-import { Plus, Search, RefreshCw, Pencil } from 'lucide-react'
+import { Plus, Search, RefreshCw, Pencil, Trash2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CATEGORIES = ['application','infrastructure','database','network','hardware','api','other']
@@ -40,8 +40,9 @@ function LicenseState({ row }) {
 }
 
 export default function Assets() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, hasRole } = useAuth()
   const canEdit = hasPermission('assets')
+  const canBulkDelete = hasRole('superadmin', 'admin')
   const [assets, setAssets] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -65,6 +66,9 @@ export default function Assets() {
   const [createLicenseIds, setCreateLicenseIds] = useState([])
   const [editLicenseIds, setEditLicenseIds] = useState([])
   const [categories, setCategories] = useState([])
+  const [selectedAssetIds, setSelectedAssetIds] = useState([])
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -75,6 +79,10 @@ export default function Assets() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => { assetCategoriesApi.list().then(r => setCategories(r.data)).catch(() => setCategories(CATEGORIES.map(s => ({ slug: s, label: s, color: '#6366f1' })))) }, [])
+
+  useEffect(() => {
+    setSelectedAssetIds(prev => prev.filter(id => assets.some(a => a.id === id)))
+  }, [assets])
 
   useEffect(() => {
     usersApi.list({ limit: 200 }).then(r => setUsers(Array.isArray(r.data) ? r.data : (r.data.data || []))).catch(() => {})
@@ -236,6 +244,39 @@ export default function Assets() {
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
+  const toggleAssetSelection = (id) => {
+    if (!canBulkDelete) return
+    setSelectedAssetIds((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const toggleSelectAllVisible = (checked) => {
+    if (!canBulkDelete) return
+    if (checked) {
+      setSelectedAssetIds(assets.map(a => a.id))
+      return
+    }
+    setSelectedAssetIds([])
+  }
+
+  const handleBulkDelete = async () => {
+    if (!canBulkDelete || selectedAssetIds.length === 0) return
+    setBulkDeleting(true)
+    try {
+      const results = await Promise.allSettled(selectedAssetIds.map((id) => assetsApi.delete(id)))
+      const ok = results.filter(r => r.status === 'fulfilled').length
+      const ko = results.length - ok
+      if (ok > 0) toast.success(`${ok} asset deleted`)
+      if (ko > 0) toast.error(`${ko} asset not deleted`)
+      setConfirmBulkDelete(false)
+      setSelectedAssetIds([])
+      load()
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  const allVisibleSelected = assets.length > 0 && assets.every(a => selectedAssetIds.includes(a.id))
+
   return (
     <Layout title="Assets">
       <div className="space-y-4">
@@ -254,7 +295,16 @@ export default function Assets() {
           </div>
           <div className="flex gap-2">
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
-              {canEdit && <Link to="/assets/categories" className="btn-secondary">Asset Categories</Link>}
+            {canBulkDelete && (
+              <button
+                className="btn-danger"
+                disabled={selectedAssetIds.length === 0 || bulkDeleting}
+                onClick={() => setConfirmBulkDelete(true)}
+              >
+                <Trash2 size={15} />Delete selected ({selectedAssetIds.length})
+              </button>
+            )}
+            {canEdit && <Link to="/assets/categories" className="btn-secondary">Asset Categories</Link>}
             {canEdit && <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />New Asset</button>}
           </div>
         </div>
@@ -264,11 +314,23 @@ export default function Assets() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
-                <tr>{['Name','Category','Criticality','Status','Licenses','Probe',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{h}</th>)}</tr>
+                <tr>
+                  {canBulkDelete && (
+                    <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={(e) => toggleSelectAllVisible(e.target.checked)}
+                        aria-label="Select all visible assets"
+                      />
+                    </th>
+                  )}
+                  {['Name','Category','Criticality','Status','Licenses','Probe',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{h}</th>)}
+                </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {loading ? (
-                  <tr><td colSpan={7} className="text-center py-8 text-gray-500">Loading...</td></tr>
+                  <tr><td colSpan={canBulkDelete ? 8 : 7} className="text-center py-8 text-gray-500">Loading...</td></tr>
                 ) : assets.map(a => (
                   <tr
                     key={a.id}
@@ -276,6 +338,16 @@ export default function Assets() {
                     onDoubleClick={canEdit ? () => openEdit(a) : undefined}
                     title={canEdit ? 'Double click to edit' : undefined}
                   >
+                    {canBulkDelete && (
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedAssetIds.includes(a.id)}
+                          onChange={() => toggleAssetSelection(a.id)}
+                          aria-label={`Select asset ${a.name}`}
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-3 font-medium">
                       <Link to={`/assets/${a.id}`} className="text-brand-600 hover:underline">{a.name}</Link>
                     </td>
@@ -428,6 +500,17 @@ export default function Assets() {
         localGroups={localGroups}
         ldapEnabled={ldapEnabled}
       />
+
+      {confirmBulkDelete && (
+        <ConfirmDialog
+          title="Delete Selected Assets"
+          message={`Delete ${selectedAssetIds.length} selected asset(s)? This action cannot be undone.`}
+          danger
+          confirmLabel={bulkDeleting ? 'Deleting...' : 'Delete'}
+          onConfirm={handleBulkDelete}
+          onCancel={() => !bulkDeleting && setConfirmBulkDelete(false)}
+        />
+      )}
     </Layout>
   )
 }
