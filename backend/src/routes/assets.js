@@ -112,6 +112,18 @@ router.get('/', async (req, res) => {
        ORDER BY l.expiry_date NULLS LAST, l.name
        LIMIT 1
      ) prim ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT pr.success AS latest_probe_success,
+              pr.status_code AS latest_probe_status_code,
+              pr.error_message AS latest_probe_error_message,
+              pr.probed_at AS latest_probe_probed_at,
+              pr.ssl_cert_expiry AS latest_probe_ssl_cert_expiry,
+              pr.dns_response AS latest_probe_dns_response
+       FROM probe_results pr
+       WHERE pr.asset_id = a.id
+       ORDER BY pr.probed_at DESC
+       LIMIT 1
+     ) lp ON TRUE
      ${where} ORDER BY a.name LIMIT $${i++} OFFSET $${i}`,
     [...params, parseInt(limit), offset]
   );
@@ -482,6 +494,9 @@ router.post('/', requireOperator, [
   body('failure_threshold').optional().isInt({ min: 1, max: 10 }),
   body('recovery_threshold').optional().isInt({ min: 1, max: 10 }),
   body('pause_during_maintenance').optional().isBoolean(),
+  body('dns_record_type').optional().isIn(['A','AAAA','CNAME','MX','TXT','NS','PTR','SRV']),
+  body('dns_expected_value').optional({ nullable: true }).isString(),
+  body('ssl_expiry_warning_days').optional().isInt({ min: 1, max: 365 }),
   body('tags').optional().isArray(),
   body('metadata').optional().isObject(),
 ], async (req, res) => {
@@ -508,24 +523,23 @@ router.post('/', requireOperator, [
     const result = await query(
       `INSERT INTO assets (name, slug, category, criticality, description, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name,
          owner_targets, user_targets, probe_enabled, probe_type, probe_url, probe_interval_seconds, probe_timeout_seconds,
-         expected_status_code, failure_threshold, recovery_threshold, pause_during_maintenance, tags, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING id`,
+         expected_status_code, failure_threshold, recovery_threshold, pause_during_maintenance,
+         dns_record_type, dns_expected_value, ssl_expiry_warning_days, tags, metadata)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING id`,
       [
         req.body.name, slug,
         req.body.category, req.body.criticality || 'medium',
         req.body.description || null,
-        ownerFields.owner_id,
-        ownerFields.owner_type,
-        ownerFields.owner_group_id,
-        ownerFields.owner_ldap_dn,
-        ownerFields.owner_ldap_name,
-        JSON.stringify(ownerTargets),
-        JSON.stringify(userTargets),
+        ownerFields.owner_id, ownerFields.owner_type, ownerFields.owner_group_id,
+        ownerFields.owner_ldap_dn, ownerFields.owner_ldap_name,
+        JSON.stringify(ownerTargets), JSON.stringify(userTargets),
         req.body.probe_enabled || false, req.body.probe_type || null,
         req.body.probe_url || null, req.body.probe_interval_seconds || 300,
         req.body.probe_timeout_seconds || 10, req.body.expected_status_code || 200,
         req.body.failure_threshold || 2, req.body.recovery_threshold || 2,
         req.body.pause_during_maintenance !== undefined ? req.body.pause_during_maintenance : true,
+        req.body.dns_record_type || 'A', req.body.dns_expected_value || null,
+        req.body.ssl_expiry_warning_days || 30,
         JSON.stringify(req.body.tags || []), JSON.stringify(req.body.metadata || {})
       ]
     );
@@ -555,6 +569,7 @@ router.put('/:id', requireOperator, async (req, res) => {
     'owner_group_id','owner_ldap_dn','owner_ldap_name','probe_enabled',
     'owner_targets','user_targets','probe_type','probe_url','probe_interval_seconds','probe_timeout_seconds',
     'expected_status_code','failure_threshold','recovery_threshold','pause_during_maintenance',
+    'dns_record_type','dns_expected_value','ssl_expiry_warning_days',
     'tags','metadata','is_active'];
   const sets = []; const vals = []; let i = 1;
   const ownerManagedFields = new Set(['owner_id', 'owner_type', 'owner_group_id', 'owner_ldap_dn', 'owner_ldap_name']);

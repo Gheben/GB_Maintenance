@@ -7,7 +7,7 @@ import { toast } from '../components/Toast'
 import { Plus, Trash2, Pencil, Server, Cog } from 'lucide-react'
 import { format } from 'date-fns'
 
-const EMPTY_FORM = { name: '', start_date: '', end_date: '', description: '', service_ids: [], asset_ids: [] }
+const EMPTY_FORM = { name: '', start_date: '', end_date: '', description: '', ticket_ref: '', service_ids: [], asset_ids: [] }
 
 export default function BlackoutPeriods() {
   const [periods, setPeriods] = useState([])
@@ -43,6 +43,7 @@ export default function BlackoutPeriods() {
       start_date: p.start_date?.slice(0,10) || '',
       end_date: p.end_date?.slice(0,10) || '',
       description: p.description || '',
+      ticket_ref: p.ticket_ref || '',
       service_ids: p.services?.map(s => s.id) || p.service_ids || [],
       asset_ids:   p.assets?.map(a => a.id)   || p.asset_ids   || [],
     })
@@ -74,6 +75,7 @@ export default function BlackoutPeriods() {
         <div><label className="block text-sm font-medium mb-1">To *</label><input type="date" className="input" required value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} /></div>
       </div>
       <div><label className="block text-sm font-medium mb-1">Description</label><textarea className="input" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
+      <div><label className="block text-sm font-medium mb-1">Ticket ref</label><input className="input" value={form.ticket_ref} onChange={e => setForm(f => ({ ...f, ticket_ref: e.target.value }))} placeholder="Optional ticket reference" /></div>
       <ItemPicker
         label="Affected Services"
         allItems={allServices}
@@ -147,6 +149,7 @@ export default function BlackoutPeriods() {
                   <p className="text-xs text-gray-500">
                     {format(new Date(p.start_date), 'MMM dd yyyy')} → {format(new Date(p.end_date), 'MMM dd yyyy')}
                   </p>
+                  {p.ticket_ref && <p className="text-xs text-brand-600 mt-1">Ticket: {p.ticket_ref}</p>}
                   {p.description && <p className="text-xs text-gray-400 mt-1">{p.description}</p>}
                   {p.services?.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">

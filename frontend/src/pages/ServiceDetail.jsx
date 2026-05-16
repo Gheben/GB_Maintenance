@@ -497,11 +497,14 @@ export default function ServiceDetail() {
             {maintenance.length === 0 && <p className="text-gray-500 text-sm">No maintenance records</p>}
             {maintenance.map(m => (
               <Link key={m.id} to={`/maintenance/${m.id}`} className="card p-4 flex items-center justify-between hover:border-brand-300">
-                <div>
+                <div className="space-y-1">
                   <p className="font-medium text-sm">{m.title}</p>
-                  <p className="text-xs text-gray-500">{format(new Date(m.scheduled_start), 'MMM dd yyyy HH:mm')}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                    <StatusBadge status={m.status} />
+                    <span>{format(new Date(m.scheduled_start), 'MMM dd yyyy HH:mm')}</span>
+                    {m.ticket_ref && <span className="text-brand-600 font-medium">Ticket: {m.ticket_ref}</span>}
+                  </div>
                 </div>
-                <StatusBadge status={m.status} />
               </Link>
             ))}
           </div>

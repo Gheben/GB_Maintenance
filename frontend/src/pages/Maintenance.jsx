@@ -35,6 +35,7 @@ export default function Maintenance() {
   const [allServices, setAllServices] = useState([])
   const [form, setForm] = useState({
     title: '', type: 'planned', impact_level: 'medium', description: '',
+    ticket_ref: '',
     scheduled_start: '', scheduled_end: '',
     asset_ids: [], service_ids: [], owner_approval_required: false,
   })
@@ -84,7 +85,7 @@ export default function Maintenance() {
       await maintenanceApi.create(payload)
       toast.success('Maintenance created')
       setShowCreate(false)
-      setForm({ title: '', type: 'planned', impact_level: 'medium', description: '', scheduled_start: '', scheduled_end: '', asset_ids: [], service_ids: [], owner_approval_required: false })
+      setForm({ title: '', type: 'planned', impact_level: 'medium', description: '', ticket_ref: '', scheduled_start: '', scheduled_end: '', asset_ids: [], service_ids: [], owner_approval_required: false })
       load()
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
@@ -224,11 +225,9 @@ export default function Maintenance() {
                         <td className="px-4 py-3 font-medium">
                           <span className="flex items-center gap-1">
                             <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
-                            <span
-                              className="text-sm text-gray-800 dark:text-gray-100"
-                              title="Click to expand timeline"
-                            >
-                              {m.title}
+                            <span className="flex flex-col">
+                              <span className="text-sm text-gray-800 dark:text-gray-100" title="Click to expand timeline">{m.title}</span>
+                              {m.ticket_ref && <span className="text-xs text-brand-600 font-medium">Ticket: {m.ticket_ref}</span>}
                             </span>
                           </span>
                         </td>
@@ -302,6 +301,10 @@ export default function Maintenance() {
                 </select>
               </div>
               <div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Ticket ref</label>
+              <input className="input" value={form.ticket_ref} onChange={e => setForm(f => ({ ...f, ticket_ref: e.target.value }))} placeholder="Optional ticket reference" />
+            </div>
                 <label className="block text-sm font-medium mb-1">Impact</label>
                 <select className="input" value={form.impact_level} onChange={e => setForm(f => ({ ...f, impact_level: e.target.value }))}>
                   {IMPACTS.map(t => <option key={t} value={t}>{t}</option>)}

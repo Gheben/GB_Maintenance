@@ -559,6 +559,7 @@ router.post('/', requireOperator, [
   body('asset_ids').optional().isArray(),
   body('service_ids').optional().isArray(),
   body('owner_approval_required').optional().isBoolean(),
+  body('ticket_ref').optional().isString().isLength({ max: 100 }),
   body('recurrence_type').optional().isIn(['none','daily','weekly','monthly','custom']),
   body('recurrence_cron').optional().isString(),
 ], async (req, res) => {
@@ -587,12 +588,12 @@ router.post('/', requireOperator, [
 
   const result = await query(
     `INSERT INTO maintenance_windows
-       (title, description, type, status, impact_level, scheduled_start, scheduled_end,
+       (title, description, ticket_ref, type, status, impact_level, scheduled_start, scheduled_end,
         recurrence_type, recurrence_cron, recurrence_end_date, created_by,
         owner_approval_required, owner_approval_status, owner_approval_updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
     [
-      req.body.title, req.body.description || null,
+      req.body.title, req.body.description || null, req.body.ticket_ref || null,
       req.body.type, status, req.body.impact_level || 'medium',
       req.body.scheduled_start, req.body.scheduled_end,
       req.body.recurrence_type || 'none',
@@ -851,7 +852,7 @@ router.put('/:id', requireOperator, async (req, res) => {
     return res.status(400).json({ error: 'Non puoi modificare una manutenzione completata o annullata' });
   }
 
-  const allowed = ['title','description','type','impact_level','scheduled_start','scheduled_end',
+  const allowed = ['title','description','ticket_ref','type','impact_level','scheduled_start','scheduled_end',
     'recurrence_type','recurrence_cron','recurrence_end_date','notes'];
   const sets=[]; const vals=[]; let i=1;
   for (const f of allowed) {

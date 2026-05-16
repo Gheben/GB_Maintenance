@@ -21,7 +21,7 @@ export default function Incidents() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
-  const [form, setForm] = useState({ title: '', severity: 'high', description: '' })
+  const [form, setForm] = useState({ title: '', severity: 'high', description: '', ticket_ref: '' })
   const [allAssets, setAllAssets] = useState([])
   const [allServices, setAllServices] = useState([])
   const [createAssetIds, setCreateAssetIds] = useState([])
@@ -77,7 +77,7 @@ export default function Incidents() {
       await incidentsApi.create({ ...form, asset_ids: createAssetIds, service_ids: createServiceIds })
       toast.success('Incident created')
       setShowCreate(false)
-      setForm({ title: '', severity: 'high', description: '' })
+      setForm({ title: '', severity: 'high', description: '', ticket_ref: '' })
       setCreateAssetIds([])
       setCreateServiceIds([])
       load()
@@ -86,7 +86,7 @@ export default function Incidents() {
 
   const openEdit = (i) => {
     setEditTarget(i)
-    setForm({ title: i.title, severity: i.severity, description: i.description || '' })
+    setForm({ title: i.title, severity: i.severity, description: i.description || '', ticket_ref: i.ticket_ref || '' })
     setEditAssetIds(i.assets?.map(a => a.id) || [])
     setEditServiceIds(i.services?.map(s => s.id) || [])
   }
@@ -128,6 +128,7 @@ export default function Incidents() {
                   <tr key={i.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <td className="px-4 py-3 font-medium">
                       <Link to={`/incidents/${i.id}`} className="text-brand-600 hover:underline">{i.title}</Link>
+                      {i.ticket_ref && <div className="text-xs text-brand-600 mt-0.5">Ticket: {i.ticket_ref}</div>}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -175,6 +176,10 @@ export default function Incidents() {
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Ticket ref</label>
+              <input className="input" value={form.ticket_ref} onChange={e => setForm(f => ({ ...f, ticket_ref: e.target.value }))} placeholder="Optional ticket reference" />
+            </div>
             <ItemPicker
               label="Affected Assets"
               allItems={allAssets}
@@ -219,6 +224,10 @@ export default function Incidents() {
             <div>
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Ticket ref</label>
+              <input className="input" value={form.ticket_ref} onChange={e => setForm(f => ({ ...f, ticket_ref: e.target.value }))} placeholder="Optional ticket reference" />
             </div>
             <ItemPicker
               label="Affected Assets"

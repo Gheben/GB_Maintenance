@@ -90,6 +90,7 @@ router.post('/', requireOperator, [
   body('title').isString().trim().isLength({ min: 1, max: 300 }),
   body('severity').isString().trim().isLength({ min: 1, max: 50 }),
   body('description').optional().isString(),
+  body('ticket_ref').optional().isString().isLength({ max: 100 }),
   body('asset_ids').optional().isArray(),
   body('service_ids').optional().isArray(),
   body('started_at').optional().isISO8601(),
@@ -103,9 +104,9 @@ router.post('/', requireOperator, [
   }
 
   const result = await query(
-    `INSERT INTO incidents (title, description, severity, status, started_at, created_by)
-     VALUES ($1,$2,$3,'investigating',$4,$5) RETURNING id`,
-    [req.body.title, req.body.description||null, req.body.severity,
+    `INSERT INTO incidents (title, description, ticket_ref, severity, status, started_at, created_by)
+     VALUES ($1,$2,$3,$4,'investigating',$5,$6) RETURNING id`,
+    [req.body.title, req.body.description||null, req.body.ticket_ref||null, req.body.severity,
      req.body.started_at || new Date(), req.user.id]
   );
   const id = result.rows[0].id;
@@ -149,7 +150,7 @@ router.put('/:id', requireOperator, async (req, res) => {
     }
   }
 
-  const allowed = ['title','description','severity'];
+  const allowed = ['title','description','ticket_ref','severity'];
   const sets=[]; const vals=[]; let i=1;
   for (const f of allowed) {
     if (req.body[f] !== undefined) { sets.push(`${f}=$${i++}`); vals.push(req.body[f]); }

@@ -7,7 +7,7 @@ import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { assetsApi, usersApi, groupsApi, settingsApi } from '../api'
 import { format } from 'date-fns'
-import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Mail, Cog, Building2, Search } from 'lucide-react'
+import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Mail, Cog, Building2, Search, Info } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CATEGORIES = ['application','infrastructure','database','network','hardware','api','other']
@@ -18,6 +18,31 @@ function approvalStatusMeta(status) {
   if (status === 'approved') return { label: 'Approved', cls: 'bg-green-100 text-green-700' }
   if (status === 'rejected') return { label: 'Rejected', cls: 'bg-red-100 text-red-700' }
   return { label: 'Pending', cls: 'bg-amber-100 text-amber-700' }
+}
+
+function ProbeFavicon({ probeType, probeUrl }) {
+  if (!probeUrl || !['http', 'https', 'tls'].includes(probeType)) return null
+  let host = ''
+  try {
+    if (probeType === 'tls') {
+      host = probeUrl.split(':')[0]
+    } else {
+      const u = probeUrl.startsWith('http') ? probeUrl : `https://${probeUrl}`
+      host = new URL(u).hostname
+    }
+    if (!host) return null
+  } catch { return null }
+  return (
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`}
+      alt=""
+      width={20} height={20}
+      className="w-5 h-5 rounded-sm object-contain flex-shrink-0"
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={e => { e.target.style.display = 'none' }}
+    />
+  )
 }
 
 export default function AssetDetail() {
@@ -54,6 +79,8 @@ export default function AssetDetail() {
   const [usersModalOpen, setUsersModalOpen] = useState(false)
   const [officesModalOpen, setOfficesModalOpen] = useState(false)
   const [officeSearch, setOfficeSearch] = useState('')
+  const [probeHistoryOpen, setProbeHistoryOpen] = useState(false)
+  const [probeDetails, setProbeDetails] = useState(null)
   // probe config modal
   const [probeConfigOpen, setProbeConfigOpen] = useState(false)
   const [probeForm, setProbeForm] = useState(null)
@@ -61,7 +88,7 @@ export default function AssetDetail() {
 
   const load = () => {
     assetsApi.get(id).then(r => setAsset(r.data)).catch(() => navigate('/assets'))
-    assetsApi.probes(id, { limit: 25 }).then(r => setProbes(r.data))
+    assetsApi.probes(id, { limit: 200 }).then(r => setProbes(r.data))
     assetsApi.maintenance(id).then(r => setMaintenance(r.data))
   }
   
@@ -112,7 +139,7 @@ export default function AssetDetail() {
     try {
       await assetsApi.probeNow(id)
       toast.success('Probe started')
-      const r = await assetsApi.probes(id, { limit: 25 })
+      const r = await assetsApi.probes(id, { limit: 200 })
       setProbes(r.data)
       const ar = await assetsApi.get(id)
       setAsset(ar.data)
@@ -167,6 +194,9 @@ export default function AssetDetail() {
       failure_threshold: asset.failure_threshold ?? 2,
       recovery_threshold: asset.recovery_threshold ?? 2,
       pause_during_maintenance: asset.pause_during_maintenance !== false,
+      dns_record_type: asset.dns_record_type || 'A',
+      dns_expected_value: asset.dns_expected_value || '',
+      ssl_expiry_warning_days: asset.ssl_expiry_warning_days ?? 30,
     })
     setProbeConfigOpen(true)
   }
@@ -185,6 +215,9 @@ export default function AssetDetail() {
         failure_threshold: Number(probeForm.failure_threshold) || 2,
         recovery_threshold: Number(probeForm.recovery_threshold) || 2,
         pause_during_maintenance: probeForm.pause_during_maintenance,
+        dns_record_type: probeForm.dns_record_type || 'A',
+        dns_expected_value: probeForm.dns_expected_value || null,
+        ssl_expiry_warning_days: Number(probeForm.ssl_expiry_warning_days) || 30,
       })
       toast.success('Probe configuration saved')
       setProbeConfigOpen(false)
@@ -274,6 +307,9 @@ export default function AssetDetail() {
       || String(l.supplier_name || '').toLowerCase().includes(q)
   })
   const assignedTargets = Array.isArray(asset.user_targets) ? asset.user_targets : []
+  const visibleProbes = probes.slice(0, 3)
+
+  const openProbeDetails = (probe) => setProbeDetails(probe)
 
   const ownerFieldsJsx = (
     <div>
@@ -468,9 +504,10 @@ export default function AssetDetail() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`w-2.5 h-2.5 rounded-full ${asset.probe_enabled ? 'bg-green-500' : 'bg-gray-300'}`} />
-                  <span className="font-medium text-sm">
-                    {asset.probe_enabled ? `Probe active — ${asset.probe_type?.toUpperCase()} · ${asset.probe_url}` : 'Probe not configured'}
-                  </span>
+                  {asset.probe_enabled
+                    ? <><ProbeFavicon probeType={asset.probe_type} probeUrl={asset.probe_url} /><span className="font-medium text-sm">Probe active — {asset.probe_type?.toUpperCase()} · {asset.probe_url}</span></>
+                    : <span className="font-medium text-sm">Probe not configured</span>
+                  }
                 </div>
                 {canEdit && (
                   <button className="btn-secondary text-xs" onClick={openProbeConfig}>
@@ -482,7 +519,9 @@ export default function AssetDetail() {
                 <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 dark:text-gray-400 pl-5">
                   <span><span className="font-medium">Interval:</span> {asset.probe_interval_seconds}s</span>
                   <span><span className="font-medium">Timeout:</span> {asset.probe_timeout_seconds}s</span>
-                  {asset.probe_type !== 'tcp' && <span><span className="font-medium">Expected HTTP:</span> {asset.expected_status_code}</span>}
+                  {['http','https'].includes(asset.probe_type) && <span><span className="font-medium">Expected HTTP:</span> {asset.expected_status_code}</span>}
+                  {asset.probe_type === 'dns' && <span><span className="font-medium">Record type:</span> {asset.dns_record_type || 'A'}{asset.dns_expected_value ? ` · expects: ${asset.dns_expected_value}` : ''}</span>}
+                  {asset.probe_type === 'tls' && <span><span className="font-medium">Warn if expiry &lt;</span> {asset.ssl_expiry_warning_days ?? 30} days</span>}
                   <span><span className="font-medium">Fail threshold:</span> {asset.failure_threshold ?? 2}</span>
                   <span><span className="font-medium">Recovery:</span> {asset.recovery_threshold ?? 2}</span>
                   {asset.pause_during_maintenance && <span className="text-amber-600">⏸ Paused during maintenance</span>}
@@ -492,20 +531,47 @@ export default function AssetDetail() {
             <div className="card overflow-hidden">
               <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
-                <tr>{['Result','Resp. ms','Status','Date'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                <tr>{['Result','Resp. ms','Method','Date'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {probes.map(p => (
+                {visibleProbes.map(p => (
                   <tr key={p.id}>
-                    <td className="px-4 py-2">{p.success ? '✅' : '❌'}</td>
+                    <td className="px-4 py-2">
+                      <span className={`inline-flex items-center gap-2 text-xs font-semibold ${p.success ? 'text-green-700' : 'text-red-700'}`}>
+                        <span className={`w-2.5 h-2.5 rounded-full ${p.success ? 'bg-green-500' : 'bg-red-500'}`} />
+                        {p.success ? 'OK' : 'Fail'}
+                      </span>
+                    </td>
                     <td className="px-4 py-2">{p.response_time_ms ?? '—'}</td>
-                    <td className="px-4 py-2">{p.status_code ?? p.error_message ?? '—'}</td>
+                    <td className="px-4 py-2">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-brand-600 hover:underline text-xs"
+                        title={[
+                          `Type: ${p.status_code ? 'HTTP' : p.dns_response ? 'DNS' : p.ssl_cert_expiry ? 'TLS' : asset.probe_type?.toUpperCase() || 'Probe'}`,
+                          `Status: ${p.status_code || '—'}`,
+                          `Error: ${p.error_message || '—'}`,
+                          `TLS expiry: ${p.ssl_cert_expiry ? String(p.ssl_cert_expiry).slice(0, 10) : '—'}`,
+                          `DNS: ${p.dns_response || '—'}`,
+                        ].join(' | ')}
+                        onClick={() => openProbeDetails(p)}
+                      >
+                        <Info size={13} />Info
+                      </button>
+                    </td>
                     <td className="px-4 py-2 text-gray-500">{format(new Date(p.probed_at), 'MM/dd HH:mm:ss')}</td>
                   </tr>
                 ))}
                 {probes.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">No probe history</td></tr>}
               </tbody>
             </table>
+            {probes.length > 3 && (
+              <div className="border-t border-gray-100 dark:border-gray-700 p-3 flex justify-end">
+                <button type="button" className="btn-secondary text-xs" onClick={() => setProbeHistoryOpen(true)}>
+                  Show more ({probes.length - 3})
+                </button>
+              </div>
+            )}
           </div>
         </div>
         )}
@@ -586,11 +652,14 @@ export default function AssetDetail() {
             {maintenance.length === 0 && <p className="text-gray-500 text-sm">No maintenance records</p>}
             {maintenance.map(m => (
               <Link key={m.id} to={`/maintenance/${m.id}`} className="card p-4 flex items-center justify-between hover:border-brand-300">
-                <div>
+                <div className="space-y-1">
                   <p className="font-medium text-sm">{m.title}</p>
-                  <p className="text-xs text-gray-500">{format(new Date(m.scheduled_start), 'MMM dd yyyy HH:mm')}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                    <StatusBadge status={m.status} />
+                    <span>{format(new Date(m.scheduled_start), 'MMM dd yyyy HH:mm')}</span>
+                    {m.ticket_ref && <span className="text-brand-600 font-medium">Ticket: {m.ticket_ref}</span>}
+                  </div>
                 </div>
-                <StatusBadge status={m.status} />
               </Link>
             ))}
           </div>
@@ -785,18 +854,24 @@ export default function AssetDetail() {
                       <option value="https">HTTPS</option>
                       <option value="http">HTTP</option>
                       <option value="tcp">TCP</option>
+                      <option value="icmp">ICMP (Ping)</option>
+                      <option value="dns">DNS</option>
+                      <option value="tls">TLS/SSL</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                      {probeForm.probe_type === 'tcp' ? 'Host:Port' : 'URL'}
+                      {{'tcp':'Host:Port','icmp':'Host or IP','dns':'Hostname','tls':'Host:Port'}[probeForm.probe_type] || 'URL'}
                     </label>
-                    <input
-                      className="input text-sm"
-                      placeholder={probeForm.probe_type === 'tcp' ? 'hostname:443' : 'https://example.com/health'}
-                      value={probeForm.probe_url}
-                      onChange={e => setProbeForm(f => ({...f, probe_url: e.target.value}))}
-                    />
+                    <div className="flex items-center gap-1.5">
+                      <ProbeFavicon probeType={probeForm.probe_type} probeUrl={probeForm.probe_url} />
+                      <input
+                        className="input text-sm flex-1"
+                        placeholder={{'tcp':'hostname:443','icmp':'192.168.1.1','dns':'example.com','tls':'hostname:443','https':'https://example.com/health','http':'http://example.com/health'}[probeForm.probe_type] || ''}
+                        value={probeForm.probe_url}
+                        onChange={e => setProbeForm(f => ({...f, probe_url: e.target.value}))}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -811,7 +886,7 @@ export default function AssetDetail() {
                     <input type="number" min="1" max="60" className="input text-sm" value={probeForm.probe_timeout_seconds}
                       onChange={e => setProbeForm(f => ({...f, probe_timeout_seconds: e.target.value}))} />
                   </div>
-                  {probeForm.probe_type !== 'tcp' && (
+                  {['http','https'].includes(probeForm.probe_type) && (
                     <div>
                       <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Expected HTTP</label>
                       <input type="number" min="100" max="599" className="input text-sm" value={probeForm.expected_status_code}
@@ -819,6 +894,30 @@ export default function AssetDetail() {
                     </div>
                   )}
                 </div>
+
+                {probeForm.probe_type === 'dns' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Record type</label>
+                      <select className="input text-sm" value={probeForm.dns_record_type} onChange={e => setProbeForm(f => ({...f, dns_record_type: e.target.value}))}>
+                        {['A','AAAA','CNAME','MX','TXT','NS','PTR','SRV'].map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Expected value <span className="font-normal text-gray-400">(optional)</span></label>
+                      <input className="input text-sm" placeholder="e.g. 93.184.216.34" value={probeForm.dns_expected_value}
+                        onChange={e => setProbeForm(f => ({...f, dns_expected_value: e.target.value}))} />
+                    </div>
+                  </div>
+                )}
+
+                {probeForm.probe_type === 'tls' && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Warn if cert expires within (days)</label>
+                    <input type="number" min="1" max="365" className="input text-sm w-32" value={probeForm.ssl_expiry_warning_days}
+                      onChange={e => setProbeForm(f => ({...f, ssl_expiry_warning_days: e.target.value}))} />
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -853,6 +952,46 @@ export default function AssetDetail() {
                 {savingProbe ? 'Saving...' : 'Save'}
               </button>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {probeHistoryOpen && (
+        <Modal title="All probe history" onClose={() => setProbeHistoryOpen(false)} size="xl">
+          <div className="max-h-[70vh] overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
+                <tr>{['Result','Resp. ms','Info','Date'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {probes.map(p => (
+                  <tr key={p.id}>
+                    <td className="px-4 py-2">{p.success ? '✅' : '❌'}</td>
+                    <td className="px-4 py-2">{p.response_time_ms ?? '—'}</td>
+                    <td className="px-4 py-2">
+                      <button type="button" className="inline-flex items-center gap-1 text-brand-600 hover:underline text-xs" onClick={() => openProbeDetails(p)}>
+                        <Info size={13} />Info
+                      </button>
+                    </td>
+                    <td className="px-4 py-2 text-gray-500">{format(new Date(p.probed_at), 'MM/dd HH:mm:ss')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Modal>
+      )}
+
+      {probeDetails && (
+        <Modal title="Probe details" onClose={() => setProbeDetails(null)} size="md">
+          <div className="space-y-2 text-sm">
+            <div><span className="text-gray-500">Type:</span> <strong>{asset.probe_type?.toUpperCase()}</strong></div>
+            <div><span className="text-gray-500">Success:</span> <strong>{probeDetails.success ? 'Yes' : 'No'}</strong></div>
+            <div><span className="text-gray-500">Response time:</span> <strong>{probeDetails.response_time_ms ?? '—'} ms</strong></div>
+            <div><span className="text-gray-500">Status code:</span> <strong>{probeDetails.status_code ?? '—'}</strong></div>
+            <div><span className="text-gray-500">Error:</span> <strong>{probeDetails.error_message || '—'}</strong></div>
+            <div><span className="text-gray-500">TLS expiry:</span> <strong>{probeDetails.ssl_cert_expiry ? format(new Date(probeDetails.ssl_cert_expiry), 'MM/dd/yyyy') : '—'}</strong></div>
+            <div><span className="text-gray-500">DNS response:</span> <strong className="break-all">{probeDetails.dns_response || '—'}</strong></div>
           </div>
         </Modal>
       )}

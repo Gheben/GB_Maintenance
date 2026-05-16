@@ -193,6 +193,7 @@ export default function MaintenanceDetail() {
       type: mw.type || 'planned',
       impact_level: mw.impact_level || 'medium',
       description: mw.description || '',
+      ticket_ref: mw.ticket_ref || '',
       notes: mw.notes || '',
       scheduled_start: toDatetimeLocal(mw.scheduled_start),
       scheduled_end: toDatetimeLocal(mw.scheduled_end),
@@ -328,6 +329,11 @@ export default function MaintenanceDetail() {
             </div>
 
             <div>
+              <label className="block text-sm font-medium mb-1">Ticket ref</label>
+              <input className="input" value={editForm.ticket_ref || ''} onChange={e => setEditForm(f => ({...f, ticket_ref: e.target.value}))} placeholder="Optional ticket reference" />
+            </div>
+
+            <div>
               <label className="block text-sm font-medium mb-1">Notes</label>
               <textarea className="input" rows={2} value={editForm.notes} onChange={e => setEditForm(f => ({...f, notes: e.target.value}))} />
             </div>
@@ -375,6 +381,7 @@ export default function MaintenanceDetail() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-gray-500">Start:</span> <strong>{format(new Date(mw.scheduled_start), 'MM/dd/yyyy HH:mm')}</strong></div>
               <div><span className="text-gray-500">End:</span> <strong>{format(new Date(mw.scheduled_end), 'MM/dd/yyyy HH:mm')}</strong></div>
+              {mw.ticket_ref && <div><span className="text-gray-500">Ticket:</span> <strong>{mw.ticket_ref}</strong></div>}
               {mw.actual_start && <div><span className="text-gray-500">Actual start:</span> <strong>{format(new Date(mw.actual_start), 'MM/dd HH:mm')}</strong></div>}
               {mw.actual_end && <div><span className="text-gray-500">Actual end:</span> <strong>{format(new Date(mw.actual_end), 'MM/dd HH:mm')}</strong></div>}
               {mw.reopened_at && <div><span className="text-gray-500">Reopened at:</span> <strong>{format(new Date(mw.reopened_at), 'MM/dd HH:mm')}</strong></div>}

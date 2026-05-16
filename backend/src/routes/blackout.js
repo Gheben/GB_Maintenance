@@ -249,6 +249,7 @@ router.post('/', requireChangeManager, [
   body('start_date').isISO8601(),
   body('end_date').isISO8601(),
   body('description').optional().isString(),
+  body('ticket_ref').optional().isString().isLength({ max: 100 }),
   body('service_ids').optional().isArray(),
   body('asset_ids').optional().isArray(),
 ], async (req, res) => {
@@ -260,9 +261,9 @@ router.post('/', requireChangeManager, [
   const sids = req.body.service_ids || [];
   const aids = req.body.asset_ids || [];
   const result = await query(
-    `INSERT INTO blackout_periods (name, description, start_date, end_date, created_by, service_ids, asset_ids)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [req.body.name, req.body.description||null, req.body.start_date, req.body.end_date, req.user.id, sids, aids]
+    `INSERT INTO blackout_periods (name, description, ticket_ref, start_date, end_date, created_by, service_ids, asset_ids)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+    [req.body.name, req.body.description||null, req.body.ticket_ref||null, req.body.start_date, req.body.end_date, req.user.id, sids, aids]
   );
   await auditService.log(req.user.id, req.user.username, 'blackout:create', 'blackout_period', result.rows[0].id, req.body.name, req.ip);
   res.status(201).json({ id: result.rows[0].id });
@@ -270,7 +271,7 @@ router.post('/', requireChangeManager, [
 
 // ─── PUT /api/blackout/:id ────────────────────────────────────────────────────
 router.put('/:id', requireChangeManager, async (req, res) => {
-  const allowed = ['name','description','start_date','end_date'];
+  const allowed = ['name','description','ticket_ref','start_date','end_date'];
   const sets=[]; const vals=[]; let i=1;
   for (const f of allowed) {
     if (req.body[f] !== undefined) { sets.push(`${f}=$${i++}`); vals.push(req.body[f]); }

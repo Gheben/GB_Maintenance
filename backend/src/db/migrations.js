@@ -1506,7 +1506,29 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS recovery_threshold INTEGER NOT NULL DEFAULT 2`);
       await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS pause_during_maintenance BOOLEAN NOT NULL DEFAULT TRUE`);
     }
-  }
+  },
+  {
+    version: 34,
+    name: 'probe_icmp_dns_tls_types',
+    up: async (client) => {
+      // New probe-type-specific config fields on assets
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS dns_record_type VARCHAR(10) NOT NULL DEFAULT 'A'`);
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS dns_expected_value TEXT`);
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS ssl_expiry_warning_days INTEGER NOT NULL DEFAULT 30`);
+      // New result detail columns on probe_results
+      await client.query(`ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS ssl_cert_expiry TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS dns_response TEXT`);
+    }
+  },
+  {
+    version: 35,
+    name: 'ticket_ref_for_changes',
+    up: async (client) => {
+      await client.query(`ALTER TABLE maintenance_windows ADD COLUMN IF NOT EXISTS ticket_ref VARCHAR(100)`);
+      await client.query(`ALTER TABLE blackout_periods ADD COLUMN IF NOT EXISTS ticket_ref VARCHAR(100)`);
+      await client.query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS ticket_ref VARCHAR(100)`);
+    }
+  },
 ];
 
 async function runMigrations(pool) {
@@ -1533,7 +1555,7 @@ async function runMigrations(pool) {
       try {
         await migration.up(client);
         await client.query(
-          'INSERT INTO schema_migrations (version, name) VALUES ($1, $2)',
+          'INSERT INTO schema_migrations (version, name) VALUES ($1, $2) ON CONFLICT (version) DO NOTHING',
           [migration.version, migration.name]
         );
         await client.query('COMMIT');

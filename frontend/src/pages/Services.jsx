@@ -30,7 +30,7 @@ function LicenseState({ row }) {
   }
 
   return (
-    <div className="space-y-0.5">
+    <div className="flex flex-col items-center text-center space-y-0.5">
       <div>{badge}</div>
       {row.primary_license_name && <div className="text-[11px] text-gray-500 leading-tight">{row.primary_license_name}</div>}
       {row.primary_supplier_name && <div className="text-[11px] text-gray-400 leading-tight">{row.primary_supplier_name}</div>}

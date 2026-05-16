@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
@@ -31,11 +31,33 @@ function LicenseState({ row }) {
   }
 
   return (
-    <div className="space-y-0.5">
+    <div className="flex flex-col items-center text-center space-y-0.5">
       <div>{badge}</div>
       {row.primary_license_name && <div className="text-[11px] text-gray-500 leading-tight">{row.primary_license_name}</div>}
       {row.primary_supplier_name && <div className="text-[11px] text-gray-400 leading-tight">{row.primary_supplier_name}</div>}
     </div>
+  )
+}
+
+function ProbeState({ row }) {
+  if (!row.probe_enabled) return <span className="text-gray-400">—</span>
+  const hasWarning = !!row.latest_probe_error_message && row.latest_probe_success !== false
+  const dotClass = row.latest_probe_success === false
+    ? 'bg-red-500'
+    : hasWarning
+      ? 'bg-amber-500 animate-pulse'
+      : 'bg-green-500'
+  const method = String(row.probe_type || 'probe').toUpperCase()
+  const label = row.latest_probe_success === false
+    ? row.latest_probe_error_message || 'Probe failed'
+    : hasWarning
+      ? row.latest_probe_error_message
+      : 'Probe healthy'
+  return (
+    <span className="inline-flex items-center gap-2 text-xs">
+      <span className={`w-2.5 h-2.5 rounded-full ${dotClass}`} title={label} />
+      <span className="font-medium text-gray-700 dark:text-gray-200">{method}</span>
+    </span>
   )
 }
 
@@ -53,7 +75,7 @@ export default function Assets() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
-  const [form, setForm] = useState({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [], probe_enabled: false, probe_type: 'https', probe_url: '', probe_interval_seconds: 300, probe_timeout_seconds: 10, expected_status_code: 200, failure_threshold: 2, recovery_threshold: 2, pause_during_maintenance: true })
+  const [form, setForm] = useState({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [], probe_enabled: false, probe_type: 'https', probe_url: '', probe_interval_seconds: 300, probe_timeout_seconds: 10, expected_status_code: 200, failure_threshold: 2, recovery_threshold: 2, pause_during_maintenance: true, dns_record_type: 'A', dns_expected_value: '', ssl_expiry_warning_days: 30 })
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
   const [pickerTarget, setPickerTarget] = useState('owner')
   const [users, setUsers] = useState([])
@@ -128,7 +150,7 @@ export default function Assets() {
       }
       toast.success('Asset created')
       setShowCreate(false)
-      setForm({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [], probe_enabled: false, probe_type: 'https', probe_url: '', probe_interval_seconds: 300, probe_timeout_seconds: 10, expected_status_code: 200, failure_threshold: 2, recovery_threshold: 2, pause_during_maintenance: true })
+      setForm({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [], probe_enabled: false, probe_type: 'https', probe_url: '', probe_interval_seconds: 300, probe_timeout_seconds: 10, expected_status_code: 200, failure_threshold: 2, recovery_threshold: 2, pause_during_maintenance: true, dns_record_type: 'A', dns_expected_value: '', ssl_expiry_warning_days: 30 })
       setCreateDepIds([])
       setCreateLicenseIds([])
       load()
@@ -369,7 +391,7 @@ export default function Assets() {
                     <td className="px-4 py-3"><CriticalityBadge criticality={a.criticality} /></td>
                     <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
                     <td className="px-4 py-3"><LicenseState row={a} /></td>
-                    <td className="px-4 py-3 text-gray-500">{a.probe_enabled ? a.probe_type : '—'}</td>
+                    <td className="px-4 py-3 text-gray-500"><ProbeState row={a} /></td>
                     <td className="px-4 py-3">
                       {canEdit && (
                         <button onClick={() => openEdit(a)} className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">
@@ -457,7 +479,7 @@ export default function Assets() {
                       <input type="number" min="1" max="60" className="input text-sm" value={form.probe_timeout_seconds}
                         onChange={e => setForm(f => ({...f, probe_timeout_seconds: e.target.value}))} />
                     </div>
-                    {form.probe_type !== 'tcp' && (
+                    {['http','https'].includes(form.probe_type) && (
                       <div>
                         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Expected HTTP</label>
                         <input type="number" min="100" max="599" className="input text-sm" value={form.expected_status_code}
@@ -584,7 +606,7 @@ export default function Assets() {
                       <input type="number" min="1" max="60" className="input text-sm" value={form.probe_timeout_seconds}
                         onChange={e => setForm(f => ({...f, probe_timeout_seconds: e.target.value}))} />
                     </div>
-                    {form.probe_type !== 'tcp' && (
+                    {['http','https'].includes(form.probe_type) && (
                       <div>
                         <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Expected HTTP</label>
                         <input type="number" min="100" max="599" className="input text-sm" value={form.expected_status_code}
