@@ -4,6 +4,67 @@ const { requireAuth } = require('../middleware/authMiddleware');
 
 const router = Router();
 
+async function computeInvolvedUsersRows(maintenanceIds) {
+  if (!Array.isArray(maintenanceIds) || maintenanceIds.length === 0) return [];
+  return getMany(
+    `SELECT DISTINCT mwa.maintenance_id,
+            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
+     FROM maintenance_assets mwa
+     JOIN service_assets sa ON sa.asset_id = mwa.asset_id
+     LEFT JOIN service_subscribers ss ON ss.service_id = sa.service_id
+     LEFT JOIN users u ON u.id = ss.user_id
+     WHERE mwa.maintenance_id = ANY($1::uuid[])
+       AND u.id IS NOT NULL
+     UNION
+     SELECT DISTINCT mwa.maintenance_id,
+            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
+     FROM maintenance_assets mwa
+     JOIN service_assets sa ON sa.asset_id = mwa.asset_id
+     JOIN services sv ON sv.id = sa.service_id
+     LEFT JOIN users u ON u.id = sv.owner_id
+     WHERE mwa.maintenance_id = ANY($1::uuid[])
+       AND u.id IS NOT NULL
+     UNION
+     SELECT DISTINCT ms.maintenance_id,
+            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
+     FROM maintenance_services ms
+     LEFT JOIN service_subscribers ss ON ss.service_id = ms.service_id
+     LEFT JOIN users u ON u.id = ss.user_id
+     WHERE ms.maintenance_id = ANY($1::uuid[])
+       AND u.id IS NOT NULL
+     UNION
+     SELECT DISTINCT ms.maintenance_id,
+            COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
+     FROM maintenance_services ms
+     JOIN services sv ON sv.id = ms.service_id
+     LEFT JOIN users u ON u.id = sv.owner_id
+     WHERE ms.maintenance_id = ANY($1::uuid[])
+       AND u.id IS NOT NULL`,
+    [maintenanceIds]
+  ).catch(() => []);
+}
+
+async function refreshInvolvedUsersCache(maintenanceIds) {
+  if (!Array.isArray(maintenanceIds) || maintenanceIds.length === 0) return;
+
+  const rows = await computeInvolvedUsersRows(maintenanceIds);
+
+  await query(
+    `DELETE FROM maintenance_involved_users_cache WHERE maintenance_id = ANY($1::uuid[])`,
+    [maintenanceIds]
+  );
+
+  for (const row of rows) {
+    await query(
+      `INSERT INTO maintenance_involved_users_cache (maintenance_id, user_id, name, office, refreshed_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (maintenance_id, user_id)
+       DO UPDATE SET name = EXCLUDED.name, office = EXCLUDED.office, refreshed_at = NOW()`,
+      [row.maintenance_id, row.user_id, row.name, row.office || null]
+    );
+  }
+}
+
 // ─── GET /api/status ── Public status page ────────────────────────────────────
 router.get('/', async (req, res) => {
   // Always expose only public services on status endpoints.
@@ -90,48 +151,36 @@ router.get('/', async (req, res) => {
 
   let involvedMap = {};
   if (allMaintIds.length > 0) {
+    const staleRows = await getMany(
+      `SELECT mw.id
+       FROM maintenance_windows mw
+       LEFT JOIN (
+         SELECT maintenance_id, MAX(refreshed_at) AS refreshed_at
+         FROM maintenance_involved_users_cache
+         WHERE maintenance_id = ANY($1::uuid[])
+         GROUP BY maintenance_id
+       ) c ON c.maintenance_id = mw.id
+       WHERE mw.id = ANY($1::uuid[])
+         AND (c.refreshed_at IS NULL OR c.refreshed_at < mw.updated_at)`,
+      [allMaintIds]
+    ).catch(() => []);
+
+    const staleIds = staleRows.map(r => r.id).filter(Boolean);
+    if (staleIds.length > 0) {
+      await refreshInvolvedUsersCache(staleIds);
+    }
+
     const involvedRows = await getMany(
-      `SELECT DISTINCT mwa.maintenance_id,
-              COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
-       FROM maintenance_assets mwa
-       JOIN service_assets sa ON sa.asset_id = mwa.asset_id
-       LEFT JOIN service_subscribers ss ON ss.service_id = sa.service_id
-       LEFT JOIN users u ON u.id = ss.user_id
-       WHERE mwa.maintenance_id = ANY($1::uuid[])
-         AND u.id IS NOT NULL
-       UNION
-       SELECT DISTINCT mwa.maintenance_id,
-              COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
-       FROM maintenance_assets mwa
-       JOIN service_assets sa ON sa.asset_id = mwa.asset_id
-       JOIN services sv ON sv.id = sa.service_id
-       LEFT JOIN users u ON u.id = sv.owner_id
-       WHERE mwa.maintenance_id = ANY($1::uuid[])
-         AND u.id IS NOT NULL
-       UNION
-       SELECT DISTINCT ms.maintenance_id,
-              COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
-       FROM maintenance_services ms
-       LEFT JOIN service_subscribers ss ON ss.service_id = ms.service_id
-       LEFT JOIN users u ON u.id = ss.user_id
-       WHERE ms.maintenance_id = ANY($1::uuid[])
-         AND u.id IS NOT NULL
-       UNION
-       SELECT DISTINCT ms.maintenance_id,
-              COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
-       FROM maintenance_services ms
-       JOIN services sv ON sv.id = ms.service_id
-       LEFT JOIN users u ON u.id = sv.owner_id
-       WHERE ms.maintenance_id = ANY($1::uuid[])
-         AND u.id IS NOT NULL`,
+      `SELECT maintenance_id, user_id, name, office
+       FROM maintenance_involved_users_cache
+       WHERE maintenance_id = ANY($1::uuid[])
+       ORDER BY name ASC`,
       [allMaintIds]
     ).catch(() => []);
 
     for (const row of involvedRows) {
       if (!involvedMap[row.maintenance_id]) involvedMap[row.maintenance_id] = [];
-      if (!involvedMap[row.maintenance_id].find(x => x.user_id === row.user_id)) {
-        involvedMap[row.maintenance_id].push({ name: row.name, user_id: row.user_id, office: row.office || '' });
-      }
+      involvedMap[row.maintenance_id].push({ name: row.name, user_id: row.user_id, office: row.office || '' });
     }
   }
 

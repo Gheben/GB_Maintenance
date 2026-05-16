@@ -1247,6 +1247,27 @@ const MIGRATIONS = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_notif_log_event_created_at ON notification_log(event_type, created_at DESC)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_notif_log_status_created_at ON notification_log(status, created_at DESC)`);
     }
+  },
+  {
+    version: 29,
+    name: 'maintenance_involved_users_cache',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS maintenance_involved_users_cache (
+          maintenance_id UUID NOT NULL REFERENCES maintenance_windows(id) ON DELETE CASCADE,
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name VARCHAR(300) NOT NULL,
+          office VARCHAR(200),
+          refreshed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (maintenance_id, user_id)
+        )
+      `);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_miuc_maintenance ON maintenance_involved_users_cache(maintenance_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_miuc_maintenance_refreshed ON maintenance_involved_users_cache(maintenance_id, refreshed_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_miuc_name ON maintenance_involved_users_cache(name)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_miuc_office ON maintenance_involved_users_cache(office)`);
+    }
   }
 ];
 
