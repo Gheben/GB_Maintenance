@@ -1,7 +1,7 @@
 {
   "name": "GB Maintenance",
   "short_name": "GBMaint",
-  "description": "Gestione manutenzioni programmate asset e servizi aziendali",
+  "description": "Management of scheduled maintenance, assets, and business services",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
