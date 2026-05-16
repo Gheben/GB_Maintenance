@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { statusApi } from '../api'
 import { format } from 'date-fns'
-import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Sparkles } from 'lucide-react'
+import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { Modal } from '../components/Modal'
 
@@ -139,25 +139,27 @@ function MaintenanceCard({ m, colorClass }) {
           <button
             onClick={handleSubscribe}
             disabled={subscribing}
-            className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border px-3 py-1.5 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
+            className={`group inline-flex items-center overflow-hidden text-xs font-semibold rounded-full border px-2.5 py-1.5 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
               subscribed
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200'
-                : 'bg-gradient-to-r from-brand-500 to-cyan-500 text-white border-transparent shadow-sm hover:shadow-md hover:-translate-y-px'
+                : 'bg-gradient-to-r from-brand-500 to-cyan-500 text-white border-transparent shadow-sm hover:shadow-md'
             }`}
-            title={subscribed ? 'Unsubscribe from updates' : 'Subscribe for status updates'}
+            title={subscribed ? 'Unsubscribe from updates' : 'Subscribe for updates'}
           >
-            {subscribed ? <CheckCircle size={13} /> : <Bell size={13} />}
-            {subscribed ? 'Subscribed to updates' : (subscribing ? 'Subscribing...' : 'Subscribe for updates')}
+            <Bell
+              size={14}
+              className={`flex-shrink-0 group-hover:animate-wiggle ${
+                subscribed ? 'fill-current' : ''
+              }`}
+            />
+            <span className="max-w-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-in-out pl-0 group-hover:max-w-[160px] group-hover:pl-1.5">
+              {subscribing ? 'Wait…' : subscribed ? 'Unsubscribe' : 'Subscribe for updates'}
+            </span>
           </button>
         )}
       </div>
 
-      {isLoggedIn && subscribed && (
-        <div className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 px-2.5 py-1 text-xs font-medium">
-          <Sparkles size={12} />
-          You are receiving updates for this maintenance.
-        </div>
-      )}
+
 
       {showHistory && (
         <div className="mt-3 flex flex-wrap items-center gap-0">
@@ -195,9 +197,11 @@ function MaintenanceCard({ m, colorClass }) {
                 filteredUsers.map(u => (
                   <div key={u.user_id} className="px-3 py-2.5 flex items-center justify-between gap-2">
                     <span className="text-sm text-gray-800 dark:text-gray-200 truncate">{u.name}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shrink-0">
-                      {u.office || 'No office'}
-                    </span>
+                    {u.office && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shrink-0">
+                        {u.office}
+                      </span>
+                    )}
                   </div>
                 ))
               )}

@@ -14,6 +14,18 @@ export default {
           900: '#1e3a8a',
         },
       },
+      keyframes: {
+        wiggle: {
+          '0%, 100%': { transform: 'rotate(0deg)' },
+          '20%':      { transform: 'rotate(-14deg)' },
+          '40%':      { transform: 'rotate(14deg)' },
+          '60%':      { transform: 'rotate(-8deg)' },
+          '80%':      { transform: 'rotate(8deg)' },
+        },
+      },
+      animation: {
+        wiggle: 'wiggle 0.45s ease-in-out',
+      },
     },
   },
   plugins: [],
