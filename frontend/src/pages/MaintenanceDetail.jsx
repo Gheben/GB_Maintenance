@@ -234,6 +234,17 @@ export default function MaintenanceDetail() {
   const canEdit = hasRole('superadmin','admin','change_manager') && !['completed','cancelled'].includes(mw.status)
   const canReopen = hasRole('superadmin','admin','change_manager','operator') && mw.status === 'completed'
   const involvedServicesCount = (mw.services?.length || 0) + (mw.affectedServices?.length || 0)
+  const timelineRows = [...(mw.statusHistory || [])]
+  if (mw.reopened_at && !timelineRows.some((h) => String(h.status || '').toLowerCase() === 'reopened')) {
+    timelineRows.push({
+      id: `synthetic-reopen-${mw.id}`,
+      status: 'reopened',
+      changed_by: 'system',
+      reason: mw.reopen_reason || 'Maintenance reopened',
+      created_at: mw.reopened_at,
+    })
+  }
+  timelineRows.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 
   return (
     <Layout title={editMode ? 'Edit Maintenance' : mw.title}>
@@ -453,7 +464,10 @@ export default function MaintenanceDetail() {
           )}
 
           <div className="card p-5">
-            <h3 className="font-medium mb-3">Impacted Audience</h3>
+            <h3 className="font-semibold text-blue-700 dark:text-blue-300 mb-3 flex items-center gap-2">
+              <Users size={16} />
+              Impacted Audience ({mwUsers.length})
+            </h3>
             <div className="flex flex-wrap gap-2">
               <button
                 className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700 px-3 py-1.5 hover:bg-blue-100 transition-colors"
@@ -482,11 +496,11 @@ export default function MaintenanceDetail() {
 
           <div className="card p-5">
             <h3 className="font-medium mb-3">Status Timeline</h3>
-            {(mw.statusHistory || []).length === 0 ? (
+            {timelineRows.length === 0 ? (
               <p className="text-sm text-gray-500">No status history available.</p>
             ) : (
               <div className="space-y-2">
-                {(mw.statusHistory || []).map((h) => (
+                {timelineRows.map((h) => (
                   <div key={h.id} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold capitalize">{String(h.status || '').replace(/_/g, ' ')}</span>

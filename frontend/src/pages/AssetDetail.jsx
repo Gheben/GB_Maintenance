@@ -7,7 +7,7 @@ import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { assetsApi, usersApi, groupsApi, settingsApi } from '../api'
 import { format } from 'date-fns'
-import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Mail, Cog } from 'lucide-react'
+import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Mail, Cog, Building2, Search } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CATEGORIES = ['application','infrastructure','database','network','hardware','api','other']
@@ -52,6 +52,8 @@ export default function AssetDetail() {
   const [licenseSearch, setLicenseSearch] = useState('')
   const [licenseRemoveTarget, setLicenseRemoveTarget] = useState(null)
   const [usersModalOpen, setUsersModalOpen] = useState(false)
+  const [officesModalOpen, setOfficesModalOpen] = useState(false)
+  const [officeSearch, setOfficeSearch] = useState('')
 
   const load = () => {
     assetsApi.get(id).then(r => setAsset(r.data)).catch(() => navigate('/assets'))
@@ -547,9 +549,17 @@ export default function AssetDetail() {
                   </div>
                 )}
               </div>
-              <div className="flex justify-start">
+              <div className="flex justify-start gap-2">
                 <button type="button" className="btn-secondary" onClick={() => setUsersModalOpen(true)}>
                   Show users ({filteredUsers.length})
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary inline-flex items-center gap-1"
+                  onClick={() => { setOfficeSearch(''); setOfficesModalOpen(true) }}
+                >
+                  <Building2 size={13} />
+                  Show offices ({impactedOffices.length})
                 </button>
               </div>
             </div>
@@ -595,6 +605,37 @@ export default function AssetDetail() {
                   </div>
                   <div className="flex justify-end">
                     <button type="button" className="btn-secondary" onClick={() => setUsersModalOpen(false)}>Close</button>
+                  </div>
+                </div>
+              </Modal>
+            )}
+
+            {officesModalOpen && (
+              <Modal title={`Offices involved (${impactedOffices.length})`} onClose={() => setOfficesModalOpen(false)} size="md">
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      className="input pl-8"
+                      placeholder="Search office..."
+                      value={officeSearch}
+                      onChange={(e) => setOfficeSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="max-h-[50vh] overflow-auto space-y-2">
+                    {impactedOffices
+                      .filter((office) => String(office || '').toLowerCase().includes(officeSearch.toLowerCase()))
+                      .map((office) => (
+                        <div key={office} className="px-3 py-2 rounded-lg border border-indigo-100 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-sm text-indigo-800 dark:text-indigo-200">
+                          {office}
+                        </div>
+                      ))}
+                    {impactedOffices.filter((office) => String(office || '').toLowerCase().includes(officeSearch.toLowerCase())).length === 0 && (
+                      <p className="text-sm text-gray-500">No offices found.</p>
+                    )}
+                  </div>
+                  <div className="flex justify-end">
+                    <button type="button" className="btn-secondary" onClick={() => setOfficesModalOpen(false)}>Close</button>
                   </div>
                 </div>
               </Modal>
