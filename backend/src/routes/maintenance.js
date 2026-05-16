@@ -941,7 +941,7 @@ router.post('/:id/start', requireOperator, async (req, res) => {
 router.post('/:id/complete', requireOperator, [
   body('notes').optional().isString(),
 ], async (req, res) => {
-  const maint = await getOne('SELECT status FROM maintenance_windows WHERE id=$1', [req.params.id]);
+  const maint = await getOne('SELECT id, title, status FROM maintenance_windows WHERE id=$1', [req.params.id]);
   if (!maint || !['in_progress','extended'].includes(maint.status)) {
     return res.status(400).json({ error: 'Stato non valido' });
   }
@@ -950,10 +950,20 @@ router.post('/:id/complete', requireOperator, [
     [req.body.notes || null, req.params.id]
   );
   await appendMaintenanceStatusHistory(req.params.id, 'completed', req.user.username || req.user.id || 'system', req.body.notes || 'Maintenance completed');
-  await notifyMaintenance(req.params.id, 'maintenance_completed');
+  await sendInApp(
+    req.user.id,
+    'maintenance_completed',
+    `Maintenance Completed: ${maint.title}`,
+    req.body.notes || 'Maintenance completed',
+    'maintenance',
+    req.params.id
+  ).catch(() => {});
   wsService.broadcast({ type: 'maintenance_completed', id: req.params.id });
   await auditService.log(req.user.id, req.user.username, 'maintenance:complete', 'maintenance', req.params.id, null, req.ip);
   res.json({ message: 'Manutenzione completata' });
+
+  // Do not block API response on email delivery.
+  notifyMaintenance(req.params.id, 'maintenance_completed').catch(() => {});
 });
 
 // ─── POST /api/maintenance/:id/reopen ───────────────────────────────────────
