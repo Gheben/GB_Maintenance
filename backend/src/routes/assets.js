@@ -208,7 +208,8 @@ router.get('/', async (req, res) => {
         pr.ssl_cert_expiry AS latest_probe_ssl_cert_expiry,
         pr.dns_response AS latest_probe_dns_response,
         ap.probe_type AS latest_probe_type,
-        ap.current_state AS latest_probe_state
+        ap.current_state AS latest_probe_state,
+        ap.name AS latest_probe_name
        FROM probe_results pr
       LEFT JOIN asset_probes ap ON ap.id = pr.probe_id
        WHERE pr.asset_id = a.id
@@ -491,15 +492,34 @@ router.get('/:id/maintenance', async (req, res) => {
             mw.impact_level, mw.ticket_ref,
             mw.reopened_at, mw.reopen_reason, mw.reopen_count,
             mw.owner_approval_required, mw.owner_approval_status,
-            mw.description, mw.notes
+            mw.description, mw.notes,
+            u.id as reopened_by_user_id, u.display_name as reopened_by_user_display_name, u.email as reopened_by_user_email
      FROM maintenance_windows mw
      JOIN maintenance_assets ma ON ma.maintenance_id=mw.id
+     LEFT JOIN users u ON u.id=mw.reopened_by
      WHERE ma.asset_id=$1
      ORDER BY mw.scheduled_start DESC
      LIMIT $2 OFFSET $3`,
     [req.params.id, limit, offset]
   );
-  res.json({ data: rows, total: totalRes.rows[0]?.total || 0, page, limit });
+  
+  // Transform reopened_by_user data
+  const data = rows.map(r => {
+    const result = { ...r };
+    if (r.reopened_by_user_id) {
+      result.reopened_by_user = {
+        id: r.reopened_by_user_id,
+        display_name: r.reopened_by_user_display_name,
+        email: r.reopened_by_user_email
+      };
+      delete result.reopened_by_user_id;
+      delete result.reopened_by_user_display_name;
+      delete result.reopened_by_user_email;
+    }
+    return result;
+  });
+  
+  res.json({ data, total: totalRes.rows[0]?.total || 0, page, limit });
 });
 
 // ─── GET /api/assets/:id/users ───────────────────────────────────────────────

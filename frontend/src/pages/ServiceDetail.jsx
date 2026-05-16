@@ -524,7 +524,7 @@ export default function ServiceDetail() {
             <div className="card overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
-                  <tr>{['Title','Status','Impact','Start','End','Ticket'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                  <tr>{['Title','Status','Impact','Start','End','Ticket','Reopened by'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {maintenance.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-500">No maintenance records</td></tr>}
@@ -542,6 +542,7 @@ export default function ServiceDetail() {
                           <td className="px-4 py-3 text-gray-500">{m.scheduled_start ? format(new Date(m.scheduled_start), 'MM/dd/yyyy HH:mm') : '—'}</td>
                           <td className="px-4 py-3 text-gray-500">{m.scheduled_end ? format(new Date(m.scheduled_end), 'MM/dd/yyyy HH:mm') : '—'}</td>
                           <td className="px-4 py-3 text-xs text-brand-600 font-medium">{m.ticket_ref || '—'}</td>
+                          <td className="px-4 py-3 text-xs">{m.reopened_at ? (m.reopened_by_user?.display_name || 'Unknown') : '—'}</td>
                         </tr>
                       ))}
                 </tbody>
@@ -700,6 +701,8 @@ export default function ServiceDetail() {
               <div><span className="font-medium">End:</span> {maintenanceDetail.scheduled_end ? format(new Date(maintenanceDetail.scheduled_end), 'MM/dd/yyyy HH:mm') : '—'}</div>
               <div><span className="font-medium">Actual start:</span> {maintenanceDetail.actual_start ? format(new Date(maintenanceDetail.actual_start), 'MM/dd/yyyy HH:mm') : '—'}</div>
               <div><span className="font-medium">Actual end:</span> {maintenanceDetail.actual_end ? format(new Date(maintenanceDetail.actual_end), 'MM/dd/yyyy HH:mm') : '—'}</div>
+              {maintenanceDetail.reopened_at && <div><span className="font-medium">Reopened:</span> {format(new Date(maintenanceDetail.reopened_at), 'MM/dd/yyyy HH:mm')}</div>}
+              {maintenanceDetail.reopened_by_user && <div><span className="font-medium">Reopened by:</span> {maintenanceDetail.reopened_by_user.display_name || 'Unknown'}</div>}
             </div>
             {(maintenanceDetail.description || maintenanceDetail.notes || maintenanceDetail.reopen_reason) && (
               <div className="space-y-1 text-sm">

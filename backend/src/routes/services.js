@@ -357,16 +357,35 @@ router.get('/:id/maintenance', async (req, res) => {
             m.scheduled_start, m.scheduled_end, m.actual_start, m.actual_end,
             m.ticket_ref, m.reopened_at, m.reopen_reason, m.reopen_count,
             m.owner_approval_required, m.owner_approval_status,
-            m.description, m.notes
+            m.description, m.notes,
+            u.id as reopened_by_user_id, u.display_name as reopened_by_user_display_name, u.email as reopened_by_user_email
      FROM maintenance_windows m
      JOIN maintenance_assets ma ON ma.maintenance_id=m.id
      JOIN service_assets sa ON sa.asset_id=ma.asset_id
+     LEFT JOIN users u ON u.id=m.reopened_by
      WHERE sa.service_id=$1
      ORDER BY m.scheduled_start DESC
      LIMIT $2 OFFSET $3`,
     [req.params.id, limit, offset]
   );
-  res.json({ data: rows, total: totalRes.rows[0]?.total || 0, page, limit });
+  
+  // Transform reopened_by_user data
+  const data = rows.map(r => {
+    const result = { ...r };
+    if (r.reopened_by_user_id) {
+      result.reopened_by_user = {
+        id: r.reopened_by_user_id,
+        display_name: r.reopened_by_user_display_name,
+        email: r.reopened_by_user_email
+      };
+      delete result.reopened_by_user_id;
+      delete result.reopened_by_user_display_name;
+      delete result.reopened_by_user_email;
+    }
+    return result;
+  });
+  
+  res.json({ data, total: totalRes.rows[0]?.total || 0, page, limit });
 });
 
 // ─── GET /api/services/:id/users ────────────────────────────────────────────

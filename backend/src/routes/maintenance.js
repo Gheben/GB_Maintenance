@@ -450,10 +450,12 @@ router.get('/:id', async (req, res) => {
   const maint = await getOne(
     `SELECT mw.*,
        u1.display_name as created_by_name, u1.email as created_by_email,
-       u2.display_name as approved_by_name
+       u2.display_name as approved_by_name,
+       u3.id as reopened_by_user_id, u3.display_name as reopened_by_user_display_name, u3.email as reopened_by_user_email
      FROM maintenance_windows mw
      LEFT JOIN users u1 ON u1.id=mw.created_by
      LEFT JOIN users u2 ON u2.id=mw.approved_by
+     LEFT JOIN users u3 ON u3.id=mw.reopened_by
      WHERE mw.id=$1`,
     [req.params.id]
   );
@@ -512,7 +514,21 @@ router.get('/:id', async (req, res) => {
     [req.params.id]
   ).catch(() => []);
 
-  res.json({ ...maint, assets, services: directServices, affectedServices: assetDerivedServices, affectedAssets: serviceDerivedAssets, statusHistory });
+  const response = { ...maint, assets, services: directServices, affectedServices: assetDerivedServices, affectedAssets: serviceDerivedAssets, statusHistory };
+  
+  // Transform reopened_by_user data if exists
+  if (maint.reopened_by_user_id) {
+    response.reopened_by_user = {
+      id: maint.reopened_by_user_id,
+      display_name: maint.reopened_by_user_display_name,
+      email: maint.reopened_by_user_email
+    };
+    delete response.reopened_by_user_id;
+    delete response.reopened_by_user_display_name;
+    delete response.reopened_by_user_email;
+  }
+  
+  res.json(response);
 });
 
 // ─── GET /api/maintenance/:id/approval-status ───────────────────────────────
