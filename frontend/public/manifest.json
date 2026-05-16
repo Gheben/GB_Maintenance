@@ -1,6 +1,6 @@
 {
   "name": "GB Maintenance",
-  "short_name": "GB Maint",
+  "short_name": "GBMaint",
   "description": "Gestione manutenzioni programmate asset e servizi aziendali",
   "start_url": "/",
   "display": "standalone",
