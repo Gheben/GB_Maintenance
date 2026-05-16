@@ -139,7 +139,7 @@ app.get(['/docs', '/docs/'], async (req, res) => {
     #docs-header .back-btn {
       background: transparent; border: 1px solid #334155; color: #94a3b8;
       border-radius: 6px; padding: 5px 14px; font-size: 12px; font-weight: 500;
-      cursor: pointer; display: none; align-items: center; gap: 6px;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
       text-decoration: none; white-space: nowrap; transition: background .15s,color .15s;
     }
     #docs-header .back-btn:hover { background: #1e293b; color: #e2e8f0; }
@@ -319,11 +319,6 @@ app.get(['/docs', '/docs/'], async (req, res) => {
         document.getElementById('no-auth-banner').classList.add('visible');
         document.body.classList.add('not-authed');
       }
-      if (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
-        var backBtn = document.getElementById('back-btn');
-        if (backBtn) backBtn.style.display = 'inline-flex';
-      }
-
       var ui = SwaggerUIBundle({
         url: '/api/docs.json',
         dom_id: '#swagger-ui',
