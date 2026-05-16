@@ -978,15 +978,15 @@ router.post('/:id/reopen', requireOperator, [
 
   await appendMaintenanceStatusHistory(req.params.id, 'reopened', req.user.username || req.user.id || 'system', req.body.reason);
   await appendMaintenanceStatusHistory(req.params.id, 'in_progress', req.user.username || req.user.id || 'system', 'Maintenance reopened');
-
-  await notifyMaintenance(req.params.id, 'maintenance_reopened', {
-    reopen_reason: req.body.reason,
-    reopened_at: formatItDate(new Date()),
-  });
-
   wsService.broadcast({ type: 'maintenance_reopened', id: req.params.id });
   await auditService.log(req.user.id, req.user.username, 'maintenance:reopen', 'maintenance', req.params.id, req.body.reason, req.ip);
   res.json({ message: 'Maintenance reopened' });
+
+  // Do not block API response on email delivery.
+  notifyMaintenance(req.params.id, 'maintenance_reopened', {
+    reopen_reason: req.body.reason,
+    reopened_at: formatItDate(new Date()),
+  }).catch(() => {});
 });
 
 // ─── POST /api/maintenance/:id/cancel ────────────────────────────────────────
