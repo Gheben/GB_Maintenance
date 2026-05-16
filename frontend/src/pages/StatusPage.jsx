@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { statusApi } from '../api'
 import { format } from 'date-fns'
-import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell } from 'lucide-react'
+import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Building2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { Modal } from '../components/Modal'
 
@@ -54,6 +54,7 @@ function MaintenanceCard({ m, colorClass }) {
   const users = m.involved_users || []
   // Subscribe is only offered for public maintenances with no user_targets
   const showSubscribeBtn = isLoggedIn && users.length === 0
+  const uniqueOffices = [...new Set(users.map(u => u.office).filter(Boolean))]
   const filteredUsers = usersSearch.trim()
     ? users.filter(u => {
         const q = usersSearch.toLowerCase()
@@ -125,10 +126,14 @@ function MaintenanceCard({ m, colorClass }) {
         {hasHistory && (
           <button
             onClick={() => setShowHistory(v => !v)}
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+            className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border px-3 py-1.5 transition-colors ${
+              showHistory
+                ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600'
+                : 'bg-gray-50 dark:bg-gray-800/60 text-gray-500 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
           >
-            {showHistory ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            History
+            <Clock size={12} />
+            Timeline
           </button>
         )}
         {users.length > 0 && (
@@ -170,6 +175,23 @@ function MaintenanceCard({ m, colorClass }) {
           </button>
         )}
       </div>
+
+      {isLoggedIn && uniqueOffices.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+            <Building2 size={11} />
+            Affected offices:
+          </span>
+          {uniqueOffices.map(office => (
+            <span
+              key={office}
+              className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 px-2.5 py-0.5 text-xs font-medium"
+            >
+              {office}
+            </span>
+          ))}
+        </div>
+      )}
 
       {showConfirm && (
         <Modal
