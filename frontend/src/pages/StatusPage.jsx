@@ -176,20 +176,26 @@ function MaintenanceCard({ m, colorClass }) {
         )}
       </div>
 
-      {isLoggedIn && uniqueOffices.length > 0 && (
+      {uniqueOffices.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="inline-flex items-center gap-1 text-xs text-gray-400">
             <Building2 size={11} />
             Affected offices:
           </span>
-          {uniqueOffices.map(office => (
-            <span
-              key={office}
-              className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 px-2.5 py-0.5 text-xs font-medium"
-            >
-              {office}
+          {isLoggedIn ? (
+            uniqueOffices.map(office => (
+              <span
+                key={office}
+                className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 px-2.5 py-0.5 text-xs font-medium"
+              >
+                {office}
+              </span>
+            ))
+          ) : (
+            <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 text-gray-600 px-2.5 py-0.5 text-xs font-medium">
+              {uniqueOffices.length}
             </span>
-          ))}
+          )}
         </div>
       )}
 
