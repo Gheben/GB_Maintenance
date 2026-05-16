@@ -60,6 +60,8 @@ export default function MaintenanceDetail() {
   const [showOfficesModal, setShowOfficesModal] = useState(false)
   const [userSearch, setUserSearch] = useState('')
   const [selectedOffice, setSelectedOffice] = useState('')
+  const [officeSearch, setOfficeSearch] = useState('')
+  const [approvalSearch, setApprovalSearch] = useState('')
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [approvalData, setApprovalData] = useState(null)
   const [approvalLoading, setApprovalLoading] = useState(false)
@@ -117,6 +119,7 @@ export default function MaintenanceDetail() {
 
   const openApprovalModal = async () => {
     setShowApprovalModal(true)
+    setApprovalSearch('')
     await loadApprovalStatus()
   }
 
@@ -483,7 +486,10 @@ export default function MaintenanceDetail() {
 
               <button
                 className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 px-3 py-1.5 hover:bg-indigo-100 transition-colors"
-                onClick={() => setShowOfficesModal(true)}
+                onClick={() => {
+                  setOfficeSearch('')
+                  setShowOfficesModal(true)
+                }}
               >
                 <Building2 size={13} />
                 Affected offices ({impactedOffices.length})
@@ -554,16 +560,30 @@ export default function MaintenanceDetail() {
 
       {showOfficesModal && (
         <Modal title={`Affected offices (${impactedOffices.length})`} onClose={() => setShowOfficesModal(false)} size="md">
-          <div className="space-y-2 max-h-[50vh] overflow-auto">
+          <div className="space-y-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="input pl-8"
+                placeholder="Search office..."
+                value={officeSearch}
+                onChange={(e) => setOfficeSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="max-h-[50vh] overflow-auto space-y-2">
             {impactedOffices.length === 0 ? (
               <p className="text-sm text-gray-500">No office data available.</p>
             ) : (
-              impactedOffices.map((office) => (
+              impactedOffices
+                .filter((office) => String(office || '').toLowerCase().includes(officeSearch.toLowerCase()))
+                .map((office) => (
                 <div key={office} className="px-3 py-2 rounded-lg border border-indigo-100 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-sm text-indigo-800 dark:text-indigo-200">
                   {office}
                 </div>
-              ))
+                ))
             )}
+            </div>
           </div>
         </Modal>
       )}
@@ -594,12 +614,40 @@ export default function MaintenanceDetail() {
                   </div>
                 </div>
 
+                <div className="relative">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    className="input pl-8"
+                    placeholder="Search owner, source, or status..."
+                    value={approvalSearch}
+                    onChange={(e) => setApprovalSearch(e.target.value)}
+                  />
+                </div>
+
                 <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                  {(approvalData.requests || []).length === 0 && (
+                  {(approvalData.requests || []).filter((row) => {
+                    const q = approvalSearch.toLowerCase().trim()
+                    if (!q) return true
+                    return [
+                      row.owner_label,
+                      row.owner_source_type,
+                      row.owner_source_name,
+                      row.status,
+                    ].some((v) => String(v || '').toLowerCase().includes(q))
+                  }).length === 0 && (
                     <p className="text-sm text-gray-500">No owner approval requests found for this maintenance.</p>
                   )}
 
-                  {(approvalData.requests || []).map((row) => {
+                  {(approvalData.requests || []).filter((row) => {
+                    const q = approvalSearch.toLowerCase().trim()
+                    if (!q) return true
+                    return [
+                      row.owner_label,
+                      row.owner_source_type,
+                      row.owner_source_name,
+                      row.status,
+                    ].some((v) => String(v || '').toLowerCase().includes(q))
+                  }).map((row) => {
                     const ownerForm = ownerFormFor(row)
                     const creatorForm = creatorFormFor(row)
                     const creatorName = approvalData.maintenance?.created_by_name || 'Maintenance creator'

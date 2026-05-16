@@ -258,9 +258,11 @@ async function notifyOwnerApprovalRequested(maintenance, targets, actorName) {
   const appUrl = await getAppBaseUrl();
   for (const t of targets) {
     const msg = `Approval required for maintenance "${maintenance.title}" (${t.owner_source_type}: ${t.owner_source_name})`;
-    await sendInApp(t.owner_user_id, 'maintenance_owner_approval_requested', 'Maintenance approval requested', msg, 'maintenance', maintenance.id);
+    const jobs = [
+      sendInApp(t.owner_user_id, 'maintenance_owner_approval_requested', 'Maintenance approval requested', msg, 'maintenance', maintenance.id),
+    ];
     if (t.owner_email) {
-      await sendEmailNotification(
+      jobs.push(sendEmailNotification(
         'maintenance_owner_approval_requested',
         [t.owner_email],
         {
@@ -278,8 +280,9 @@ async function notifyOwnerApprovalRequested(maintenance, targets, actorName) {
         },
         'maintenance',
         maintenance.id
-      ).catch(() => {});
+      ).catch(() => {}));
     }
+    await Promise.allSettled(jobs);
   }
 }
 
@@ -709,11 +712,12 @@ router.post('/:id/owner-approvals/:approvalId/respond', [
     const inAppMsg = action === 'reschedule'
       ? `${actorName} proposed ${formatItDate(req.body.proposed_start)} - ${formatItDate(req.body.proposed_end)}`
       : (note || '');
-    await sendInApp(creator.id, `maintenance_owner_${action}`, inAppTitle, inAppMsg, 'maintenance', maintenance.id);
-
+    const jobs = [
+      sendInApp(creator.id, `maintenance_owner_${action}`, inAppTitle, inAppMsg, 'maintenance', maintenance.id),
+    ];
     if (creator.email) {
       if (action === 'reschedule') {
-        await sendEmailNotification(
+        jobs.push(sendEmailNotification(
           'maintenance_owner_reschedule_proposed',
           [creator.email],
           {
@@ -726,9 +730,10 @@ router.post('/:id/owner-approvals/:approvalId/respond', [
           },
           'maintenance',
           maintenance.id
-        ).catch(() => {});
+        ).catch(() => {}));
       }
     }
+    await Promise.allSettled(jobs);
   }
 
   await auditService.log(req.user.id, req.user.username, `maintenance:owner_approval:${action}`, 'maintenance', req.params.id, note, req.ip);
@@ -813,10 +818,11 @@ router.post('/:id/owner-approvals/:approvalId/creator-decision', [
       : action === 'reject'
         ? `Reschedule rejected by creator: ${maintenance.title}`
         : `Creator sent a counter proposal: ${maintenance.title}`;
-    await sendInApp(owner.id, `maintenance_creator_${action}`, title, note || '', 'maintenance', maintenance.id);
-
+    const jobs = [
+      sendInApp(owner.id, `maintenance_creator_${action}`, title, note || '', 'maintenance', maintenance.id),
+    ];
     if (action === 'counter_propose' && owner.email) {
-      await sendEmailNotification(
+      jobs.push(sendEmailNotification(
         'maintenance_owner_reschedule_countered',
         [owner.email],
         {
@@ -828,8 +834,9 @@ router.post('/:id/owner-approvals/:approvalId/creator-decision', [
         },
         'maintenance',
         maintenance.id
-      ).catch(() => {});
+      ).catch(() => {}));
     }
+    await Promise.allSettled(jobs);
   }
 
   await auditService.log(req.user.id, req.user.username, `maintenance:creator_decision:${action}`, 'maintenance', req.params.id, note, req.ip);

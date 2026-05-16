@@ -360,14 +360,18 @@ async function notifyIncident(incidentId, eventType) {
       resolved_at: incident.resolved_at ? new Date(incident.resolved_at).toLocaleString('it-IT') : '-',
     };
 
+    const tasks = [];
     if (emails.size > 0) {
-      await sendEmailNotification(eventType, [...emails], vars, 'incident', incidentId);
+      tasks.push(sendEmailNotification(eventType, [...emails], vars, 'incident', incidentId));
     }
-    for (const uid of userIds) {
-      await sendInApp(uid, eventType, `Incidente: ${incident.title}`, incident.description, 'incident', incidentId);
+    if (userIds.size > 0) {
+      tasks.push(Promise.all([...userIds].map((uid) =>
+        sendInApp(uid, eventType, `Incidente: ${incident.title}`, incident.description, 'incident', incidentId)
+      )));
     }
+    tasks.push(_dispatchWebhooks(eventType, { incident }));
 
-    await _dispatchWebhooks(eventType, { incident });
+    await Promise.allSettled(tasks);
   } catch (err) {
     logger.error(`[Notify] notifyIncident error: ${err.message}`);
   }
