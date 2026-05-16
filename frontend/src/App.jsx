@@ -68,7 +68,7 @@ export default function App() {
       }
     }
 
-    const applyPwaBrandingFromAppName = async (appName) => {
+    const applyPwaBranding = async ({ appName, appImage }) => {
       if (!appName) return
 
       let appleTitleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
@@ -91,10 +91,32 @@ export default function App() {
         const response = await fetch(originalHref, { cache: 'no-store' })
         if (!response.ok) return
         const manifest = await response.json()
+        const imageWithTs = appImage
+          ? `${appImage}${appImage.includes('?') ? '&' : '?'}v=${Date.now()}`
+          : ''
+
         const updatedManifest = {
           ...manifest,
           name: appName,
           short_name: appName,
+          ...(imageWithTs
+            ? {
+              icons: [
+                {
+                  src: imageWithTs,
+                  sizes: '192x192',
+                  type: 'image/png',
+                  purpose: 'any maskable',
+                },
+                {
+                  src: imageWithTs,
+                  sizes: '512x512',
+                  type: 'image/png',
+                  purpose: 'any maskable',
+                },
+              ],
+            }
+            : {}),
         }
 
         const blob = new Blob([JSON.stringify(updatedManifest)], { type: 'application/manifest+json' })
@@ -115,7 +137,7 @@ export default function App() {
 
       if (appName) {
         document.title = appName
-        applyPwaBrandingFromAppName(appName)
+        applyPwaBranding({ appName, appImage })
       }
       if (appImage) {
         // Add timestamp to force browser cache busting
