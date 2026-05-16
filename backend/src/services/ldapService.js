@@ -38,7 +38,7 @@ function _memoSet(key, value, ttlMs) {
   if (firstKey) LDAP_MEMO.delete(firstKey);
 }
 
-async function _memoizeLdapCall(key, ttlMs, producer) {
+async function _memoizeLdapCall(key, ttlMs, producer, shouldCache = () => true) {
   const cached = _memoGet(key);
   if (cached !== undefined) return cached;
 
@@ -47,7 +47,9 @@ async function _memoizeLdapCall(key, ttlMs, producer) {
   const pending = (async () => {
     try {
       const value = await producer();
-      _memoSet(key, value, ttlMs);
+      if (shouldCache(value)) {
+        _memoSet(key, value, ttlMs);
+      }
       return value;
     } finally {
       LDAP_INFLIGHT.delete(key);
@@ -59,9 +61,20 @@ async function _memoizeLdapCall(key, ttlMs, producer) {
 }
 
 function _normalizeGroupDns(groupDns = []) {
-  return [...new Set((Array.isArray(groupDns) ? groupDns : [])
-    .map(v => String(v || '').trim().toLowerCase())
-    .filter(Boolean))].sort();
+  const byLowerKey = new Map();
+  for (const raw of (Array.isArray(groupDns) ? groupDns : [])) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    if (!byLowerKey.has(lower)) byLowerKey.set(lower, trimmed);
+  }
+  return [...byLowerKey.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([, original]) => original);
+}
+
+function _normalizedDnsKey(groupDns = []) {
+  return _normalizeGroupDns(groupDns).map((dn) => dn.toLowerCase());
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
@@ -708,7 +721,8 @@ async function countUsersInGroups(groupDns = []) {
   const cfg = await getLdapSettings();
   if (!cfg || !cfg.enabled || !ldap) return 0;
 
-  const memoKey = `ldap:countUsersInGroups:${_cacheTokenFromCfg(cfg)}:${dns.join(',')}`;
+  const memoKeyDns = _normalizedDnsKey(dns);
+  const memoKey = `ldap:countUsersInGroups:${_cacheTokenFromCfg(cfg)}:${memoKeyDns.join(',')}`;
   return _memoizeLdapCall(memoKey, 60 * 1000, async () => {
 
   const searchBases = [
@@ -823,7 +837,7 @@ async function countUsersInGroups(groupDns = []) {
   } finally {
     client.destroy();
   }
-  });
+  }, (value) => Number.isFinite(value) && value > 0);
 }
 
 async function listUsersInGroups(groupDns = [], options = {}) {
@@ -834,7 +848,8 @@ async function listUsersInGroups(groupDns = [], options = {}) {
   if (!cfg || !cfg.enabled || !ldap) return [];
 
   const maxResults = Math.max(1, Math.min(parseInt(options.maxResults || 2000, 10), 5000));
-  const memoKey = `ldap:listUsersInGroups:${_cacheTokenFromCfg(cfg)}:${maxResults}:${dns.join(',')}`;
+  const memoKeyDns = _normalizedDnsKey(dns);
+  const memoKey = `ldap:listUsersInGroups:${_cacheTokenFromCfg(cfg)}:${maxResults}:${memoKeyDns.join(',')}`;
   return _memoizeLdapCall(memoKey, 60 * 1000, async () => {
 
   const searchBases = [
@@ -983,7 +998,7 @@ async function listUsersInGroups(groupDns = [], options = {}) {
   } finally {
     client.destroy();
   }
-  });
+  }, (value) => Array.isArray(value) && value.length > 0);
 }
 
 module.exports.searchUsers = searchUsers;
