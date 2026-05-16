@@ -3,16 +3,19 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
-import { Modal } from '../components/Modal'
+import { ConfirmDialog, Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { ItemPicker } from '../components/ItemPicker'
 import { maintenanceApi, maintenanceTypesApi, assetsApi, servicesApi, blackoutApi } from '../api'
-import { Plus, RefreshCw, Pencil, ChevronDown, ChevronRight as ChevronRight2, CheckCircle2, Ban, AlertTriangle } from 'lucide-react'
+import { Plus, RefreshCw, Pencil, ChevronDown, ChevronRight as ChevronRight2, CheckCircle2, Ban, AlertTriangle, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
+import { useAuth } from '../contexts/AuthContext'
 
 const IMPACTS = ['critical','high','medium','low']
 
 export default function Maintenance() {
+  const { hasRole } = useAuth()
+  const canBulkDelete = hasRole('superadmin', 'admin')
   const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
@@ -23,6 +26,9 @@ export default function Maintenance() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [expandedId, setExpandedId] = useState(null)
+  const [selectedMaintenanceIds, setSelectedMaintenanceIds] = useState([])
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const [mTypes, setMTypes] = useState([])
   const [blackouts, setBlackouts] = useState([])
   const [allAssets, setAllAssets] = useState([])
@@ -41,6 +47,9 @@ export default function Maintenance() {
   }, [filterStatus, filterUpcoming, page, limit])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    setSelectedMaintenanceIds(prev => prev.filter(id => items.some(m => m.id === id)))
+  }, [items])
   useEffect(() => {
     maintenanceTypesApi.list().then(r => setMTypes(r.data))
     blackoutApi.list().then(r => setBlackouts(r.data)).catch(() => {})
@@ -79,6 +88,39 @@ export default function Maintenance() {
       load()
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
+
+  const toggleMaintenanceSelection = (id) => {
+    if (!canBulkDelete) return
+    setSelectedMaintenanceIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const toggleSelectAllVisible = (checked) => {
+    if (!canBulkDelete) return
+    if (checked) {
+      setSelectedMaintenanceIds(items.map(m => m.id))
+      return
+    }
+    setSelectedMaintenanceIds([])
+  }
+
+  const handleBulkDelete = async () => {
+    if (!canBulkDelete || selectedMaintenanceIds.length === 0) return
+    setBulkDeleting(true)
+    try {
+      const results = await Promise.allSettled(selectedMaintenanceIds.map((id) => maintenanceApi.delete(id)))
+      const ok = results.filter(r => r.status === 'fulfilled').length
+      const ko = results.length - ok
+      if (ok > 0) toast.success(`${ok} maintenance item(s) deleted`)
+      if (ko > 0) toast.error(`${ko} maintenance item(s) not deleted`)
+      setSelectedMaintenanceIds([])
+      setConfirmBulkDelete(false)
+      load()
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  const allVisibleSelected = items.length > 0 && items.every(m => selectedMaintenanceIds.includes(m.id))
 
   const now = new Date()
   const activeBlackouts = blackouts.filter(b => {
@@ -125,6 +167,15 @@ export default function Maintenance() {
           </div>
           <div className="flex gap-2">
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
+            {canBulkDelete && (
+              <button
+                className="btn-danger"
+                disabled={selectedMaintenanceIds.length === 0 || bulkDeleting}
+                onClick={() => setConfirmBulkDelete(true)}
+              >
+                <Trash2 size={15} />Delete selected ({selectedMaintenanceIds.length})
+              </button>
+            )}
             <Link to="/maintenance/types" className="btn-secondary">Types</Link>
             <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />New</button>
           </div>
@@ -134,9 +185,22 @@ export default function Maintenance() {
           <div className="overflow-x-auto">
           <table className="min-w-[700px] w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>{['Title','Type','Impact','Status','Assets','Start','End',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>            </thead>
+              <tr>
+                {canBulkDelete && (
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={(e) => toggleSelectAllVisible(e.target.checked)}
+                      aria-label="Select all visible maintenance rows"
+                    />
+                  </th>
+                )}
+                {['Title','Type','Impact','Status','Assets','Start','End',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
+              </tr>
+            </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {loading ? <tr><td colSpan={8} className="text-center py-8 text-gray-500">Loading...</td></tr>
+              {loading ? <tr><td colSpan={canBulkDelete ? 9 : 8} className="text-center py-8 text-gray-500">Loading...</td></tr>
                 : items.map(m => {
                   const isExpanded = expandedId === m.id
                   return (
@@ -147,6 +211,16 @@ export default function Maintenance() {
                         onDoubleClick={() => navigate(`/maintenance/${m.id}`)}
                         title="Click to expand timeline. Double click to edit"
                       >
+                        {canBulkDelete && (
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedMaintenanceIds.includes(m.id)}
+                              onChange={() => toggleMaintenanceSelection(m.id)}
+                              aria-label={`Select maintenance ${m.title}`}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3 font-medium">
                           <span className="flex items-center gap-1">
                             <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
@@ -174,7 +248,7 @@ export default function Maintenance() {
                       </tr>
                       {isExpanded && (
                         <tr className="bg-gray-50 dark:bg-gray-800/60">
-                          <td colSpan={8} className="px-8 py-3">
+                          <td colSpan={canBulkDelete ? 9 : 8} className="px-8 py-3">
                             <div className="flex flex-wrap items-center gap-0">
                               {[
                                 { label: 'Created', ts: m.created_at, color: 'bg-gray-400' },
@@ -272,6 +346,17 @@ export default function Maintenance() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {confirmBulkDelete && (
+        <ConfirmDialog
+          title="Delete selected maintenance"
+          message={`Delete ${selectedMaintenanceIds.length} selected maintenance item(s)? This action cannot be undone.`}
+          danger
+          confirmLabel={bulkDeleting ? 'Deleting...' : 'Delete'}
+          onConfirm={handleBulkDelete}
+          onCancel={() => !bulkDeleting && setConfirmBulkDelete(false)}
+        />
       )}
     </Layout>
   )

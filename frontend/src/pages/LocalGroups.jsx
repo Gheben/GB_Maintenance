@@ -4,12 +4,18 @@ import { groupsApi } from '../api'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { Plus, Trash2, Users, ChevronRight } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function LocalGroups() {
+  const { hasRole } = useAuth()
+  const canBulkDelete = hasRole('superadmin', 'admin')
   const [groups, setGroups] = useState([])
   const [selected, setSelected] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [selectedGroupIds, setSelectedGroupIds] = useState([])
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const [form, setForm] = useState({ name: '', description: '' })
   const [memberEmail, setMemberEmail] = useState('')
 
@@ -17,6 +23,9 @@ export default function LocalGroups() {
   const loadDetail = (id) => groupsApi.get(id).then(r => setSelected(r.data))
 
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    setSelectedGroupIds(prev => prev.filter(id => groups.some(g => g.id === id)))
+  }, [groups])
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -27,6 +36,40 @@ export default function LocalGroups() {
   const handleDelete = async () => {
     try { await groupsApi.delete(deleteTarget.id); toast.success('Eliminato'); setDeleteTarget(null); if (selected?.id === deleteTarget.id) setSelected(null); load() }
     catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+  }
+
+  const toggleGroupSelection = (id) => {
+    if (!canBulkDelete) return
+    setSelectedGroupIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const toggleSelectAllGroups = (checked) => {
+    if (!canBulkDelete) return
+    if (checked) {
+      setSelectedGroupIds(groups.map(g => g.id))
+      return
+    }
+    setSelectedGroupIds([])
+  }
+
+  const allGroupsSelected = groups.length > 0 && groups.every(g => selectedGroupIds.includes(g.id))
+
+  const handleBulkDeleteGroups = async () => {
+    if (!canBulkDelete || selectedGroupIds.length === 0) return
+    setBulkDeleting(true)
+    try {
+      const results = await Promise.allSettled(selectedGroupIds.map((id) => groupsApi.delete(id)))
+      const ok = results.filter(r => r.status === 'fulfilled').length
+      const ko = results.length - ok
+      if (ok > 0) toast.success(`${ok} gruppo/i eliminato/i`)
+      if (ko > 0) toast.error(`${ko} gruppo/i non eliminato/i`)
+      if (selected?.id && selectedGroupIds.includes(selected.id)) setSelected(null)
+      setSelectedGroupIds([])
+      setBulkDeleteConfirm(false)
+      await load()
+    } finally {
+      setBulkDeleting(false)
+    }
   }
 
   const handleAddMember = async (e) => {
@@ -48,18 +91,52 @@ export default function LocalGroups() {
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <span className="font-semibold text-sm text-gray-600">Gruppi</span>
-            <button className="btn-primary text-xs" onClick={() => setShowCreate(true)}><Plus size={13} />Nuovo</button>
+            <div className="flex items-center gap-2">
+              {canBulkDelete && (
+                <button
+                  className="btn-danger text-xs"
+                  disabled={selectedGroupIds.length === 0 || bulkDeleting}
+                  onClick={() => setBulkDeleteConfirm(true)}
+                >
+                  <Trash2 size={13} />Elimina selezionati ({selectedGroupIds.length})
+                </button>
+              )}
+              <button className="btn-primary text-xs" onClick={() => setShowCreate(true)}><Plus size={13} />Nuovo</button>
+            </div>
           </div>
+          {canBulkDelete && groups.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-gray-500">
+              <input
+                type="checkbox"
+                checked={allGroupsSelected}
+                onChange={(e) => toggleSelectAllGroups(e.target.checked)}
+                aria-label="Seleziona tutti i gruppi"
+              />
+              Seleziona tutti
+            </label>
+          )}
           {groups.map(g => (
-            <button key={g.id} onClick={() => loadDetail(g.id)}
-              className={`w-full text-left p-3 rounded-lg border transition-colors flex items-center gap-2 ${selected?.id === g.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>
-              <Users size={16} className="text-gray-400 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{g.name}</p>
-                {g.description && <p className="text-xs text-gray-500 truncate">{g.description}</p>}
-              </div>
-              <ChevronRight size={14} className="text-gray-300" />
-            </button>
+            <div key={g.id} className="flex items-stretch gap-2">
+              {canBulkDelete && (
+                <label className="flex items-center px-2 border border-gray-200 dark:border-gray-700 rounded-lg">
+                  <input
+                    type="checkbox"
+                    checked={selectedGroupIds.includes(g.id)}
+                    onChange={() => toggleGroupSelection(g.id)}
+                    aria-label={`Seleziona gruppo ${g.name}`}
+                  />
+                </label>
+              )}
+              <button onClick={() => loadDetail(g.id)}
+                className={`w-full text-left p-3 rounded-lg border transition-colors flex items-center gap-2 ${selected?.id === g.id ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}>
+                <Users size={16} className="text-gray-400 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{g.name}</p>
+                  {g.description && <p className="text-xs text-gray-500 truncate">{g.description}</p>}
+                </div>
+                <ChevronRight size={14} className="text-gray-300" />
+              </button>
+            </div>
           ))}
           {groups.length === 0 && <p className="text-sm text-gray-500 text-center py-4">Nessun gruppo</p>}
         </div>
@@ -130,6 +207,16 @@ export default function LocalGroups() {
       )}
 
       {deleteTarget && <ConfirmDialog title="Elimina Gruppo" message={`Eliminare "${deleteTarget.name}"?`} danger confirmLabel="Elimina" onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />}
+      {bulkDeleteConfirm && (
+        <ConfirmDialog
+          title="Elimina gruppi selezionati"
+          message={`Eliminare ${selectedGroupIds.length} gruppo/i selezionato/i? L'operazione non puo essere annullata.`}
+          danger
+          confirmLabel={bulkDeleting ? 'Eliminazione...' : 'Elimina'}
+          onConfirm={handleBulkDeleteGroups}
+          onCancel={() => !bulkDeleting && setBulkDeleteConfirm(false)}
+        />
+      )}
     </Layout>
   )
 }

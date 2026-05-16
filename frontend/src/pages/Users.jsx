@@ -7,6 +7,7 @@ import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { Plus, Trash2, Users as UsersIcon, X, User, Shield, CheckCircle, XCircle, Pencil, Save, ShieldCheck, Wand2, Eye, EyeOff } from 'lucide-react'
 import { QuickCreateLocalGroupModal, QuickCreateUserModal } from '../components/QuickCreateModals'
+import { useAuth } from '../contexts/AuthContext'
 
 const DEFAULT_ROLES = ['admin','change_manager','operator','viewer','subscriber']
 const TABS = [
@@ -510,7 +511,7 @@ function EditPermissionsModal({ user: u, roleOptions, roleProfiles, localGroups,
   )
 }
 
-function UsersTab({ roleOptions, roleProfiles }) {
+function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
   const [users, setUsers] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -523,6 +524,9 @@ function UsersTab({ roleOptions, roleProfiles }) {
   const [localGroups, setLocalGroups] = useState([])
   const [showCreatePassword, setShowCreatePassword] = useState(false)
   const [showCreateConfirmPassword, setShowCreateConfirmPassword] = useState(false)
+  const [selectedLocalUserIds, setSelectedLocalUserIds] = useState([])
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const [form, setForm] = useState({ username: '', display_name: '', email: '', office: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' })
 
   useEffect(() => {
@@ -542,6 +546,9 @@ function UsersTab({ roleOptions, roleProfiles }) {
     setUsers(list); setTotal(tot)
   })
   useEffect(() => { load() }, [page, limit])
+  useEffect(() => {
+    setSelectedLocalUserIds(prev => prev.filter(id => users.some(u => u.id === id && u.auth_type !== 'ldap')))
+  }, [users])
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -573,7 +580,41 @@ function UsersTab({ roleOptions, roleProfiles }) {
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
+  const toggleUserSelection = (id) => {
+    if (!canBulkDelete) return
+    setSelectedLocalUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const toggleSelectAllVisibleLocalUsers = (checked) => {
+    if (!canBulkDelete) return
+    const visibleLocalIds = filtered.filter(u => u.auth_type !== 'ldap').map(u => u.id)
+    if (checked) {
+      setSelectedLocalUserIds(visibleLocalIds)
+      return
+    }
+    setSelectedLocalUserIds([])
+  }
+
+  const handleBulkDeleteUsers = async () => {
+    if (!canBulkDelete || selectedLocalUserIds.length === 0) return
+    setBulkDeleting(true)
+    try {
+      const results = await Promise.allSettled(selectedLocalUserIds.map((id) => usersApi.delete(id)))
+      const ok = results.filter(r => r.status === 'fulfilled').length
+      const ko = results.length - ok
+      if (ok > 0) toast.success(`${ok} user(s) deleted`)
+      if (ko > 0) toast.error(`${ko} user(s) not deleted`)
+      setSelectedLocalUserIds([])
+      setBulkDeleteConfirm(false)
+      load()
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   const filtered = authFilter === 'all' ? users : users.filter(u => u.auth_type === authFilter)
+  const visibleLocalUsers = filtered.filter(u => u.auth_type !== 'ldap')
+  const allVisibleLocalSelected = visibleLocalUsers.length > 0 && visibleLocalUsers.every(u => selectedLocalUserIds.includes(u.id))
   const hasFullAccess = (u) => u.role === 'admin' || u.role === 'superadmin'
   const formatLastLogin = (value) => {
     if (!value) return 'Never'
@@ -595,16 +636,39 @@ function UsersTab({ roleOptions, roleProfiles }) {
           ))}
           {authFilter !== 'all' && <span className="text-xs text-gray-400">({filtered.length} shown)</span>}
         </div>
-        {authFilter === 'local' && (
-          <button className="btn-primary" onClick={() => { setShowCreatePassword(false); setShowCreateConfirmPassword(false); setShowCreate(true) }}><Plus size={15} />New User</button>
-        )}
+        <div className="flex items-center gap-2">
+          {canBulkDelete && authFilter === 'local' && (
+            <button
+              className="btn-danger"
+              disabled={selectedLocalUserIds.length === 0 || bulkDeleting}
+              onClick={() => setBulkDeleteConfirm(true)}
+            >
+              <Trash2 size={15} />Delete selected ({selectedLocalUserIds.length})
+            </button>
+          )}
+          {authFilter === 'local' && (
+            <button className="btn-primary" onClick={() => { setShowCreatePassword(false); setShowCreateConfirmPassword(false); setShowCreate(true) }}><Plus size={15} />New User</button>
+          )}
+        </div>
       </div>
 
       <div className="card overflow-hidden">
           <div className="overflow-x-auto">
           <table className="min-w-[640px] w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
-            <tr>{['Username','Display name','Email','Office','Auth','Role','Active','Last login','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+            <tr>
+              {canBulkDelete && authFilter === 'local' && (
+                <th className="text-left px-4 py-3 font-medium text-gray-600 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleLocalSelected}
+                    onChange={(e) => toggleSelectAllVisibleLocalUsers(e.target.checked)}
+                    aria-label="Select all visible local users"
+                  />
+                </th>
+              )}
+              {['Username','Display name','Email','Office','Auth','Role','Active','Last login','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
+            </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
             {filtered.map(u => (
@@ -612,6 +676,17 @@ function UsersTab({ roleOptions, roleProfiles }) {
                 className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer select-none"
                 onDoubleClick={() => setDetail(u)}
                 title="Double click for details">
+                {canBulkDelete && authFilter === 'local' && (
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedLocalUserIds.includes(u.id)}
+                      onChange={() => toggleUserSelection(u.id)}
+                      disabled={u.auth_type === 'ldap'}
+                      aria-label={`Select user ${u.username}`}
+                    />
+                  </td>
+                )}
                 <td className="px-4 py-3 font-mono text-xs">
                   <div className="flex items-center gap-1.5">
                     <span className={`inline-block w-2 h-2 rounded-full ${authAccentClass(u.auth_type)}`} />
@@ -641,7 +716,7 @@ function UsersTab({ roleOptions, roleProfiles }) {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-gray-500">No users</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={(canBulkDelete && authFilter === 'local') ? 10 : 9} className="text-center py-8 text-gray-500">No users</td></tr>}
           </tbody>
         </table>
         </div>
@@ -672,12 +747,23 @@ function UsersTab({ roleOptions, roleProfiles }) {
         <ConfirmDialog title="Delete user" message={`Delete "${deleteTarget.display_name}"?`} danger confirmLabel="Delete"
           onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />
       )}
+
+      {bulkDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete selected users"
+          message={`Delete ${selectedLocalUserIds.length} selected local user(s)? This action cannot be undone.`}
+          danger
+          confirmLabel={bulkDeleting ? 'Deleting...' : 'Delete'}
+          onConfirm={handleBulkDeleteUsers}
+          onCancel={() => !bulkDeleting && setBulkDeleteConfirm(false)}
+        />
+      )}
     </div>
   )
 }
 
 // â”€â”€â”€ Tab Gruppi Locali â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function GroupsTab({ roleOptions, roleProfiles }) {
+function GroupsTab({ roleOptions, roleProfiles, canBulkDelete }) {
   const [groupType, setGroupType] = useState('all')
   const [groups, setGroups] = useState([])
   const [allMappings, setAllMappings] = useState([])
@@ -699,6 +785,9 @@ function GroupsTab({ roleOptions, roleProfiles }) {
   const [ldapCreateSearch, setLdapCreateSearch] = useState('')
   const [ldapCreateResults, setLdapCreateResults] = useState([])
   const [ldapCreateLoading, setLdapCreateLoading] = useState(false)
+  const [selectedLocalGroupIds, setSelectedLocalGroupIds] = useState([])
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   useEffect(() => {
     setForm(f => ({ ...f, permissions: mergeWithRoleBaseline(f.role, f.permissions, roleProfiles) }))
@@ -726,6 +815,9 @@ function GroupsTab({ roleOptions, roleProfiles }) {
     }
   })
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    setSelectedLocalGroupIds(prev => prev.filter(id => groupsWithType.some(g => g.id === id && g.type === 'local')))
+  }, [groups])
 
   const ldapGroupIds = new Set((allMappings || []).map(m => String(m.local_group_id || '').toLowerCase()).filter(Boolean))
   const groupsWithType = groups.map(g => {
@@ -735,6 +827,8 @@ function GroupsTab({ roleOptions, roleProfiles }) {
   })
   const filteredGroups = groupType === 'all' ? groupsWithType : groupsWithType.filter(g => g.type === groupType)
   const pagedGroups = filteredGroups.slice((page - 1) * limit, page * limit)
+  const visibleLocalGroups = pagedGroups.filter(g => g.type === 'local')
+  const allVisibleLocalGroupsSelected = visibleLocalGroups.length > 0 && visibleLocalGroups.every(g => selectedLocalGroupIds.includes(g.id))
   const detailGroupType = detailGroup && (ldapGroupIds.has(String(detailGroup.id || '').toLowerCase()) || Number(detailGroup.ldap_mapping_count || 0) > 0) ? 'ldap' : 'local'
   const mappingsByGroup = (groupId) => (allMappings || []).filter(m => m.local_group_id === groupId)
 
@@ -747,6 +841,39 @@ function GroupsTab({ roleOptions, roleProfiles }) {
   const handleDelete = async () => {
     try { await groupsApi.delete(deleteTarget.id); toast.success('Deleted'); setDeleteTarget(null); if (detailGroup?.id === deleteTarget.id) setDetailGroup(null); load() }
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
+
+  const toggleGroupSelection = (id) => {
+    if (!canBulkDelete) return
+    setSelectedLocalGroupIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const toggleSelectAllVisibleLocalGroups = (checked) => {
+    if (!canBulkDelete) return
+    const visibleLocalIds = pagedGroups.filter(g => g.type === 'local').map(g => g.id)
+    if (checked) {
+      setSelectedLocalGroupIds(visibleLocalIds)
+      return
+    }
+    setSelectedLocalGroupIds([])
+  }
+
+  const handleBulkDeleteGroups = async () => {
+    if (!canBulkDelete || selectedLocalGroupIds.length === 0) return
+    setBulkDeleting(true)
+    try {
+      const results = await Promise.allSettled(selectedLocalGroupIds.map((id) => groupsApi.delete(id)))
+      const ok = results.filter(r => r.status === 'fulfilled').length
+      const ko = results.length - ok
+      if (ok > 0) toast.success(`${ok} group(s) deleted`)
+      if (ko > 0) toast.error(`${ko} group(s) not deleted`)
+      if (detailGroup?.id && selectedLocalGroupIds.includes(detailGroup.id)) setDetailGroup(null)
+      setSelectedLocalGroupIds([])
+      setBulkDeleteConfirm(false)
+      await load()
+    } finally {
+      setBulkDeleting(false)
+    }
   }
 
   const handleAddMember = async (e) => {
@@ -889,11 +1016,22 @@ function GroupsTab({ roleOptions, roleProfiles }) {
           ))}
           <span className="text-xs text-gray-400">({filteredGroups.length} shown / {groupsWithType.length} total)</span>
         </div>
-        {groupType !== 'all' && (
-          <button className="btn-primary" onClick={() => { setCreateType(groupType === 'ldap' ? 'ldap' : 'local'); setShowCreate(true) }}>
-            <Plus size={15} />{(groupType === 'ldap' || createType === 'ldap') ? 'New LDAP Group' : 'New Group'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {canBulkDelete && groupType === 'local' && (
+            <button
+              className="btn-danger"
+              disabled={selectedLocalGroupIds.length === 0 || bulkDeleting}
+              onClick={() => setBulkDeleteConfirm(true)}
+            >
+              <Trash2 size={15} />Delete selected ({selectedLocalGroupIds.length})
+            </button>
+          )}
+          {groupType !== 'all' && (
+            <button className="btn-primary" onClick={() => { setCreateType(groupType === 'ldap' ? 'ldap' : 'local'); setShowCreate(true) }}>
+              <Plus size={15} />{(groupType === 'ldap' || createType === 'ldap') ? 'New LDAP Group' : 'New Group'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card overflow-hidden">
@@ -901,16 +1039,37 @@ function GroupsTab({ roleOptions, roleProfiles }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
               <tr>
+                {canBulkDelete && groupType === 'local' && (
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleLocalGroupsSelected}
+                      onChange={(e) => toggleSelectAllVisibleLocalGroups(e.target.checked)}
+                      aria-label="Select all visible local groups"
+                    />
+                  </th>
+                )}
                 {['Name','Description','Type','Role','']
                   .map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {pagedGroups.length === 0 && (
-                <tr><td colSpan={5} className="text-center py-8 text-gray-500">No groups</td></tr>
+                <tr><td colSpan={(canBulkDelete && groupType === 'local') ? 6 : 5} className="text-center py-8 text-gray-500">No groups</td></tr>
               )}
               {pagedGroups.map(g => (
                 <tr key={g.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onDoubleClick={() => openDetail(g.id)} title="Double click for details">
+                  {canBulkDelete && groupType === 'local' && (
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedLocalGroupIds.includes(g.id)}
+                        onChange={() => toggleGroupSelection(g.id)}
+                        disabled={g.type !== 'local'}
+                        aria-label={`Select group ${g.name}`}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3 font-medium flex items-center gap-2">
                     <span className={`inline-block w-2 h-2 rounded-full ${g.type === 'ldap' ? 'bg-sky-500' : 'bg-emerald-500'}`} />
                     <UsersIcon size={15} className="text-gray-400 flex-shrink-0" />
@@ -1133,6 +1292,16 @@ function GroupsTab({ roleOptions, roleProfiles }) {
         </Modal>
       )}
       {deleteTarget && <ConfirmDialog title="Delete Group" message={`Delete "${deleteTarget.name}"?`} danger confirmLabel="Delete" onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />}
+      {bulkDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete selected groups"
+          message={`Delete ${selectedLocalGroupIds.length} selected local group(s)? This action cannot be undone.`}
+          danger
+          confirmLabel={bulkDeleting ? 'Deleting...' : 'Delete'}
+          onConfirm={handleBulkDeleteGroups}
+          onCancel={() => !bulkDeleting && setBulkDeleteConfirm(false)}
+        />
+      )}
     </div>
   )
 }
@@ -1286,6 +1455,8 @@ function RolesTab() {
 
 // â”€â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function Users() {
+  const { hasRole } = useAuth()
+  const canBulkDelete = hasRole('superadmin', 'admin')
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') || 'users'
   const [roleOptions, setRoleOptions] = useState(DEFAULT_ROLES)
@@ -1323,8 +1494,8 @@ export default function Users() {
           </nav>
         </div>
 
-        {tab === 'users' && <UsersTab roleOptions={roleOptions} roleProfiles={roleProfiles} />}
-        {tab === 'groups' && <GroupsTab roleOptions={roleOptions} roleProfiles={roleProfiles} />}
+        {tab === 'users' && <UsersTab roleOptions={roleOptions} roleProfiles={roleProfiles} canBulkDelete={canBulkDelete} />}
+        {tab === 'groups' && <GroupsTab roleOptions={roleOptions} roleProfiles={roleProfiles} canBulkDelete={canBulkDelete} />}
         {tab === 'roles' && <RolesTab />}
       </div>
     </Layout>
