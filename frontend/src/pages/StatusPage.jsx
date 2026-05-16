@@ -120,13 +120,20 @@ function MaintenanceCard({ m, colorClass }) {
           </button>
         )}
         {users.length > 0 && (
-          <button
-            onClick={() => { setUsersSearch(''); setShowUsersModal(true) }}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700 px-3 py-1.5 hover:bg-blue-100 transition-colors"
-          >
-            <Users size={13} />
-            Involved users ({users.length})
-          </button>
+          isLoggedIn ? (
+            <button
+              onClick={() => { setUsersSearch(''); setShowUsersModal(true) }}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700 px-3 py-1.5 hover:bg-blue-100 transition-colors"
+            >
+              <Users size={13} />
+              Involved users ({users.length})
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border border-gray-200 bg-gray-100 text-gray-600 px-3 py-1.5 cursor-default" title="Login required to view involved users details">
+              <Users size={13} />
+              Involved users ({users.length})
+            </span>
+          )
         )}
         {isLoggedIn && (
           <button
@@ -169,7 +176,7 @@ function MaintenanceCard({ m, colorClass }) {
         </div>
       )}
 
-      {showUsersModal && (
+      {showUsersModal && isLoggedIn && (
         <Modal title={`Involved users (${users.length})`} onClose={() => setShowUsersModal(false)} size="md">
           <div className="space-y-3">
             <div className="relative">
