@@ -320,7 +320,7 @@ router.get('/:id/probe-configs', async (req, res) => {
 
 // ─── POST /api/assets/:id/probe-configs ──────────────────────────────────────
 router.post('/:id/probe-configs', requireOperator, [
-  body('name').optional().isString().isLength({ max: 200 }),
+  body('name').optional({ nullable: true }).isString().isLength({ max: 200 }),
   body('probe_enabled').optional().isBoolean(),
   body('probe_type').isIn(PROBE_TYPES),
   body('probe_target').isString().trim().isLength({ min: 1 }),
