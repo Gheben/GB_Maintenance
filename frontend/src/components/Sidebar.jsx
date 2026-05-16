@@ -61,6 +61,47 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const navigate = useNavigate()
   const [branding, setBranding] = useState(() => brandingMemoryCache || getCachedBranding() || DEFAULT_BRANDING)
 
+  const appBase = String(import.meta.env.BASE_URL || '/')
+  const normalizedBase = appBase.endsWith('/') ? appBase : `${appBase}/`
+
+  const withAppBase = (path) => {
+    const cleanPath = String(path || '').replace(/^\/+/, '')
+    if (normalizedBase === '/') return `/${cleanPath}`
+    return `${normalizedBase}${cleanPath}`
+  }
+
+  const openApiDocs = async () => {
+    const candidates = Array.from(new Set([
+      withAppBase('/docs/'),
+      withAppBase('/api/docs/'),
+      '/docs/',
+      '/api/docs/',
+    ]))
+
+    const isSwaggerHtml = (html) => /swagger-ui|SwaggerUIBundle/i.test(String(html || ''))
+
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          credentials: 'include',
+          headers: { Accept: 'text/html' },
+        })
+        if (!res.ok) continue
+        const html = await res.text()
+        if (!isSwaggerHtml(html)) continue
+        window.open(url, '_blank', 'noopener,noreferrer')
+        onClose?.()
+        return
+      } catch {
+        // Try next candidate.
+      }
+    }
+
+    window.open(candidates[0], '_blank', 'noopener,noreferrer')
+    onClose?.()
+  }
+
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
   )
@@ -183,6 +224,17 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
             if (!hasPermission(item.perm)) return null
             const Icon = item.icon
             if (item.href) {
+              if (item.href === '/docs/') {
+                return (
+                  <button key={item.href} type="button"
+                    onClick={openApiDocs}
+                    title={cl ? item.label : undefined}
+                    className={`${itemBase} w-full text-gray-300 hover:bg-gray-800 hover:text-white`}>
+                    <Icon size={17} className="flex-shrink-0" />
+                    {!cl && <span className="leading-tight">{item.label}</span>}
+                  </button>
+                )
+              }
               return (
                 <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer"
                   onClick={onClose}
