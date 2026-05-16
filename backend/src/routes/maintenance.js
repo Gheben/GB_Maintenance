@@ -985,6 +985,14 @@ router.post('/:id/reopen', requireOperator, [
 
   await appendMaintenanceStatusHistory(req.params.id, 'reopened', req.user.username || req.user.id || 'system', req.body.reason);
   await appendMaintenanceStatusHistory(req.params.id, 'in_progress', req.user.username || req.user.id || 'system', 'Maintenance reopened');
+  await sendInApp(
+    req.user.id,
+    'maintenance_reopened',
+    `Maintenance Reopened: ${maint.title}`,
+    req.body.reason,
+    'maintenance',
+    req.params.id
+  ).catch(() => {});
   wsService.broadcast({ type: 'maintenance_reopened', id: req.params.id });
   await auditService.log(req.user.id, req.user.username, 'maintenance:reopen', 'maintenance', req.params.id, req.body.reason, req.ip);
   res.json({ message: 'Maintenance reopened' });
