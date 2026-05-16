@@ -7,7 +7,7 @@ import { ItemPicker } from '../components/ItemPicker'
 import { toast } from '../components/Toast'
 import { maintenanceApi, assetsApi, servicesApi, maintenanceTypesApi } from '../api'
 import { format } from 'date-fns'
-import { ArrowLeft, CheckCircle, XCircle, Play, Square, Ban, Pencil, Save, X, ClipboardCheck, RotateCcw } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, Play, Square, Ban, Pencil, Save, X, ClipboardCheck, RotateCcw, Users, Building2, Search } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const IMPACTS = ['critical','high','medium','low']
@@ -56,9 +56,10 @@ export default function MaintenanceDetail() {
   const [saving, setSaving] = useState(false)
   const [mwUsers, setMwUsers] = useState([])
   const [impactedOffices, setImpactedOffices] = useState([])
-  const [selectedOffice, setSelectedOffice] = useState('')
+  const [showUsersModal, setShowUsersModal] = useState(false)
+  const [showOfficesModal, setShowOfficesModal] = useState(false)
   const [userSearch, setUserSearch] = useState('')
-  const [userLimit, setUserLimit] = useState(25)
+  const [selectedOffice, setSelectedOffice] = useState('')
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [approvalData, setApprovalData] = useState(null)
   const [approvalLoading, setApprovalLoading] = useState(false)
@@ -464,82 +465,108 @@ export default function MaintenanceDetail() {
         )}
 
         {/* Users */}
-        {!editMode && (() => {
-          const q = userSearch.toLowerCase()
-          const filtered = mwUsers.filter((u) => {
-            const matchesSearch = !q ||
-              (u.display_name||'').toLowerCase().includes(q) ||
-              (u.username||'').toLowerCase().includes(q) ||
-              (u.email||'').toLowerCase().includes(q)
-            const matchesOffice = !selectedOffice || String(u.office || '').trim() === selectedOffice
-            return matchesSearch && matchesOffice
-          })
-          const visible = filtered.slice(0, userLimit)
-          return (
-            <div className="card overflow-hidden">
-              <div className="p-4 border-b border-gray-100 dark:border-gray-700">
-                <h3 className="font-medium text-sm mb-2">Impacted users</h3>
-                <div className="mb-3">
-                  <p className="text-xs font-medium text-gray-500 mb-1">Offices impacted ({impactedOffices.length})</p>
-                  {impactedOffices.length === 0 ? (
-                    <p className="text-xs text-gray-400">No office data available</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => { setSelectedOffice(''); setUserLimit(25) }}
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs border ${selectedOffice === '' ? 'bg-brand-100 text-brand-700 border-brand-200' : 'bg-white text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'}`}
-                      >
-                        All offices
-                      </button>
-                      {impactedOffices.map((office) => (
-                        <button
-                          type="button"
-                          key={office}
-                          onClick={() => { setSelectedOffice(office); setUserLimit(25) }}
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${selectedOffice === office ? 'bg-indigo-200 text-indigo-900 dark:bg-indigo-700/60 dark:text-indigo-100' : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'}`}
-                        >
-                          {office}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <input className="input text-sm" placeholder="Search users..."
-                  value={userSearch} onChange={e => { setUserSearch(e.target.value); setUserLimit(25) }} />
-              </div>
-              {filtered.length === 0 ? (
-                <p className="text-gray-500 text-sm p-5 text-center">No users impacted by this maintenance.</p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 dark:bg-gray-700/50">
-                    <tr>{['Display Name','Username','Email','Office','Role','Auth'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {visible.map(u => (
-                      <tr key={u.id}>
-                        <td className="px-4 py-2 font-medium">{u.display_name || u.username}</td>
-                        <td className="px-4 py-2 text-gray-500">{u.username}</td>
-                        <td className="px-4 py-2 text-gray-500">{u.email || '—'}</td>
-                        <td className="px-4 py-2 text-gray-500">{u.office || '—'}</td>
-                        <td className="px-4 py-2 text-gray-500">{u.role}</td>
-                        <td className="px-4 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-bold ${u.auth_type === 'ldap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{u.auth_type || 'local'}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              {filtered.length > userLimit && (
-                <div className="p-3 text-center border-t border-gray-100">
-                  <button className="text-sm text-brand-600 hover:underline" onClick={() => setUserLimit(l => l + 25)}>
-                    Show {filtered.length - userLimit} more
-                  </button>
-                </div>
-              )}
+        {!editMode && (
+          <div className="card p-5">
+            <h3 className="font-medium mb-3">Impacted Audience</h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700 px-3 py-1.5 hover:bg-blue-100 transition-colors"
+                onClick={() => {
+                  setUserSearch('')
+                  setSelectedOffice('')
+                  setShowUsersModal(true)
+                }}
+              >
+                <Users size={13} />
+                Affected users ({mwUsers.length})
+              </button>
+
+              <button
+                className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 px-3 py-1.5 hover:bg-indigo-100 transition-colors"
+                onClick={() => setShowOfficesModal(true)}
+              >
+                <Building2 size={13} />
+                Affected offices ({impactedOffices.length})
+              </button>
             </div>
-          )
-        })()}
+          </div>
+        )}
       </div>
+
+      {showUsersModal && (
+        <Modal title={`Impacted users (${mwUsers.length})`} onClose={() => setShowUsersModal(false)} size="xl">
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  className="input pl-8"
+                  placeholder="Search user..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                />
+              </div>
+              <select
+                className="input"
+                value={selectedOffice}
+                onChange={(e) => setSelectedOffice(e.target.value)}
+              >
+                <option value="">All offices</option>
+                {impactedOffices.map((office) => (
+                  <option key={office} value={office}>{office}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="max-h-[60vh] overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+              {mwUsers
+                .filter((u) => {
+                  const q = userSearch.toLowerCase()
+                  const matchesSearch = !q ||
+                    (u.display_name || '').toLowerCase().includes(q) ||
+                    (u.username || '').toLowerCase().includes(q) ||
+                    (u.email || '').toLowerCase().includes(q)
+                  const matchesOffice = !selectedOffice || String(u.office || '').trim() === selectedOffice
+                  return matchesSearch && matchesOffice
+                })
+                .map((u) => (
+                  <div key={u.id} className="px-3 py-2.5 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{u.display_name || u.username}</p>
+                      <p className="text-xs text-gray-500 truncate">{u.email || u.username}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {u.office && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                          {u.office}
+                        </span>
+                      )}
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${u.auth_type === 'ldap' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {u.auth_type || 'local'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showOfficesModal && (
+        <Modal title={`Affected offices (${impactedOffices.length})`} onClose={() => setShowOfficesModal(false)} size="md">
+          <div className="space-y-2 max-h-[50vh] overflow-auto">
+            {impactedOffices.length === 0 ? (
+              <p className="text-sm text-gray-500">No office data available.</p>
+            ) : (
+              impactedOffices.map((office) => (
+                <div key={office} className="px-3 py-2 rounded-lg border border-indigo-100 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-sm text-indigo-800 dark:text-indigo-200">
+                  {office}
+                </div>
+              ))
+            )}
+          </div>
+        </Modal>
+      )}
 
       {showApprovalModal && (
         <Modal title="Owner Approval Workflow" onClose={() => setShowApprovalModal(false)} size="xl">

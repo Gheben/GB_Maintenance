@@ -231,26 +231,29 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
       ...extraVars
     };
 
+    const titles = {
+      maintenance_scheduled: `Maintenance Scheduled: ${maint.title}`,
+      maintenance_reminder: `Reminder: ${maint.title} starts in ${extraVars.time_before || ''}`,
+      maintenance_started: `Maintenance Started: ${maint.title}`,
+      maintenance_completed: `Maintenance Completed: ${maint.title}`,
+      maintenance_reopened: `Maintenance Reopened: ${maint.title}`,
+      maintenance_cancelled: `Maintenance Cancelled: ${maint.title}`,
+      maintenance_rejected: `Maintenance Rejected: ${maint.title}`,
+    };
+
+    // Dispatch all channels in parallel so in-app bell notifications are not blocked by email delivery.
+    const tasks = [];
     if (emails.length > 0) {
-      await sendEmailNotification(eventType, emails, vars, 'maintenance', maintenanceId);
+      tasks.push(sendEmailNotification(eventType, emails, vars, 'maintenance', maintenanceId));
     }
-
-    // In-app for subscribed users
-    for (const uid of userIds) {
-      const titles = {
-        maintenance_scheduled: `Maintenance Scheduled: ${maint.title}`,
-        maintenance_reminder: `Reminder: ${maint.title} starts in ${extraVars.time_before || ''}`,
-        maintenance_started: `Maintenance Started: ${maint.title}`,
-        maintenance_completed: `Maintenance Completed: ${maint.title}`,
-        maintenance_reopened: `Maintenance Reopened: ${maint.title}`,
-        maintenance_cancelled: `Maintenance Cancelled: ${maint.title}`,
-        maintenance_rejected: `Maintenance Rejected: ${maint.title}`,
-      };
-      await sendInApp(uid, eventType, titles[eventType] || maint.title, vars.description, 'maintenance', maintenanceId);
+    if (userIds.length > 0) {
+      tasks.push(Promise.all(userIds.map((uid) =>
+        sendInApp(uid, eventType, titles[eventType] || maint.title, vars.description, 'maintenance', maintenanceId)
+      )));
     }
+    tasks.push(_dispatchWebhooks(eventType, { maintenance: maint, ...extraVars }));
 
-    // Webhooks
-    await _dispatchWebhooks(eventType, { maintenance: maint, ...extraVars });
+    await Promise.allSettled(tasks);
   } catch (err) {
     logger.error(`[Notify] notifyMaintenance error: ${err.message}`);
   }
