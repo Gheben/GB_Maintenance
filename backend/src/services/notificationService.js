@@ -103,7 +103,23 @@ async function getMaintenanceSubscribers(maintenanceId) {
   directServices.forEach(s => allServiceIds.add(s.service_id));
 
   const serviceIds = [...allServiceIds];
-  if (serviceIds.length === 0) return { emails: [], userIds: [] };
+
+  // Direct maintenance status subscribers — always fetched, independent of services
+  const statusSubs = await getMany(
+    `SELECT u.id as user_id, u.email as user_email
+     FROM maintenance_status_subscribers mss
+     JOIN users u ON u.id = mss.user_id
+     WHERE mss.maintenance_id = $1 AND u.is_active = true`,
+    [maintenanceId]
+  ).catch(() => []);
+
+  if (serviceIds.length === 0) {
+    for (const ss of statusSubs) {
+      if (ss.user_email) emails.add(ss.user_email);
+      if (ss.user_id) userIds.add(ss.user_id);
+    }
+    return { emails: [...emails], userIds: [...userIds] };
+  }
 
   // Subscribers
   const subs = await getMany(
@@ -114,14 +130,7 @@ async function getMaintenanceSubscribers(maintenanceId) {
     [serviceIds]
   );
 
-  // Direct maintenance status subscribers
-  const statusSubs = await getMany(
-    `SELECT u.id as user_id, u.email as user_email
-     FROM maintenance_status_subscribers mss
-     JOIN users u ON u.id = mss.user_id
-     WHERE mss.maintenance_id = $1 AND u.is_active = true`,
-    [maintenanceId]
-  ).catch(() => []);
+  // (statusSubs already fetched above)
 
   // Service owners
   const owners = await getMany(
