@@ -287,7 +287,12 @@ export default function AssetDetail() {
       setProbeConfigOpen(false)
       setEditingProbeId(null)
       load()
-    } catch (err) { toast.error(err.response?.data?.error || 'Error saving probe config') }
+    } catch (err) {
+      const errData = err.response?.data
+      const msg = errData?.error || errData?.errors?.[0]?.msg || 'Error saving probe config'
+      toast.error(msg)
+      console.error('[ProbeConfig] save error:', errData)
+    }
     finally { setSavingProbe(false) }
   }
 

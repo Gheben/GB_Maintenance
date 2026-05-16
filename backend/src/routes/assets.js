@@ -324,144 +324,162 @@ router.post('/:id/probe-configs', requireOperator, [
   body('probe_enabled').optional().isBoolean(),
   body('probe_type').isIn(PROBE_TYPES),
   body('probe_target').isString().trim().isLength({ min: 1 }),
-  body('probe_interval_seconds').optional().isInt({ min: 15 }),
-  body('probe_timeout_seconds').optional().isInt({ min: 1, max: 60 }),
-  body('expected_status_code').optional({ nullable: true }).isInt({ min: 100, max: 599 }),
-  body('failure_threshold').optional().isInt({ min: 1, max: 10 }),
-  body('recovery_threshold').optional().isInt({ min: 1, max: 10 }),
+  body('probe_interval_seconds').optional().toInt().isInt({ min: 15 }),
+  body('probe_timeout_seconds').optional().toInt().isInt({ min: 1, max: 60 }),
+  body('expected_status_code').optional({ nullable: true }).toInt().isInt({ min: 100, max: 599 }),
+  body('failure_threshold').optional().toInt().isInt({ min: 1, max: 10 }),
+  body('recovery_threshold').optional().toInt().isInt({ min: 1, max: 10 }),
   body('pause_during_maintenance').optional().isBoolean(),
   body('dns_record_type').optional().isIn(['A','AAAA','CNAME','MX','TXT','NS','PTR','SRV']),
   body('dns_expected_value').optional({ nullable: true }).isString(),
-  body('ssl_expiry_warning_days').optional().isInt({ min: 1, max: 365 }),
+  body('ssl_expiry_warning_days').optional().toInt().isInt({ min: 1, max: 365 }),
 ], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.error('[PROBE] Validation errors for body:', JSON.stringify(req.body), 'errors:', JSON.stringify(errors.array()));
+      return res.status(400).json({ errors: errors.array(), error: errors.array()[0]?.msg });
+    }
 
-  const asset = await getOne('SELECT id FROM assets WHERE id=$1 AND is_active=true', [req.params.id]);
-  if (!asset) return res.status(404).json({ error: 'Asset non trovato' });
+    const asset = await getOne('SELECT id FROM assets WHERE id=$1 AND is_active=true', [req.params.id]);
+    if (!asset) return res.status(404).json({ error: 'Asset non trovato' });
 
-  const r = await query(
-    `INSERT INTO asset_probes (
-       asset_id, name, probe_enabled, probe_type, probe_target,
-       probe_interval_seconds, probe_timeout_seconds, expected_status_code,
-       failure_threshold, recovery_threshold, pause_during_maintenance,
-       dns_record_type, dns_expected_value, ssl_expiry_warning_days,
-       next_probe_at, current_state
-     ) VALUES (
-       $1,$2,$3,$4,$5,
-       $6,$7,$8,
-       $9,$10,$11,
-       $12,$13,$14,
-       NOW(),'unknown'
-     )
-     RETURNING id`,
-    [
-      req.params.id,
-      req.body.name || null,
-      req.body.probe_enabled !== false,
-      req.body.probe_type,
-      req.body.probe_target,
-      req.body.probe_interval_seconds || 300,
-      req.body.probe_timeout_seconds || 10,
-      req.body.expected_status_code ?? 200,
-      req.body.failure_threshold || 2,
-      req.body.recovery_threshold || 2,
-      req.body.pause_during_maintenance !== false,
-      req.body.dns_record_type || 'A',
-      req.body.dns_expected_value || null,
-      req.body.ssl_expiry_warning_days || 30,
-    ]
-  );
-  res.status(201).json({ id: r.rows[0].id });
+    const r = await query(
+      `INSERT INTO asset_probes (
+         asset_id, name, probe_enabled, probe_type, probe_target,
+         probe_interval_seconds, probe_timeout_seconds, expected_status_code,
+         failure_threshold, recovery_threshold, pause_during_maintenance,
+         dns_record_type, dns_expected_value, ssl_expiry_warning_days,
+         next_probe_at, current_state
+       ) VALUES (
+         $1,$2,$3,$4,$5,
+         $6,$7,$8,
+         $9,$10,$11,
+         $12,$13,$14,
+         NOW(),'unknown'
+       )
+       RETURNING id`,
+      [
+        req.params.id,
+        req.body.name || null,
+        req.body.probe_enabled !== false,
+        req.body.probe_type,
+        req.body.probe_target,
+        req.body.probe_interval_seconds || 300,
+        req.body.probe_timeout_seconds || 10,
+        req.body.expected_status_code ?? 200,
+        req.body.failure_threshold || 2,
+        req.body.recovery_threshold || 2,
+        req.body.pause_during_maintenance !== false,
+        req.body.dns_record_type || 'A',
+        req.body.dns_expected_value || null,
+        req.body.ssl_expiry_warning_days || 30,
+      ]
+    );
+    res.status(201).json({ id: r.rows[0].id });
+  } catch (err) {
+    console.error('[PROBE] Error creating probe:', err.message);
+    res.status(500).json({ error: err.message || 'Error creating probe config' });
+  }
 });
 
 // ─── PUT /api/assets/:id/probe-configs/:probeId ──────────────────────────────
 router.put('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
-  const probe = await getOne(
-    `SELECT id, legacy_slot FROM asset_probes WHERE id=$1 AND asset_id=$2`,
-    [req.params.probeId, req.params.id]
-  );
-  if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
-
-  const allowed = [
-    'name', 'probe_enabled', 'probe_type', 'probe_target',
-    'probe_interval_seconds', 'probe_timeout_seconds', 'expected_status_code',
-    'failure_threshold', 'recovery_threshold', 'pause_during_maintenance',
-    'dns_record_type', 'dns_expected_value', 'ssl_expiry_warning_days'
-  ];
-  const sets = [];
-  const vals = [];
-  let i = 1;
-  for (const field of allowed) {
-    if (req.body[field] === undefined) continue;
-    sets.push(`${field} = $${i++}`);
-    vals.push(req.body[field]);
-  }
-  if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
-  sets.push(`updated_at = NOW()`);
-  vals.push(req.params.probeId, req.params.id);
-
-  await query(`UPDATE asset_probes SET ${sets.join(', ')} WHERE id = $${i++} AND asset_id = $${i}`, vals);
-
-  if (probe.legacy_slot) {
-    // Keep old asset-level probe fields in sync for frontend/API compatibility.
-    const p = await getOne(
-      `SELECT probe_enabled, probe_type, probe_target, probe_interval_seconds,
-              probe_timeout_seconds, expected_status_code,
-              failure_threshold, recovery_threshold, pause_during_maintenance,
-              dns_record_type, dns_expected_value, ssl_expiry_warning_days
-       FROM asset_probes
-       WHERE id = $1`,
-      [req.params.probeId]
+  try {
+    const probe = await getOne(
+      `SELECT id, legacy_slot FROM asset_probes WHERE id=$1 AND asset_id=$2`,
+      [req.params.probeId, req.params.id]
     );
-    await query(
-      `UPDATE assets
-       SET probe_enabled = $1,
-           probe_type = $2,
-           probe_url = $3,
-           probe_interval_seconds = $4,
-           probe_timeout_seconds = $5,
-           expected_status_code = $6,
-           failure_threshold = $7,
-           recovery_threshold = $8,
-           pause_during_maintenance = $9,
-           dns_record_type = $10,
-           dns_expected_value = $11,
-           ssl_expiry_warning_days = $12,
-           updated_at = NOW()
-       WHERE id = $13`,
-      [
-        p.probe_enabled,
-        p.probe_type,
-        p.probe_target,
-        p.probe_interval_seconds,
-        p.probe_timeout_seconds,
-        p.expected_status_code,
-        p.failure_threshold,
-        p.recovery_threshold,
-        p.pause_during_maintenance,
-        p.dns_record_type,
-        p.dns_expected_value,
-        p.ssl_expiry_warning_days,
-        req.params.id,
-      ]
-    );
-  }
+    if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
 
-  res.json({ message: 'Probe aggiornata' });
+    const allowed = [
+      'name', 'probe_enabled', 'probe_type', 'probe_target',
+      'probe_interval_seconds', 'probe_timeout_seconds', 'expected_status_code',
+      'failure_threshold', 'recovery_threshold', 'pause_during_maintenance',
+      'dns_record_type', 'dns_expected_value', 'ssl_expiry_warning_days'
+    ];
+    const sets = [];
+    const vals = [];
+    let i = 1;
+    for (const field of allowed) {
+      if (req.body[field] === undefined) continue;
+      sets.push(`${field} = $${i++}`);
+      vals.push(req.body[field]);
+    }
+    if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
+    sets.push(`updated_at = NOW()`);
+    vals.push(req.params.probeId, req.params.id);
+
+    await query(`UPDATE asset_probes SET ${sets.join(', ')} WHERE id = $${i++} AND asset_id = $${i}`, vals);
+
+    if (probe.legacy_slot) {
+      // Keep old asset-level probe fields in sync for frontend/API compatibility.
+      const p = await getOne(
+        `SELECT probe_enabled, probe_type, probe_target, probe_interval_seconds,
+                probe_timeout_seconds, expected_status_code,
+                failure_threshold, recovery_threshold, pause_during_maintenance,
+                dns_record_type, dns_expected_value, ssl_expiry_warning_days
+         FROM asset_probes
+         WHERE id = $1`,
+        [req.params.probeId]
+      );
+      await query(
+        `UPDATE assets
+         SET probe_enabled = $1,
+             probe_type = $2,
+             probe_url = $3,
+             probe_interval_seconds = $4,
+             probe_timeout_seconds = $5,
+             expected_status_code = $6,
+             failure_threshold = $7,
+             recovery_threshold = $8,
+             pause_during_maintenance = $9,
+             dns_record_type = $10,
+             dns_expected_value = $11,
+             ssl_expiry_warning_days = $12,
+             updated_at = NOW()
+         WHERE id = $13`,
+        [
+          p.probe_enabled,
+          p.probe_type,
+          p.probe_target,
+          p.probe_interval_seconds,
+          p.probe_timeout_seconds,
+          p.expected_status_code,
+          p.failure_threshold,
+          p.recovery_threshold,
+          p.pause_during_maintenance,
+          p.dns_record_type,
+          p.dns_expected_value,
+          p.ssl_expiry_warning_days,
+          req.params.id,
+        ]
+      );
+    }
+
+    res.json({ message: 'Probe aggiornata' });
+  } catch (err) {
+    console.error('[PROBE] Error updating probe:', err.message);
+    res.status(500).json({ error: err.message || 'Error updating probe config' });
+  }
 });
 
 // ─── DELETE /api/assets/:id/probe-configs/:probeId ───────────────────────────
 router.delete('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
-  const probe = await getOne(
-    `SELECT id, legacy_slot FROM asset_probes WHERE id=$1 AND asset_id=$2`,
-    [req.params.probeId, req.params.id]
-  );
-  if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
-  if (probe.legacy_slot) return res.status(400).json({ error: 'La probe principale legacy non può essere eliminata' });
+  try {
+    const probe = await getOne(
+      `SELECT id, legacy_slot FROM asset_probes WHERE id=$1 AND asset_id=$2`,
+      [req.params.probeId, req.params.id]
+    );
+    if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
+    if (probe.legacy_slot) return res.status(400).json({ error: 'La probe principale legacy non può essere eliminata' });
 
-  await query(`DELETE FROM asset_probes WHERE id=$1 AND asset_id=$2`, [req.params.probeId, req.params.id]);
-  res.json({ message: 'Probe eliminata' });
+    await query(`DELETE FROM asset_probes WHERE id=$1 AND asset_id=$2`, [req.params.probeId, req.params.id]);
+    res.json({ message: 'Probe eliminata' });
+  } catch (err) {
+    console.error('[PROBE] Error deleting probe:', err.message);
+    res.status(500).json({ error: err.message || 'Error deleting probe config' });
+  }
 });
 
 // ─── POST /api/assets/:id/probe ───────────────────────────────────────────────
