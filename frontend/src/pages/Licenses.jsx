@@ -30,6 +30,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { QuickCreateUserModal } from '../components/QuickCreateModals'
+import { useAuth } from '../contexts/AuthContext'
 
 const SIDE_ICON_COMPONENTS = {
   'check-circle': CheckCircle2,
@@ -936,6 +937,8 @@ function TemplateVisualEditor({ templateConfig, setTemplateConfig, templateUploa
 }
 
 export default function Licenses() {
+  const { hasRole } = useAuth()
+  const canBulkDelete = hasRole('superadmin', 'admin')
   const [tab, setTab] = useState('licenses')
 
   const [licenses, setLicenses] = useState([])
@@ -964,11 +967,17 @@ export default function Licenses() {
   const [editingLicense, setEditingLicense] = useState(null)
   const [licenseActionConfirm, setLicenseActionConfirm] = useState(null)
   const [licenseForm, setLicenseForm] = useState(emptyLicenseForm)
+  const [selectedLicenseIds, setSelectedLicenseIds] = useState([])
+  const [licenseBulkDeleteConfirm, setLicenseBulkDeleteConfirm] = useState(false)
+  const [bulkDeletingLicenses, setBulkDeletingLicenses] = useState(false)
 
   const [showSupplierForm, setShowSupplierForm] = useState(false)
   const [editingSupplier, setEditingSupplier] = useState(null)
   const [supplierDeleteTarget, setSupplierDeleteTarget] = useState(null)
   const [supplierForm, setSupplierForm] = useState(emptySupplierForm)
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState([])
+  const [supplierBulkDeleteConfirm, setSupplierBulkDeleteConfirm] = useState(false)
+  const [bulkDeletingSuppliers, setBulkDeletingSuppliers] = useState(false)
   const [showSupplierPicker, setShowSupplierPicker] = useState(false)
   const [supplierPickerQ, setSupplierPickerQ] = useState('')
 
@@ -1006,6 +1015,14 @@ export default function Licenses() {
   useEffect(() => {
     if (tab === 'suppliers') loadSuppliers().catch(() => {})
   }, [tab, suppliersPage, suppliersLimit, suppliersQ])
+
+  useEffect(() => {
+    setSelectedLicenseIds(prev => prev.filter(id => licenses.some(l => l.id === id)))
+  }, [licenses])
+
+  useEffect(() => {
+    setSelectedSupplierIds(prev => prev.filter(id => suppliers.some(s => s.id === id)))
+  }, [suppliers])
 
   useEffect(() => {
     if (tab !== 'template') return
@@ -1314,6 +1331,72 @@ export default function Licenses() {
     }
   }
 
+  const toggleLicenseSelection = (id) => {
+    if (!canBulkDelete) return
+    setSelectedLicenseIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const toggleSupplierSelection = (id) => {
+    if (!canBulkDelete) return
+    setSelectedSupplierIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const toggleSelectAllVisibleLicenses = (checked) => {
+    if (!canBulkDelete) return
+    if (checked) {
+      setSelectedLicenseIds(licenses.map(l => l.id))
+      return
+    }
+    setSelectedLicenseIds([])
+  }
+
+  const toggleSelectAllVisibleSuppliers = (checked) => {
+    if (!canBulkDelete) return
+    if (checked) {
+      setSelectedSupplierIds(suppliers.map(s => s.id))
+      return
+    }
+    setSelectedSupplierIds([])
+  }
+
+  const bulkDeleteLicenses = async () => {
+    if (!canBulkDelete || selectedLicenseIds.length === 0) return
+    setBulkDeletingLicenses(true)
+    try {
+      const results = await Promise.allSettled(selectedLicenseIds.map((id) => licensesApi.delete(id)))
+      const ok = results.filter(r => r.status === 'fulfilled').length
+      const ko = results.length - ok
+      if (ok > 0) toast.success(`${ok} license deleted`)
+      if (ko > 0) toast.error(`${ko} license not deleted`)
+      setSelectedLicenseIds([])
+      setLicenseBulkDeleteConfirm(false)
+      await loadLicenses()
+    } finally {
+      setBulkDeletingLicenses(false)
+    }
+  }
+
+  const bulkDeleteSuppliers = async () => {
+    if (!canBulkDelete || selectedSupplierIds.length === 0) return
+    setBulkDeletingSuppliers(true)
+    try {
+      const results = await Promise.allSettled(selectedSupplierIds.map((id) => suppliersApi.delete(id)))
+      const ok = results.filter(r => r.status === 'fulfilled').length
+      const ko = results.length - ok
+      if (ok > 0) toast.success(`${ok} supplier deleted`)
+      if (ko > 0) toast.error(`${ko} supplier not deleted`)
+      setSelectedSupplierIds([])
+      setSupplierBulkDeleteConfirm(false)
+      await loadSuppliers()
+      suppliersApi.list({ page: 1, limit: 100 }).then(r => setSupplierLookup(r.data?.data || [])).catch(() => {})
+    } finally {
+      setBulkDeletingSuppliers(false)
+    }
+  }
+
+  const allVisibleLicensesSelected = licenses.length > 0 && licenses.every(l => selectedLicenseIds.includes(l.id))
+  const allVisibleSuppliersSelected = suppliers.length > 0 && suppliers.every(s => selectedSupplierIds.includes(s.id))
+
   const uploadSupplierDoc = async (files) => {
     const list = Array.from(files || [])
     if (list.length === 0) return
@@ -1466,20 +1549,53 @@ export default function Licenses() {
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <input className="input w-full sm:w-80" placeholder="Search licenses..." value={licensesQ} onChange={e => { setLicensesQ(e.target.value); setLicensesPage(1) }} />
-              <button className="btn-primary" onClick={openCreateLicense}><Plus size={15} />New License</button>
+              <div className="flex items-center gap-2">
+                {canBulkDelete && (
+                  <button
+                    className="btn-danger"
+                    disabled={selectedLicenseIds.length === 0 || bulkDeletingLicenses}
+                    onClick={() => setLicenseBulkDeleteConfirm(true)}
+                  >
+                    <Trash2 size={15} />Delete selected ({selectedLicenseIds.length})
+                  </button>
+                )}
+                <button className="btn-primary" onClick={openCreateLicense}><Plus size={15} />New License</button>
+              </div>
             </div>
 
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-[900px] w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
-                    <tr>{['Name', 'Supplier', 'Owner', 'Approver', 'Expiry', 'Status', 'Scope', 'Open'].map(h => (
-                      <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
-                    ))}</tr>
+                    <tr>
+                      {canBulkDelete && (
+                        <th className="text-left px-4 py-3 font-medium text-gray-600 w-10">
+                          <input
+                            type="checkbox"
+                            checked={allVisibleLicensesSelected}
+                            onChange={(e) => toggleSelectAllVisibleLicenses(e.target.checked)}
+                            aria-label="Select all visible licenses"
+                          />
+                        </th>
+                      )}
+                      {['Name', 'Supplier', 'Owner', 'Approver', 'Expiry', 'Status', 'Scope', 'Open'].map(h => (
+                        <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
+                      ))}
+                    </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                     {licenses.map(l => (
                       <tr key={l.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onDoubleClick={() => openEditLicense(l)} title="Double click for details">
+                        {canBulkDelete && (
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedLicenseIds.includes(l.id)}
+                              onChange={() => toggleLicenseSelection(l.id)}
+                              aria-label={`Select license ${l.name}`}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3 font-medium">{l.name}</td>
                         <td className="px-4 py-3 text-gray-500">{l.supplier_company || l.supplier || '—'}</td>
                         <td className="px-4 py-3 text-gray-500">{l.owner_name || contactSummary(l.owner_contact)}</td>
@@ -1501,7 +1617,7 @@ export default function Licenses() {
                         </td>
                       </tr>
                     ))}
-                    {licenses.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-gray-500">No licenses</td></tr>}
+                    {licenses.length === 0 && <tr><td colSpan={canBulkDelete ? 9 : 8} className="text-center py-8 text-gray-500">No licenses</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -1514,20 +1630,53 @@ export default function Licenses() {
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <input className="input w-full sm:w-80" placeholder="Search suppliers..." value={suppliersQ} onChange={e => { setSuppliersQ(e.target.value); setSuppliersPage(1) }} />
-              <button className="btn-secondary" onClick={openCreateSupplier}><Plus size={15} />New Supplier</button>
+              <div className="flex items-center gap-2">
+                {canBulkDelete && (
+                  <button
+                    className="btn-danger"
+                    disabled={selectedSupplierIds.length === 0 || bulkDeletingSuppliers}
+                    onClick={() => setSupplierBulkDeleteConfirm(true)}
+                  >
+                    <Trash2 size={15} />Delete selected ({selectedSupplierIds.length})
+                  </button>
+                )}
+                <button className="btn-secondary" onClick={openCreateSupplier}><Plus size={15} />New Supplier</button>
+              </div>
             </div>
 
             <div className="card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-[760px] w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
-                    <tr>{['First name', 'Last name', 'Company', 'Email', 'Phone', 'Mobile', 'Actions'].map(h => (
-                      <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
-                    ))}</tr>
+                    <tr>
+                      {canBulkDelete && (
+                        <th className="text-left px-4 py-3 font-medium text-gray-600 w-10">
+                          <input
+                            type="checkbox"
+                            checked={allVisibleSuppliersSelected}
+                            onChange={(e) => toggleSelectAllVisibleSuppliers(e.target.checked)}
+                            aria-label="Select all visible suppliers"
+                          />
+                        </th>
+                      )}
+                      {['First name', 'Last name', 'Company', 'Email', 'Phone', 'Mobile', 'Actions'].map(h => (
+                        <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
+                      ))}
+                    </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                     {suppliers.map(s => (
                       <tr key={s.id}>
+                        {canBulkDelete && (
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedSupplierIds.includes(s.id)}
+                              onChange={() => toggleSupplierSelection(s.id)}
+                              aria-label={`Select supplier ${s.company}`}
+                            />
+                          </td>
+                        )}
                         <td className="px-4 py-3">{s.first_name}</td>
                         <td className="px-4 py-3">{s.last_name}</td>
                         <td className="px-4 py-3">
@@ -1557,7 +1706,7 @@ export default function Licenses() {
                         </td>
                       </tr>
                     ))}
-                    {suppliers.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-gray-500">No suppliers</td></tr>}
+                    {suppliers.length === 0 && <tr><td colSpan={canBulkDelete ? 8 : 7} className="text-center py-8 text-gray-500">No suppliers</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -1903,6 +2052,28 @@ export default function Licenses() {
           confirmLabel="Delete"
           onConfirm={removeSupplier}
           onCancel={() => setSupplierDeleteTarget(null)}
+        />
+      )}
+
+      {licenseBulkDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete selected licenses"
+          message={`Delete ${selectedLicenseIds.length} selected license(s)? This action cannot be undone.`}
+          danger
+          confirmLabel={bulkDeletingLicenses ? 'Deleting...' : 'Delete'}
+          onConfirm={bulkDeleteLicenses}
+          onCancel={() => !bulkDeletingLicenses && setLicenseBulkDeleteConfirm(false)}
+        />
+      )}
+
+      {supplierBulkDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete selected suppliers"
+          message={`Delete ${selectedSupplierIds.length} selected supplier(s)? This action cannot be undone.`}
+          danger
+          confirmLabel={bulkDeletingSuppliers ? 'Deleting...' : 'Delete'}
+          onConfirm={bulkDeleteSuppliers}
+          onCancel={() => !bulkDeletingSuppliers && setSupplierBulkDeleteConfirm(false)}
         />
       )}
 
