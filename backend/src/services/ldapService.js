@@ -7,6 +7,62 @@ const { encrypt, decrypt, isEncrypted } = require('../utils/encryption');
 const { ROLE_DEFAULTS } = require('./authService');
 
 const SETTINGS_KEY = 'ldap_config';
+const LDAP_MEMO_MAX_ENTRIES = 300;
+const LDAP_MEMO = new Map();
+const LDAP_INFLIGHT = new Map();
+
+function _cacheTokenFromCfg(cfg = {}) {
+  return [
+    String(cfg.url || '').trim().toLowerCase(),
+    String(cfg.search_base || '').trim().toLowerCase(),
+    String(cfg.base_dn || '').trim().toLowerCase(),
+    String(cfg.group_search_base || '').trim().toLowerCase(),
+    String(cfg.groups_search_base || '').trim().toLowerCase(),
+  ].join('|');
+}
+
+function _memoGet(key) {
+  const hit = LDAP_MEMO.get(key);
+  if (!hit) return undefined;
+  if (Date.now() > hit.expiresAt) {
+    LDAP_MEMO.delete(key);
+    return undefined;
+  }
+  return hit.value;
+}
+
+function _memoSet(key, value, ttlMs) {
+  LDAP_MEMO.set(key, { value, expiresAt: Date.now() + Math.max(1, ttlMs) });
+  if (LDAP_MEMO.size <= LDAP_MEMO_MAX_ENTRIES) return;
+  const firstKey = LDAP_MEMO.keys().next().value;
+  if (firstKey) LDAP_MEMO.delete(firstKey);
+}
+
+async function _memoizeLdapCall(key, ttlMs, producer) {
+  const cached = _memoGet(key);
+  if (cached !== undefined) return cached;
+
+  if (LDAP_INFLIGHT.has(key)) return LDAP_INFLIGHT.get(key);
+
+  const pending = (async () => {
+    try {
+      const value = await producer();
+      _memoSet(key, value, ttlMs);
+      return value;
+    } finally {
+      LDAP_INFLIGHT.delete(key);
+    }
+  })();
+
+  LDAP_INFLIGHT.set(key, pending);
+  return pending;
+}
+
+function _normalizeGroupDns(groupDns = []) {
+  return [...new Set((Array.isArray(groupDns) ? groupDns : [])
+    .map(v => String(v || '').trim().toLowerCase())
+    .filter(Boolean))].sort();
+}
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 async function getLdapSettings() {
@@ -496,9 +552,13 @@ async function searchUsers(q) {
   const cfg = await getLdapSettings();
   if (!cfg || !cfg.enabled) return [];
 
+  const queryText = String(q || '').trim().toLowerCase();
+  const memoKey = `ldap:searchUsers:${_cacheTokenFromCfg(cfg)}:${queryText}`;
+  return _memoizeLdapCall(memoKey, 45 * 1000, async () => {
+
   let cachedUsers = [];
   try {
-    cachedUsers = await _searchCachedUsers(q || '');
+    cachedUsers = await _searchCachedUsers(queryText || '');
   } catch (err) {
     logger.warn('LDAP cached user search failed:', err.message);
   }
@@ -510,8 +570,8 @@ async function searchUsers(q) {
     await _bind(client, _bindPrincipal(cfg), _bindPassword(cfg));
     const searchBase = cfg.search_base || cfg.base_dn;
     if (!searchBase) return [];
-    const escaped = _escapeLdap(q || '');
-    const filter = q
+    const escaped = _escapeLdap(queryText || '');
+    const filter = queryText
       ? `(&(objectClass=user)(|(sAMAccountName=*${escaped}*)(cn=*${escaped}*)(displayName=*${escaped}*)(mail=*${escaped}*)))`
       : `(objectClass=user)`;
     const entries = await _search(client, searchBase, {
@@ -550,12 +610,16 @@ async function searchUsers(q) {
   } finally {
     client.destroy();
   }
+  });
 }
 
 async function searchGroups(q) {
   const cfg = await getLdapSettings();
   if (!cfg || !cfg.enabled) return [];
-  if (!ldap) return [];
+  const cleaned = String(q || '').trim().toLowerCase();
+  const memoKey = `ldap:searchGroups:${_cacheTokenFromCfg(cfg)}:${cleaned}`;
+  return _memoizeLdapCall(memoKey, 60 * 1000, async () => {
+    if (!ldap) return [];
 
   const client = _createClient(cfg);
   try {
@@ -568,7 +632,6 @@ async function searchGroups(q) {
     ].map(v => String(v || '').trim()).filter(Boolean);
     const uniqueBases = [...new Set(searchBases)];
     if (uniqueBases.length === 0) return [];
-    const cleaned = String(q || '').trim();
     const escaped = cleaned ? _escapeLdap(cleaned) : '';
     const attrs = ['dn', 'cn', 'name', 'sAMAccountName', 'description'];
     const mapEntries = (entries) => (entries || [])
@@ -635,16 +698,18 @@ async function searchGroups(q) {
   } finally {
     client.destroy();
   }
+  });
 }
 
 async function countUsersInGroups(groupDns = []) {
-  const dns = [...new Set((Array.isArray(groupDns) ? groupDns : [])
-    .map(v => String(v || '').trim())
-    .filter(Boolean))];
+  const dns = _normalizeGroupDns(groupDns);
   if (dns.length === 0) return 0;
 
   const cfg = await getLdapSettings();
   if (!cfg || !cfg.enabled || !ldap) return 0;
+
+  const memoKey = `ldap:countUsersInGroups:${_cacheTokenFromCfg(cfg)}:${dns.join(',')}`;
+  return _memoizeLdapCall(memoKey, 60 * 1000, async () => {
 
   const searchBases = [
     cfg.search_base,
@@ -758,16 +823,19 @@ async function countUsersInGroups(groupDns = []) {
   } finally {
     client.destroy();
   }
+  });
 }
 
 async function listUsersInGroups(groupDns = [], options = {}) {
-  const dns = [...new Set((Array.isArray(groupDns) ? groupDns : [])
-    .map(v => String(v || '').trim())
-    .filter(Boolean))];
+  const dns = _normalizeGroupDns(groupDns);
   if (dns.length === 0) return [];
 
   const cfg = await getLdapSettings();
   if (!cfg || !cfg.enabled || !ldap) return [];
+
+  const maxResults = Math.max(1, Math.min(parseInt(options.maxResults || 2000, 10), 5000));
+  const memoKey = `ldap:listUsersInGroups:${_cacheTokenFromCfg(cfg)}:${maxResults}:${dns.join(',')}`;
+  return _memoizeLdapCall(memoKey, 60 * 1000, async () => {
 
   const searchBases = [
     cfg.search_base,
@@ -778,7 +846,6 @@ async function listUsersInGroups(groupDns = [], options = {}) {
   const uniqueBases = [...new Set(searchBases)];
   if (uniqueBases.length === 0) return [];
 
-  const maxResults = Math.max(1, Math.min(parseInt(options.maxResults || 2000, 10), 5000));
   const users = new Map();
 
   const addUser = (entry = {}, fallbackDn = '') => {
@@ -916,6 +983,7 @@ async function listUsersInGroups(groupDns = [], options = {}) {
   } finally {
     client.destroy();
   }
+  });
 }
 
 module.exports.searchUsers = searchUsers;
