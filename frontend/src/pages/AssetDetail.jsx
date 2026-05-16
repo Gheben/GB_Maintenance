@@ -144,6 +144,16 @@ export default function AssetDetail() {
       owner_group_id: asset.owner_group_id || '',
       owner_ldap_dn: asset.owner_ldap_dn || '',
       owner_ldap_name: asset.owner_ldap_name || '',
+      // probe config
+      probe_enabled: asset.probe_enabled || false,
+      probe_type: asset.probe_type || 'https',
+      probe_url: asset.probe_url || '',
+      probe_interval_seconds: asset.probe_interval_seconds ?? 300,
+      probe_timeout_seconds: asset.probe_timeout_seconds ?? 10,
+      expected_status_code: asset.expected_status_code ?? 200,
+      failure_threshold: asset.failure_threshold ?? 2,
+      recovery_threshold: asset.recovery_threshold ?? 2,
+      pause_during_maintenance: asset.pause_during_maintenance !== false,
     })
     setEditMode(true)
     setTab('info')
@@ -175,6 +185,16 @@ export default function AssetDetail() {
         owner_group_id: firstOwner?.type === 'local_group' ? (firstOwner.id || null) : null,
         owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? (firstOwner.dn || null) : null,
         owner_ldap_name: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? (firstOwner.name || firstOwner.dn || null) : null,
+        // probe config
+        probe_enabled: editForm.probe_enabled,
+        probe_type: editForm.probe_type || null,
+        probe_url: editForm.probe_url || null,
+        probe_interval_seconds: Number(editForm.probe_interval_seconds) || 300,
+        probe_timeout_seconds: Number(editForm.probe_timeout_seconds) || 10,
+        expected_status_code: Number(editForm.expected_status_code) || 200,
+        failure_threshold: Number(editForm.failure_threshold) || 2,
+        recovery_threshold: Number(editForm.recovery_threshold) || 2,
+        pause_during_maintenance: editForm.pause_during_maintenance,
       })
       toast.success('Asset updated')
       setEditMode(false)
@@ -334,6 +354,90 @@ export default function AssetDetail() {
             </div>
             {ownerFieldsJsx}
             {usersFieldsJsx}
+
+            {/* ── Probe Configuration ──────────────────────────────────────── */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Probe Configuration</span>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={editForm.probe_enabled}
+                    onChange={e => setEditForm(f => ({...f, probe_enabled: e.target.checked}))}
+                  />
+                  <div className="relative w-9 h-5 bg-gray-300 peer-checked:bg-brand-500 rounded-full transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:w-4 after:h-4 after:transition-all peer-checked:after:translate-x-4" />
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-300">{editForm.probe_enabled ? 'Enabled' : 'Disabled'}</span>
+                </label>
+              </div>
+              {editForm.probe_enabled && (
+                <div className="p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Type</label>
+                      <select className="input text-sm" value={editForm.probe_type} onChange={e => setEditForm(f => ({...f, probe_type: e.target.value}))}>
+                        <option value="https">HTTPS</option>
+                        <option value="http">HTTP</option>
+                        <option value="tcp">TCP</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                        {editForm.probe_type === 'tcp' ? 'Host:Port' : 'URL'}
+                      </label>
+                      <input
+                        className="input text-sm"
+                        placeholder={editForm.probe_type === 'tcp' ? 'hostname:443' : 'https://example.com/health'}
+                        value={editForm.probe_url}
+                        onChange={e => setEditForm(f => ({...f, probe_url: e.target.value}))}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Interval (s)</label>
+                      <input type="number" min="30" className="input text-sm" value={editForm.probe_interval_seconds}
+                        onChange={e => setEditForm(f => ({...f, probe_interval_seconds: e.target.value}))} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Timeout (s)</label>
+                      <input type="number" min="1" max="60" className="input text-sm" value={editForm.probe_timeout_seconds}
+                        onChange={e => setEditForm(f => ({...f, probe_timeout_seconds: e.target.value}))} />
+                    </div>
+                    {editForm.probe_type !== 'tcp' && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Expected HTTP code</label>
+                        <input type="number" min="100" max="599" className="input text-sm" value={editForm.expected_status_code}
+                          onChange={e => setEditForm(f => ({...f, expected_status_code: e.target.value}))} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Failure threshold</label>
+                      <input type="number" min="1" max="10" className="input text-sm" value={editForm.failure_threshold}
+                        onChange={e => setEditForm(f => ({...f, failure_threshold: e.target.value}))} />
+                      <p className="text-xs text-gray-400 mt-0.5">Consecutive failures before major outage</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Recovery threshold</label>
+                      <input type="number" min="1" max="10" className="input text-sm" value={editForm.recovery_threshold}
+                        onChange={e => setEditForm(f => ({...f, recovery_threshold: e.target.value}))} />
+                      <p className="text-xs text-gray-400 mt-0.5">Consecutive successes before operational</p>
+                    </div>
+                  </div>
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-brand-600"
+                      checked={editForm.pause_during_maintenance}
+                      onChange={e => setEditForm(f => ({...f, pause_during_maintenance: e.target.checked}))}
+                    />
+                    <span className="text-xs text-gray-600 dark:text-gray-300">Pause probing during maintenance windows</span>
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="card p-6">
@@ -352,8 +456,18 @@ export default function AssetDetail() {
               </div>
             )}
             {asset.probe_enabled && (
-              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm">
-                <strong>Probe:</strong> {asset.probe_type} → {asset.probe_url} | Interval: {asset.probe_interval_seconds}s
+              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm space-y-1">
+                <div className="font-semibold text-gray-700 dark:text-gray-200 mb-1">Probe</div>
+                <div className="flex flex-wrap gap-x-6 gap-y-1 text-gray-600 dark:text-gray-300 text-xs">
+                  <span><span className="font-medium">Type:</span> {asset.probe_type}</span>
+                  <span><span className="font-medium">Target:</span> {asset.probe_url}</span>
+                  <span><span className="font-medium">Interval:</span> {asset.probe_interval_seconds}s</span>
+                  <span><span className="font-medium">Timeout:</span> {asset.probe_timeout_seconds}s</span>
+                  {asset.probe_type !== 'tcp' && <span><span className="font-medium">Expected:</span> {asset.expected_status_code}</span>}
+                  <span><span className="font-medium">Fail threshold:</span> {asset.failure_threshold ?? 2}</span>
+                  <span><span className="font-medium">Recovery threshold:</span> {asset.recovery_threshold ?? 2}</span>
+                  {asset.pause_during_maintenance && <span className="text-amber-600">⏸ Paused during maintenance</span>}
+                </div>
               </div>
             )}
           </div>
@@ -410,8 +524,25 @@ export default function AssetDetail() {
         )}
 
         {tab === 'probes' && (
-          <div className="card overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="space-y-4">
+            {!asset.probe_enabled ? (
+              <div className="card p-6 text-center text-gray-500 space-y-2">
+                <p className="text-sm">Probe monitoring is not configured for this asset.</p>
+                {canEdit && <button className="btn-secondary text-xs" onClick={enterEdit}>Configure probe</button>}
+              </div>
+            ) : (
+              <div className="card p-3 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700 flex flex-wrap gap-x-6 gap-y-1 text-xs text-brand-700 dark:text-brand-300">
+                <span><span className="font-medium">Type:</span> {asset.probe_type}</span>
+                <span><span className="font-medium">Target:</span> {asset.probe_url}</span>
+                <span><span className="font-medium">Interval:</span> {asset.probe_interval_seconds}s</span>
+                <span><span className="font-medium">Timeout:</span> {asset.probe_timeout_seconds}s</span>
+                {asset.probe_type !== 'tcp' && <span><span className="font-medium">Expected:</span> HTTP {asset.expected_status_code}</span>}
+                <span><span className="font-medium">Fail threshold:</span> {asset.failure_threshold ?? 2}</span>
+                <span><span className="font-medium">Recovery:</span> {asset.recovery_threshold ?? 2}</span>
+              </div>
+            )}
+            <div className="card overflow-hidden">
+              <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>{['Result','Resp. ms','Status','Date'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
               </thead>
@@ -427,6 +558,7 @@ export default function AssetDetail() {
                 {probes.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">No probe history</td></tr>}
               </tbody>
             </table>
+          </div>
           </div>
         )}
 

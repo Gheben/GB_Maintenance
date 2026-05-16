@@ -479,6 +479,9 @@ router.post('/', requireOperator, [
   body('probe_interval_seconds').optional().isInt({ min: 30 }),
   body('probe_timeout_seconds').optional().isInt({ min: 1, max: 60 }),
   body('expected_status_code').optional().isInt({ min: 100, max: 599 }),
+  body('failure_threshold').optional().isInt({ min: 1, max: 10 }),
+  body('recovery_threshold').optional().isInt({ min: 1, max: 10 }),
+  body('pause_during_maintenance').optional().isBoolean(),
   body('tags').optional().isArray(),
   body('metadata').optional().isObject(),
 ], async (req, res) => {
@@ -505,8 +508,8 @@ router.post('/', requireOperator, [
     const result = await query(
       `INSERT INTO assets (name, slug, category, criticality, description, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name,
          owner_targets, user_targets, probe_enabled, probe_type, probe_url, probe_interval_seconds, probe_timeout_seconds,
-         expected_status_code, tags, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
+         expected_status_code, failure_threshold, recovery_threshold, pause_during_maintenance, tags, metadata)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING id`,
       [
         req.body.name, slug,
         req.body.category, req.body.criticality || 'medium',
@@ -521,6 +524,8 @@ router.post('/', requireOperator, [
         req.body.probe_enabled || false, req.body.probe_type || null,
         req.body.probe_url || null, req.body.probe_interval_seconds || 300,
         req.body.probe_timeout_seconds || 10, req.body.expected_status_code || 200,
+        req.body.failure_threshold || 2, req.body.recovery_threshold || 2,
+        req.body.pause_during_maintenance !== undefined ? req.body.pause_during_maintenance : true,
         JSON.stringify(req.body.tags || []), JSON.stringify(req.body.metadata || {})
       ]
     );
@@ -549,7 +554,8 @@ router.put('/:id', requireOperator, async (req, res) => {
   const allowed = ['name','category','criticality','description','owner_id','owner_type',
     'owner_group_id','owner_ldap_dn','owner_ldap_name','probe_enabled',
     'owner_targets','user_targets','probe_type','probe_url','probe_interval_seconds','probe_timeout_seconds',
-    'expected_status_code','tags','metadata','is_active'];
+    'expected_status_code','failure_threshold','recovery_threshold','pause_during_maintenance',
+    'tags','metadata','is_active'];
   const sets = []; const vals = []; let i = 1;
   const ownerManagedFields = new Set(['owner_id', 'owner_type', 'owner_group_id', 'owner_ldap_dn', 'owner_ldap_name']);
   for (const field of allowed) {

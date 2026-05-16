@@ -27,6 +27,7 @@ async function _runProbes() {
     const assets = await getMany(
       `SELECT a.id, a.probe_type, a.probe_url, a.probe_timeout_seconds,
               a.expected_status_code, a.probe_interval_seconds, a.status,
+              a.failure_threshold, a.recovery_threshold, a.pause_during_maintenance,
               MAX(pr.probed_at) as last_probed
        FROM assets a
        LEFT JOIN probe_results pr ON pr.asset_id = a.id
@@ -35,6 +36,9 @@ async function _runProbes() {
     );
 
     for (const asset of assets) {
+      // Skip if paused during maintenance
+      if (asset.pause_during_maintenance && asset.status === 'under_maintenance') continue;
+
       const lastProbed = asset.last_probed ? new Date(asset.last_probed).getTime() / 1000 : 0;
       const interval = asset.probe_interval_seconds || 300;
       if (now - lastProbed < interval) continue;
@@ -77,9 +81,24 @@ async function _probeAsset(asset) {
     [asset.id, success, responseTime, statusCode, errorMsg]
   );
 
+  // Determine new status using consecutive-streak thresholds
+  const failThresh   = Math.max(1, asset.failure_threshold  || 2);
+  const recoverThresh = Math.max(1, asset.recovery_threshold || 2);
+  const lookback = Math.max(failThresh, recoverThresh);
+  const recent = await getMany(
+    `SELECT success FROM probe_results WHERE asset_id=$1 ORDER BY probed_at DESC LIMIT $2`,
+    [asset.id, lookback]
+  );
+
+  let newStatus = asset.status;
+  if (recent.length >= failThresh && recent.slice(0, failThresh).every(r => !r.success)) {
+    newStatus = 'major_outage';
+  } else if (recent.length >= recoverThresh && recent.slice(0, recoverThresh).every(r => r.success)) {
+    newStatus = 'operational';
+  }
+
   // Update asset status based on probe result
-  const newStatus = success ? 'operational' : 'major_outage';
-  if (asset.status !== newStatus && asset.status !== 'under_maintenance') {
+  if (newStatus !== asset.status && asset.status !== 'under_maintenance') {
     await query(`UPDATE assets SET status=$1, updated_at=NOW() WHERE id=$2`, [newStatus, asset.id]);
     await query(
       `INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason)
@@ -121,7 +140,8 @@ function _tcpProbe(hostPort, timeoutMs) {
 async function probeNow(assetId) {
   const { getOne } = require('../db/database');
   const asset = await getOne(
-    `SELECT id, probe_type, probe_url, probe_timeout_seconds, expected_status_code, probe_interval_seconds, status
+    `SELECT id, probe_type, probe_url, probe_timeout_seconds, expected_status_code,
+            probe_interval_seconds, status, failure_threshold, recovery_threshold, pause_during_maintenance
      FROM assets WHERE id=$1 AND probe_enabled=true`,
     [assetId]
   );
@@ -149,6 +169,31 @@ async function probeNow(assetId) {
      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
     [assetId, success, responseTime, statusCode, errorMsg]
   );
+
+  // Apply threshold logic for status update
+  const failThresh    = Math.max(1, asset.failure_threshold  || 2);
+  const recoverThresh = Math.max(1, asset.recovery_threshold || 2);
+  const lookback = Math.max(failThresh, recoverThresh);
+  const recent = await getMany(
+    `SELECT success FROM probe_results WHERE asset_id=$1 ORDER BY probed_at DESC LIMIT $2`,
+    [assetId, lookback]
+  );
+  let newStatus = asset.status;
+  if (recent.length >= failThresh && recent.slice(0, failThresh).every(r => !r.success)) {
+    newStatus = 'major_outage';
+  } else if (recent.length >= recoverThresh && recent.slice(0, recoverThresh).every(r => r.success)) {
+    newStatus = 'operational';
+  }
+  if (newStatus !== asset.status && asset.status !== 'under_maintenance') {
+    await query(`UPDATE assets SET status=$1, updated_at=NOW() WHERE id=$2`, [newStatus, assetId]);
+    await query(
+      `INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason)
+       VALUES ('asset', $1, $2, 'probe', $3)`,
+      [assetId, newStatus, errorMsg || 'Probe success']
+    );
+    wsService.broadcast({ type: 'asset_status_changed', assetId, status: newStatus });
+  }
+
   return { success, responseTime, statusCode, errorMsg };
 }
 

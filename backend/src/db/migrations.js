@@ -1497,6 +1497,15 @@ const MIGRATIONS = [
         );
       }
     }
+  },
+  {
+    version: 33,
+    name: 'probe_threshold_and_pause_fields',
+    up: async (client) => {
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS failure_threshold INTEGER NOT NULL DEFAULT 2`);
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS recovery_threshold INTEGER NOT NULL DEFAULT 2`);
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS pause_during_maintenance BOOLEAN NOT NULL DEFAULT TRUE`);
+    }
   }
 ];
 
