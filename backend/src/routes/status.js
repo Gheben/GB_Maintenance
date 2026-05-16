@@ -92,7 +92,7 @@ router.get('/', async (req, res) => {
   if (allMaintIds.length > 0) {
     const involvedRows = await getMany(
       `SELECT DISTINCT mwa.maintenance_id,
-              COALESCE(u.display_name, u.username) AS name, u.id AS user_id
+              COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
        FROM maintenance_assets mwa
        JOIN service_assets sa ON sa.asset_id = mwa.asset_id
        LEFT JOIN service_subscribers ss ON ss.service_id = sa.service_id
@@ -101,7 +101,7 @@ router.get('/', async (req, res) => {
          AND u.id IS NOT NULL
        UNION
        SELECT DISTINCT mwa.maintenance_id,
-              COALESCE(u.display_name, u.username) AS name, u.id AS user_id
+              COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
        FROM maintenance_assets mwa
        JOIN service_assets sa ON sa.asset_id = mwa.asset_id
        JOIN services sv ON sv.id = sa.service_id
@@ -110,7 +110,7 @@ router.get('/', async (req, res) => {
          AND u.id IS NOT NULL
        UNION
        SELECT DISTINCT ms.maintenance_id,
-              COALESCE(u.display_name, u.username) AS name, u.id AS user_id
+              COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
        FROM maintenance_services ms
        LEFT JOIN service_subscribers ss ON ss.service_id = ms.service_id
        LEFT JOIN users u ON u.id = ss.user_id
@@ -118,7 +118,7 @@ router.get('/', async (req, res) => {
          AND u.id IS NOT NULL
        UNION
        SELECT DISTINCT ms.maintenance_id,
-              COALESCE(u.display_name, u.username) AS name, u.id AS user_id
+              COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office AS office
        FROM maintenance_services ms
        JOIN services sv ON sv.id = ms.service_id
        LEFT JOIN users u ON u.id = sv.owner_id
@@ -130,7 +130,7 @@ router.get('/', async (req, res) => {
     for (const row of involvedRows) {
       if (!involvedMap[row.maintenance_id]) involvedMap[row.maintenance_id] = [];
       if (!involvedMap[row.maintenance_id].find(x => x.user_id === row.user_id)) {
-        involvedMap[row.maintenance_id].push({ name: row.name, user_id: row.user_id });
+        involvedMap[row.maintenance_id].push({ name: row.name, user_id: row.user_id, office: row.office || '' });
       }
     }
   }

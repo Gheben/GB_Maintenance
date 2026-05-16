@@ -4,6 +4,7 @@ import { statusApi } from '../api'
 import { format } from 'date-fns'
 import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Sparkles } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { Modal } from '../components/Modal'
 
 const OVERALL_ICONS = {
   operational: <CheckCircle className="text-green-500" size={28} />,
@@ -31,12 +32,20 @@ function fmt(dt, f = 'MM/dd/yyyy HH:mm') {
 }
 
 function MaintenanceCard({ m, colorClass }) {
-  const [expanded, setExpanded] = useState(false)
+  const [showUsersModal, setShowUsersModal] = useState(false)
+  const [usersSearch, setUsersSearch] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [subscribed, setSubscribed] = useState(m.is_subscribed || false)
   const [subscribing, setSubscribing] = useState(false)
   const isLoggedIn = !!localStorage.getItem('token')
   const users = m.involved_users || []
+  const filteredUsers = usersSearch.trim()
+    ? users.filter(u => {
+        const q = usersSearch.toLowerCase()
+        return String(u.name || '').toLowerCase().includes(q)
+          || String(u.office || '').toLowerCase().includes(q)
+      })
+    : users
 
   const handleSubscribe = async () => {
     setSubscribing(true)
@@ -95,12 +104,11 @@ function MaintenanceCard({ m, colorClass }) {
         )}
         {users.length > 0 && (
           <button
-            onClick={() => setExpanded(v => !v)}
-            className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+            onClick={() => { setUsersSearch(''); setShowUsersModal(true) }}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700 px-3 py-1.5 hover:bg-blue-100 transition-colors"
           >
             <Users size={13} />
             Involved users ({users.length})
-            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </button>
         )}
         {isLoggedIn && (
@@ -144,14 +152,34 @@ function MaintenanceCard({ m, colorClass }) {
         </div>
       )}
 
-      {expanded && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {users.map(u => (
-            <span key={u.user_id} className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-full">
-              {u.name}
-            </span>
-          ))}
-        </div>
+      {showUsersModal && (
+        <Modal title={`Involved users (${users.length})`} onClose={() => setShowUsersModal(false)} size="md">
+          <div className="space-y-3">
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="input pl-8"
+                placeholder="Search user or office..."
+                value={usersSearch}
+                onChange={(e) => setUsersSearch(e.target.value)}
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+              {filteredUsers.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">No users found</p>
+              ) : (
+                filteredUsers.map(u => (
+                  <div key={u.user_id} className="px-3 py-2.5 flex items-center justify-between gap-2">
+                    <span className="text-sm text-gray-800 dark:text-gray-200 truncate">{u.name}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shrink-0">
+                      {u.office || 'No office'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   )
