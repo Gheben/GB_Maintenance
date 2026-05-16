@@ -367,6 +367,13 @@ function IncidentCard({ incident }) {
   )
 }
 
+const CRITICALITY_BADGE = {
+  critical: 'bg-red-100 text-red-800 border-red-200',
+  high:     'bg-orange-100 text-orange-800 border-orange-200',
+  medium:   'bg-amber-100 text-amber-800 border-amber-200',
+  low:      'bg-blue-100 text-blue-800 border-blue-200',
+}
+
 export default function StatusPage() {
   const { user } = useAuth()
   const [data, setData] = useState(null)
@@ -489,13 +496,19 @@ export default function StatusPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500 capitalize">{s.status?.replace(/_/g, ' ')}</span>
-                    {expandedService === s.id ? <ChevronUp size={13} className="text-gray-400" /> : <ChevronDown size={13} className="text-gray-400" />}
                   </div>
                 </div>
                 {expandedService === s.id && (
                   <div className="px-4 sm:px-5 pb-4 pt-1 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 space-y-1">
                     {s.description && <p>{s.description}</p>}
-                    {s.criticality && <p>Criticality: <span className="font-medium capitalize">{s.criticality}</span></p>}
+                    {s.criticality && (
+                      <p className="flex items-center gap-2">
+                        Criticality:
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${CRITICALITY_BADGE[s.criticality] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                          {s.criticality}
+                        </span>
+                      </p>
+                    )}
                     {s.sla_uptime_percent != null && <p>SLA: <span className="font-medium">{s.sla_uptime_percent}%</span></p>}
                     {s.system_name && <p>Group: <span className="font-medium">{s.system_name}</span></p>}
                     {s.incident_count > 0 && <p className="text-red-600 font-medium">Active incidents: {s.incident_count}</p>}
