@@ -202,12 +202,20 @@ async function _searchCachedUsers(q) {
 // ─── Client factory ───────────────────────────────────────────────────────────
 function _createClient(cfg) {
   if (!ldap) throw new Error('ldapjs non è installato');
-  return ldap.createClient({
+  const client = ldap.createClient({
     url: cfg.url,
     connectTimeout: 8000,
     timeout: 8000,
     tlsOptions: { rejectUnauthorized: false }
   });
+
+  // ldapjs can emit asynchronous "error" events on the client; without a
+  // listener Node treats them as unhandled and crashes the process.
+  client.on('error', (err) => {
+    logger.warn(`LDAP client error: ${err?.message || err}`);
+  });
+
+  return client;
 }
 
 function _bind(client, dn, password) {
