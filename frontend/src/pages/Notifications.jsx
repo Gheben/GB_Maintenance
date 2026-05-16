@@ -3,9 +3,35 @@ import { Layout } from '../components/Layout'
 import { notificationsApi, maintenanceApi, incidentsApi, blackoutApi } from '../api'
 import { useNotifications } from '../contexts/NotificationsContext'
 import { Pagination } from '../components/Pagination'
+import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { format } from 'date-fns'
 import { toast } from '../components/Toast'
 import { Modal } from '../components/Modal'
+
+const TYPE_BADGE = {
+  planned: 'bg-blue-100 text-blue-800 border-blue-200',
+  emergency: 'bg-red-100 text-red-800 border-red-200',
+  upgrade: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+  security_patch: 'bg-amber-100 text-amber-800 border-amber-200',
+  infrastructure: 'bg-slate-100 text-slate-800 border-slate-200',
+  other: 'bg-gray-100 text-gray-700 border-gray-200',
+}
+
+const SEVERITY_BADGE = {
+  critical: 'bg-red-100 text-red-800 border-red-200',
+  high: 'bg-orange-100 text-orange-800 border-orange-200',
+  medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  low: 'bg-green-100 text-green-800 border-green-200',
+}
+
+function PrettyBadge({ value, classes }) {
+  if (!value) return <span className="text-gray-500">-</span>
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold capitalize ${classes || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+      {String(value).replace(/_/g, ' ')}
+    </span>
+  )
+}
 
 export default function Notifications() {
   const { unreadCount, markRead, markAllRead, fetchNotifications, clearAll } = useNotifications()
@@ -214,10 +240,30 @@ export default function Notifications() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {'title' in detailData && <div><span className="text-gray-500">Title:</span> <span className="font-medium">{detailData.title || '-'}</span></div>}
                 {'name' in detailData && <div><span className="text-gray-500">Name:</span> <span className="font-medium">{detailData.name || '-'}</span></div>}
-                {'status' in detailData && <div><span className="text-gray-500">Status:</span> <span className="font-medium">{detailData.status || '-'}</span></div>}
-                {'type' in detailData && <div><span className="text-gray-500">Type:</span> <span className="font-medium">{detailData.type || '-'}</span></div>}
-                {'impact_level' in detailData && <div><span className="text-gray-500">Impact:</span> <span className="font-medium">{detailData.impact_level || '-'}</span></div>}
-                {'severity' in detailData && <div><span className="text-gray-500">Severity:</span> <span className="font-medium">{detailData.severity || '-'}</span></div>}
+                {'status' in detailData && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Status:</span>
+                    <StatusBadge status={detailData.status} />
+                  </div>
+                )}
+                {'type' in detailData && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Type:</span>
+                    <PrettyBadge value={detailData.type} classes={TYPE_BADGE[detailData.type]} />
+                  </div>
+                )}
+                {'impact_level' in detailData && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Impact:</span>
+                    <CriticalityBadge criticality={detailData.impact_level} />
+                  </div>
+                )}
+                {'severity' in detailData && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Severity:</span>
+                    <PrettyBadge value={detailData.severity} classes={SEVERITY_BADGE[detailData.severity]} />
+                  </div>
+                )}
                 {'scheduled_start' in detailData && <div><span className="text-gray-500">Start:</span> <span className="font-medium">{detailData.scheduled_start ? format(new Date(detailData.scheduled_start), 'MMM dd yyyy HH:mm') : '-'}</span></div>}
                 {'scheduled_end' in detailData && <div><span className="text-gray-500">End:</span> <span className="font-medium">{detailData.scheduled_end ? format(new Date(detailData.scheduled_end), 'MMM dd yyyy HH:mm') : '-'}</span></div>}
               </div>
