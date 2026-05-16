@@ -37,19 +37,19 @@ export function NotificationBell() {
       {open && (
         <div className="absolute right-0 mt-2 w-80 card shadow-xl z-50">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-            <span className="font-medium text-sm">Notifiche</span>
+            <span className="font-medium text-sm">Notifications</span>
             <div className="flex items-center gap-3">
               {unreadCount > 0 && (
-                <button onClick={markAllRead} className="action-text-btn">Segna tutte lette</button>
+                <button onClick={markAllRead} className="action-text-btn">Mark all read</button>
               )}
               {notifications.length > 0 && (
-                <button onClick={handleClearAll} className="action-text-btn text-red-600 hover:text-red-700">Cancella tutte</button>
+                <button onClick={handleClearAll} className="action-text-btn text-red-600 hover:text-red-700">Delete all</button>
               )}
             </div>
           </div>
           <div className="max-h-80 overflow-y-auto p-2 space-y-1.5">
             {notifications.length === 0 ? (
-              <p className="text-center text-gray-500 text-sm py-8">Nessuna notifica</p>
+              <p className="text-center text-gray-500 text-sm py-8">No notifications</p>
             ) : notifications.map(n => (
               (() => {
                 const message = String(n.message || '').trim()
