@@ -591,7 +591,7 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
 
   const handleDelete = async () => {
     if (!canDeleteUser(deleteTarget)) {
-      toast.error('You cannot delete this user')
+      toast.error('You cannot delete yourself')
       setDeleteTarget(null)
       return
     }
