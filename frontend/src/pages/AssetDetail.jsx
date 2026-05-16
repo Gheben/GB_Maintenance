@@ -459,7 +459,6 @@ export default function AssetDetail() {
                 <button className="btn-primary flex items-center gap-1" onClick={saveEdit} disabled={saving}><Save size={14} />{saving ? 'Saving...' : 'Save'}</button>
               </>
             )}
-            {!editMode && asset.probe_enabled && <button className="btn-secondary flex items-center gap-1" disabled={probing} onClick={handleProbeNow}><Play size={14} />{probing ? 'Probing...' : 'Probe now'}</button>}
             {!editMode && canEdit && <button className="btn-danger flex items-center gap-1" onClick={() => setDeleteConfirm(true)}><Trash2 size={14} />Delete</button>}
           </div>
         </div>
@@ -589,12 +588,15 @@ export default function AssetDetail() {
             <div className="card p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">Probe configurations ({probeConfigs.length})</span>
-                {canEdit && (
-                  <div className="flex items-center gap-2">
-                    <button className="btn-secondary text-xs" onClick={openProbeConfig}>Edit default</button>
-                    <button className="btn-primary text-xs" onClick={() => openAdditionalProbeConfig(null)}>Add probe</button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  {asset.probe_enabled && <button className="btn-secondary text-xs flex items-center gap-1" disabled={probing} onClick={handleProbeNow}><Play size={12} />{probing ? 'Probing...' : 'Probe now'}</button>}
+                  {canEdit && (
+                    <>
+                      <button className="btn-secondary text-xs" onClick={openProbeConfig}>Edit default</button>
+                      <button className="btn-primary text-xs" onClick={() => openAdditionalProbeConfig(null)}>Add probe</button>
+                    </>
+                  )}
+                </div>
               </div>
               {probeConfigs.length === 0 && <p className="text-sm text-gray-500">No probe configured.</p>}
               {probeConfigs.map((p) => {

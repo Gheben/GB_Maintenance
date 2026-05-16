@@ -384,7 +384,8 @@ export default function MaintenanceDetail() {
               {mw.ticket_ref && <div><span className="text-gray-500">Ticket:</span> <strong>{mw.ticket_ref}</strong></div>}
               {mw.actual_start && <div><span className="text-gray-500">Actual start:</span> <strong>{format(new Date(mw.actual_start), 'MM/dd HH:mm')}</strong></div>}
               {mw.actual_end && <div><span className="text-gray-500">Actual end:</span> <strong>{format(new Date(mw.actual_end), 'MM/dd HH:mm')}</strong></div>}
-              {mw.reopened_at && <div><span className="text-gray-500">Reopened at:</span> <strong>{format(new Date(mw.reopened_at), 'MM/dd HH:mm')}</strong></div>}
+              {mw.reopened_at && <div><span className="text-gray-500">Reopened at:</span> <strong>{format(new Date(mw.reopened_at), 'MM/dd/yyyy HH:mm')}</strong></div>}
+              {mw.reopened_by_user && <div><span className="text-gray-500">Reopened by:</span> <strong>{mw.reopened_by_user.display_name || 'Unknown'}</strong></div>}
               {mw.reopen_count > 0 && <div><span className="text-gray-500">Reopen count:</span> <strong>{mw.reopen_count}</strong></div>}
             </div>
 
