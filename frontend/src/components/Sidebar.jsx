@@ -90,7 +90,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
         if (!res.ok) continue
         const html = await res.text()
         if (!isSwaggerHtml(html)) continue
-        window.open(url, '_blank', 'noopener,noreferrer')
+        window.location.assign(url)
         onClose?.()
         return
       } catch {
@@ -98,7 +98,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
       }
     }
 
-    window.open(candidates[0], '_blank', 'noopener,noreferrer')
+    window.location.assign(candidates[0])
     onClose?.()
   }
 
@@ -236,7 +236,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
                 )
               }
               return (
-                <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer"
+                <a key={item.href} href={item.href}
                   onClick={onClose}
                   title={cl ? item.label : undefined}
                   className={`${itemBase} text-gray-300 hover:bg-gray-800 hover:text-white`}>

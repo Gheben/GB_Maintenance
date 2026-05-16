@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { statusApi } from '../api'
 import { format } from 'date-fns'
 import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Sparkles } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 const OVERALL_ICONS = {
   operational: <CheckCircle className="text-green-500" size={28} />,
@@ -271,8 +273,10 @@ function IncidentCard({ incident }) {
 }
 
 export default function StatusPage() {
+  const { user } = useAuth()
   const [data, setData] = useState(null)
   const [expandedService, setExpandedService] = useState(null)
+  const isLoggedIn = !!user || !!localStorage.getItem('token')
 
   useEffect(() => {
     statusApi.overview().then(r => setData(r.data)).catch(() => {})
@@ -303,7 +307,17 @@ export default function StatusPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-8 sm:py-12 px-4">
       <div className="max-w-3xl mx-auto space-y-6 sm:space-y-8">
         {/* Header */}
-        <div className="text-center">
+        <div className="relative text-center">
+          {isLoggedIn && (
+            <div className="absolute top-0 right-0">
+              <Link
+                to="/"
+                className="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 px-2.5 py-1 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                Back to app
+              </Link>
+            </div>
+          )}
           {String(data.app_brand_image_url || '').trim() ? (
             <img
               src={String(data.app_brand_image_url || '').trim()}
