@@ -38,7 +38,10 @@ async function logNotification(eventType, channel, recipient, refType, refId, su
 
 // ─── Send email notification ──────────────────────────────────────────────────
 async function sendEmailNotification(eventType, toEmails, vars, refType, refId) {
-  const tpl = await getTemplate(eventType);
+  let tpl = await getTemplate(eventType);
+  if (!tpl && eventType === 'maintenance_reopened') {
+    tpl = await getTemplate('maintenance_started');
+  }
   if (!tpl) {
     logger.warn(`[Notify] No active template for event: ${eventType}`);
     return;
