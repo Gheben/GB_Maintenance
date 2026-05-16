@@ -48,8 +48,12 @@ function MaintenanceCard({ m, colorClass }) {
   const [showHistory, setShowHistory] = useState(false)
   const [subscribed, setSubscribed] = useState(m.is_subscribed || false)
   const [subscribing, setSubscribing] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const { user } = useAuth()
   const isLoggedIn = !!localStorage.getItem('token')
   const users = m.involved_users || []
+  // Subscribe is only offered for public maintenances with no user_targets
+  const showSubscribeBtn = isLoggedIn && users.length === 0
   const filteredUsers = usersSearch.trim()
     ? users.filter(u => {
         const q = usersSearch.toLowerCase()
@@ -70,6 +74,14 @@ function MaintenanceCard({ m, colorClass }) {
       }
     } catch { /* ignore */ }
     finally { setSubscribing(false) }
+  }
+
+  const handleBellClick = () => {
+    if (window.matchMedia('(hover: none)').matches) {
+      setShowConfirm(true)
+    } else {
+      handleSubscribe()
+    }
   }
 
   const steps = [
@@ -135,9 +147,9 @@ function MaintenanceCard({ m, colorClass }) {
             </span>
           )
         )}
-        {isLoggedIn && (
+        {showSubscribeBtn && (
           <button
-            onClick={handleSubscribe}
+            onClick={handleBellClick}
             disabled={subscribing}
             className={`group inline-flex items-center overflow-hidden text-xs font-semibold rounded-full border px-2.5 py-1.5 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed ${
               subscribed
@@ -159,7 +171,34 @@ function MaintenanceCard({ m, colorClass }) {
         )}
       </div>
 
-
+      {showConfirm && (
+        <Modal
+          title={subscribed ? 'Unsubscribe from updates' : 'Subscribe for updates'}
+          onClose={() => setShowConfirm(false)}
+        >
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">
+            {subscribed
+              ? `Stop receiving email notifications for \u201c${m.title}\u201d?`
+              : `Receive email notifications for updates on \u201c${m.title}\u201d?`}
+          </p>
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => setShowConfirm(false)}
+              className="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { setShowConfirm(false); handleSubscribe() }}
+              className={`rounded-md px-3 py-1.5 text-sm font-semibold text-white ${
+                subscribed ? 'bg-red-500 hover:bg-red-600' : 'bg-brand-500 hover:bg-brand-600'
+              }`}
+            >
+              {subscribed ? 'Unsubscribe' : 'Subscribe'}
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {showHistory && (
         <div className="mt-3 flex flex-wrap items-center gap-0">
