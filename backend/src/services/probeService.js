@@ -4,11 +4,13 @@ const net           = require('net');
 const tls           = require('tls');
 const dns           = require('dns');
 const { exec }      = require('child_process');
-const { query, getMany } = require('../db/database');
+const { query, getMany, getOne } = require('../db/database');
 const logger        = require('../utils/logger');
 const wsService     = require('./wsService');
 
 const TICK_SECONDS = parseInt(process.env.PROBE_TICK_SECONDS || '60', 10);
+const PROBE_BATCH_SIZE = parseInt(process.env.PROBE_BATCH_SIZE || '200', 10);
+const PROBE_MAX_PARALLEL = parseInt(process.env.PROBE_MAX_PARALLEL || '20', 10);
 let _interval = null;
 
 function start() {
@@ -25,69 +27,79 @@ function stop() {
 
 async function _runProbes() {
   try {
-    const now = Math.floor(Date.now() / 1000);
-    // Only probe assets where enough time has passed since last probe
-    const assets = await getMany(
-      `SELECT a.id, a.probe_type, a.probe_url, a.probe_timeout_seconds,
-              a.expected_status_code, a.probe_interval_seconds, a.status,
-              a.failure_threshold, a.recovery_threshold, a.pause_during_maintenance,
-              a.dns_record_type, a.dns_expected_value, a.ssl_expiry_warning_days,
-              MAX(pr.probed_at) as last_probed
-       FROM assets a
-       LEFT JOIN probe_results pr ON pr.asset_id = a.id
-       WHERE a.probe_enabled = true AND a.is_active = true
-       GROUP BY a.id`,
+    const probes = await getMany(
+      `SELECT ap.id, ap.asset_id, ap.name,
+              ap.probe_type, ap.probe_target, ap.probe_timeout_seconds,
+              ap.expected_status_code, ap.probe_interval_seconds,
+              ap.failure_threshold, ap.recovery_threshold,
+              ap.pause_during_maintenance,
+              ap.dns_record_type, ap.dns_expected_value, ap.ssl_expiry_warning_days,
+              ap.consecutive_failures, ap.consecutive_successes, ap.current_state,
+              a.status AS asset_status
+       FROM asset_probes ap
+       JOIN assets a ON a.id = ap.asset_id
+       WHERE ap.probe_enabled = true
+         AND a.is_active = true
+         AND ap.next_probe_at <= NOW()
+       ORDER BY ap.next_probe_at ASC
+       LIMIT $1`,
+      [PROBE_BATCH_SIZE]
     );
 
-    for (const asset of assets) {
-      // Skip if paused during maintenance
-      if (asset.pause_during_maintenance && asset.status === 'under_maintenance') continue;
-
-      const lastProbed = asset.last_probed ? new Date(asset.last_probed).getTime() / 1000 : 0;
-      const interval = asset.probe_interval_seconds || 300;
-      if (now - lastProbed < interval) continue;
-
-      _probeAsset(asset).catch(err => {
-        logger.error(`[ProbeService] Asset ${asset.id} probe error: ${err.message}`);
-      });
+    for (let i = 0; i < probes.length; i += PROBE_MAX_PARALLEL) {
+      const batch = probes.slice(i, i + PROBE_MAX_PARALLEL);
+      await Promise.allSettled(batch.map((probe) => _probeAsset(probe)));
     }
   } catch (err) {
     logger.error(`[ProbeService] _runProbes error: ${err.message}`);
   }
 }
 
-async function _probeAsset(asset) {
+async function _probeAsset(probe, options = {}) {
+  const forceRun = options.forceRun === true;
+  // Skip and reschedule if paused while in maintenance.
+  if (!forceRun && probe.pause_during_maintenance && probe.asset_status === 'under_maintenance') {
+    await query(
+      `UPDATE asset_probes
+       SET next_probe_at = NOW() + ($1::int * INTERVAL '1 second'),
+           updated_at = NOW()
+       WHERE id = $2`,
+      [probe.probe_interval_seconds || 300, probe.id]
+    );
+    return { skipped: true };
+  }
+
   const start = Date.now();
   let success = false, statusCode = null, errorMsg = null, sslCertExpiry = null, dnsResponse = null;
 
   try {
-    if (asset.probe_type === 'http' || asset.probe_type === 'https') {
-      const result = await _httpProbe(asset.probe_url, asset.probe_timeout_seconds * 1000);
+    if (probe.probe_type === 'http' || probe.probe_type === 'https') {
+      const result = await _httpProbe(probe.probe_target, (probe.probe_timeout_seconds || 10) * 1000);
       statusCode = result.statusCode;
-      success = statusCode === (asset.expected_status_code || 200);
+      success = statusCode === (probe.expected_status_code || 200);
       if (!success) errorMsg = `HTTP ${statusCode}`;
 
-    } else if (asset.probe_type === 'tcp') {
-      success = await _tcpProbe(asset.probe_url, asset.probe_timeout_seconds * 1000);
+    } else if (probe.probe_type === 'tcp') {
+      success = await _tcpProbe(probe.probe_target, (probe.probe_timeout_seconds || 10) * 1000);
       if (!success) errorMsg = 'TCP connection failed';
 
-    } else if (asset.probe_type === 'icmp') {
-      success = await _icmpProbe(asset.probe_url, asset.probe_timeout_seconds * 1000);
+    } else if (probe.probe_type === 'icmp') {
+      success = await _icmpProbe(probe.probe_target, (probe.probe_timeout_seconds || 10) * 1000);
       if (!success) errorMsg = 'Host unreachable';
 
-    } else if (asset.probe_type === 'dns') {
+    } else if (probe.probe_type === 'dns') {
       const r = await _dnsProbe(
-        asset.probe_url,
-        asset.dns_record_type || 'A',
-        asset.dns_expected_value || null,
-        asset.probe_timeout_seconds * 1000
+        probe.probe_target,
+        probe.dns_record_type || 'A',
+        probe.dns_expected_value || null,
+        (probe.probe_timeout_seconds || 10) * 1000
       );
       success = r.success;
       dnsResponse = r.response;
       if (!success) errorMsg = r.error;
 
-    } else if (asset.probe_type === 'tls') {
-      const r = await _tlsProbe(asset.probe_url, asset.probe_timeout_seconds * 1000);
+    } else if (probe.probe_type === 'tls') {
+      const r = await _tlsProbe(probe.probe_target, (probe.probe_timeout_seconds || 10) * 1000);
       sslCertExpiry = r.expiryDate || null;
       if (!r.connected) {
         success = false; errorMsg = r.error || 'TLS connection failed';
@@ -95,7 +107,7 @@ async function _probeAsset(asset) {
         success = false; errorMsg = 'Certificate expired';
       } else {
         success = true;
-        if (r.daysUntilExpiry !== null && r.daysUntilExpiry <= (asset.ssl_expiry_warning_days || 30)) {
+        if (r.daysUntilExpiry !== null && r.daysUntilExpiry <= (probe.ssl_expiry_warning_days || 30)) {
           errorMsg = `Certificate expires in ${r.daysUntilExpiry} day(s)`;
         }
       }
@@ -110,37 +122,67 @@ async function _probeAsset(asset) {
   const responseTime = Date.now() - start;
 
   await query(
-    `INSERT INTO probe_results (asset_id, success, response_time_ms, status_code, error_message, ssl_cert_expiry, dns_response)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [asset.id, success, responseTime, statusCode, errorMsg, sslCertExpiry, dnsResponse]
+    `INSERT INTO probe_results (asset_id, probe_id, success, response_time_ms, status_code, error_message, ssl_cert_expiry, dns_response)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [probe.asset_id, probe.id, success, responseTime, statusCode, errorMsg, sslCertExpiry, dnsResponse]
   );
 
-  // Determine new status using consecutive-streak thresholds
-  const failThresh   = Math.max(1, asset.failure_threshold  || 2);
-  const recoverThresh = Math.max(1, asset.recovery_threshold || 2);
-  const lookback = Math.max(failThresh, recoverThresh);
-  const recent = await getMany(
-    `SELECT success FROM probe_results WHERE asset_id=$1 ORDER BY probed_at DESC LIMIT $2`,
-    [asset.id, lookback]
+  const failThresh = Math.max(1, probe.failure_threshold || 2);
+  const recoverThresh = Math.max(1, probe.recovery_threshold || 2);
+  const consecutiveFailures = success ? 0 : (probe.consecutive_failures || 0) + 1;
+  const consecutiveSuccesses = success ? (probe.consecutive_successes || 0) + 1 : 0;
+  let currentState = probe.current_state || 'unknown';
+  if (consecutiveFailures >= failThresh) currentState = 'major_outage';
+  else if (consecutiveSuccesses >= recoverThresh) currentState = 'operational';
+
+  await query(
+    `UPDATE asset_probes
+     SET last_probed_at = NOW(),
+         next_probe_at = NOW() + ($1::int * INTERVAL '1 second'),
+         consecutive_failures = $2,
+         consecutive_successes = $3,
+         current_state = $4,
+         updated_at = NOW()
+     WHERE id = $5`,
+    [probe.probe_interval_seconds || 300, consecutiveFailures, consecutiveSuccesses, currentState, probe.id]
   );
 
-  let newStatus = asset.status;
-  if (recent.length >= failThresh && recent.slice(0, failThresh).every(r => !r.success)) {
-    newStatus = 'major_outage';
-  } else if (recent.length >= recoverThresh && recent.slice(0, recoverThresh).every(r => r.success)) {
-    newStatus = 'operational';
-  }
+  await _refreshAssetStatus(probe.asset_id, errorMsg || 'Probe update');
 
-  // Update asset status based on probe result
+  return {
+    probeId: probe.id,
+    assetId: probe.asset_id,
+    success,
+    responseTime,
+    statusCode,
+    errorMsg,
+    sslCertExpiry,
+    dnsResponse,
+  };
+}
+
+async function _refreshAssetStatus(assetId, reason) {
+  const [asset, agg] = await Promise.all([
+    getOne(`SELECT status FROM assets WHERE id=$1`, [assetId]),
+    getOne(
+      `SELECT COUNT(*) FILTER (WHERE probe_enabled = true AND current_state = 'major_outage')::int AS failing_count
+       FROM asset_probes
+       WHERE asset_id = $1`,
+      [assetId]
+    )
+  ]);
+
+  if (!asset) return;
+  const newStatus = (agg?.failing_count || 0) > 0 ? 'major_outage' : 'operational';
   if (newStatus !== asset.status && asset.status !== 'under_maintenance') {
-    await query(`UPDATE assets SET status=$1, updated_at=NOW() WHERE id=$2`, [newStatus, asset.id]);
+    await query(`UPDATE assets SET status=$1, updated_at=NOW() WHERE id=$2`, [newStatus, assetId]);
     await query(
       `INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason)
        VALUES ('asset', $1, $2, 'probe', $3)`,
-      [asset.id, newStatus, errorMsg || 'Probe success']
+      [assetId, newStatus, reason]
     );
-    wsService.broadcast({ type: 'asset_status_changed', assetId: asset.id, status: newStatus });
-    logger.info(`[ProbeService] Asset ${asset.id}: ${asset.status} → ${newStatus}`);
+    wsService.broadcast({ type: 'asset_status_changed', assetId, status: newStatus });
+    logger.info(`[ProbeService] Asset ${assetId}: ${asset.status} -> ${newStatus}`);
   }
 }
 
@@ -224,85 +266,39 @@ function _tlsProbe(hostPort, timeoutMs) {
 
 // ─── Manual probe trigger ─────────────────────────────────────────────────────
 async function probeNow(assetId) {
-  const { getOne } = require('../db/database');
-  const asset = await getOne(
-    `SELECT id, probe_type, probe_url, probe_timeout_seconds, expected_status_code,
-            probe_interval_seconds, status, failure_threshold, recovery_threshold,
-            pause_during_maintenance, dns_record_type, dns_expected_value, ssl_expiry_warning_days
-     FROM assets WHERE id=$1 AND probe_enabled=true`,
+  const probes = await getMany(
+    `SELECT ap.id, ap.asset_id, ap.name,
+            ap.probe_type, ap.probe_target, ap.probe_timeout_seconds,
+            ap.expected_status_code, ap.probe_interval_seconds,
+            ap.failure_threshold, ap.recovery_threshold,
+            ap.pause_during_maintenance,
+            ap.dns_record_type, ap.dns_expected_value, ap.ssl_expiry_warning_days,
+            ap.consecutive_failures, ap.consecutive_successes, ap.current_state,
+            a.status AS asset_status
+     FROM asset_probes ap
+     JOIN assets a ON a.id = ap.asset_id
+     WHERE ap.asset_id = $1
+       AND ap.probe_enabled = true
+       AND a.is_active = true`,
     [assetId]
   );
-  if (!asset) throw new Error('Asset non trovato o probe non abilitato');
-  const start = Date.now();
-  let success = false, statusCode = null, errorMsg = null, sslCertExpiry = null, dnsResponse = null;
+  if (probes.length === 0) throw new Error('Asset non trovato o nessuna probe abilitata');
 
-  try {
-    if (asset.probe_type === 'http' || asset.probe_type === 'https') {
-      const r = await _httpProbe(asset.probe_url, (asset.probe_timeout_seconds || 10) * 1000);
-      statusCode = r.statusCode;
-      success = statusCode === (asset.expected_status_code || 200);
-      if (!success) errorMsg = `HTTP ${statusCode}`;
-    } else if (asset.probe_type === 'tcp') {
-      success = await _tcpProbe(asset.probe_url, (asset.probe_timeout_seconds || 10) * 1000);
-      if (!success) errorMsg = 'TCP connection failed';
-    } else if (asset.probe_type === 'icmp') {
-      success = await _icmpProbe(asset.probe_url, (asset.probe_timeout_seconds || 10) * 1000);
-      if (!success) errorMsg = 'Host unreachable';
-    } else if (asset.probe_type === 'dns') {
-      const r = await _dnsProbe(
-        asset.probe_url, asset.dns_record_type || 'A',
-        asset.dns_expected_value || null, (asset.probe_timeout_seconds || 10) * 1000
-      );
-      success = r.success; dnsResponse = r.response;
-      if (!success) errorMsg = r.error;
-    } else if (asset.probe_type === 'tls') {
-      const r = await _tlsProbe(asset.probe_url, (asset.probe_timeout_seconds || 10) * 1000);
-      sslCertExpiry = r.expiryDate || null;
-      if (!r.connected) { success = false; errorMsg = r.error || 'TLS connection failed'; }
-      else if (r.daysUntilExpiry !== null && r.daysUntilExpiry <= 0) { success = false; errorMsg = 'Certificate expired'; }
-      else {
-        success = true;
-        if (r.daysUntilExpiry !== null && r.daysUntilExpiry <= (asset.ssl_expiry_warning_days || 30)) {
-          errorMsg = `Certificate expires in ${r.daysUntilExpiry} day(s)`;
-        }
-      }
-    }
-  } catch (err) {
-    success = false; errorMsg = err.message.slice(0, 255);
+  const results = [];
+  for (const probe of probes) {
+    results.push(await _probeAsset(probe, { forceRun: true }));
   }
 
-  const responseTime = Date.now() - start;
-  await query(
-    `INSERT INTO probe_results (asset_id, success, response_time_ms, status_code, error_message, ssl_cert_expiry, dns_response)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [assetId, success, responseTime, statusCode, errorMsg, sslCertExpiry, dnsResponse]
-  );
-
-  // Apply threshold logic for status update
-  const failThresh    = Math.max(1, asset.failure_threshold  || 2);
-  const recoverThresh = Math.max(1, asset.recovery_threshold || 2);
-  const lookback = Math.max(failThresh, recoverThresh);
-  const recent = await getMany(
-    `SELECT success FROM probe_results WHERE asset_id=$1 ORDER BY probed_at DESC LIMIT $2`,
-    [assetId, lookback]
-  );
-  let newStatus = asset.status;
-  if (recent.length >= failThresh && recent.slice(0, failThresh).every(r => !r.success)) {
-    newStatus = 'major_outage';
-  } else if (recent.length >= recoverThresh && recent.slice(0, recoverThresh).every(r => r.success)) {
-    newStatus = 'operational';
-  }
-  if (newStatus !== asset.status && asset.status !== 'under_maintenance') {
-    await query(`UPDATE assets SET status=$1, updated_at=NOW() WHERE id=$2`, [newStatus, assetId]);
-    await query(
-      `INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason)
-       VALUES ('asset', $1, $2, 'probe', $3)`,
-      [assetId, newStatus, errorMsg || 'Probe success']
-    );
-    wsService.broadcast({ type: 'asset_status_changed', assetId, status: newStatus });
+  if (results.length === 1) {
+    return results[0];
   }
 
-  return { success, responseTime, statusCode, errorMsg, sslCertExpiry, dnsResponse };
+  return {
+    assetId,
+    probeCount: results.length,
+    success: results.every((r) => !!r.success),
+    results,
+  };
 }
 
 module.exports = { start, stop, probeNow };

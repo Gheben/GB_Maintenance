@@ -40,23 +40,34 @@ function LicenseState({ row }) {
 }
 
 function ProbeState({ row }) {
-  if (!row.probe_enabled) return <span className="text-gray-400">—</span>
-  const hasWarning = !!row.latest_probe_error_message && row.latest_probe_success !== false
-  const dotClass = row.latest_probe_success === false
+  if (!row.probe_enabled && !row.probe_enabled_count) return <span className="text-gray-400">—</span>
+  const hasAnyFailingProbe = Number(row.failing_probe_count || 0) > 0
+  const hasWarning = !!row.latest_probe_error_message && row.latest_probe_success !== false && !hasAnyFailingProbe
+  const dotClass = hasAnyFailingProbe || row.latest_probe_success === false
     ? 'bg-red-500'
     : hasWarning
       ? 'bg-amber-500 animate-pulse'
       : 'bg-green-500'
-  const method = String(row.probe_type || 'probe').toUpperCase()
-  const label = row.latest_probe_success === false
-    ? row.latest_probe_error_message || 'Probe failed'
+  const method = String(row.latest_probe_type || row.probe_type || 'probe').toUpperCase()
+  const label = hasAnyFailingProbe || row.latest_probe_success === false
+    ? (row.latest_probe_error_message || 'Probe failed')
     : hasWarning
       ? row.latest_probe_error_message
       : 'Probe healthy'
+  const probeCount = Number(row.probe_enabled_count || 0)
+  const probeName = row.primary_probe_name || 'Probe'
+  
   return (
     <span className="inline-flex items-center gap-2 text-xs">
       <span className={`w-2.5 h-2.5 rounded-full ${dotClass}`} title={label} />
       <span className="font-medium text-gray-700 dark:text-gray-200">{method}</span>
+      {probeCount > 1 ? (
+        <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+          {probeName} <span className="font-semibold">+{probeCount - 1}</span>
+        </span>
+      ) : probeCount === 1 && probeName && (
+        <span className="text-[10px] text-gray-600">{probeName}</span>
+      )}
     </span>
   )
 }

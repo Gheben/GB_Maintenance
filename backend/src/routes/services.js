@@ -339,16 +339,34 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 
 // ─── GET /api/services/:id/maintenance ──────────────────────────────────────
 router.get('/:id/maintenance', async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page || '1', 10));
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '25', 10)));
+  const offset = (page - 1) * limit;
+
+  const totalRes = await query(
+    `SELECT COUNT(DISTINCT m.id)::int AS total
+     FROM maintenance_windows m
+     JOIN maintenance_assets ma ON ma.maintenance_id = m.id
+     JOIN service_assets sa ON sa.asset_id = ma.asset_id
+     WHERE sa.service_id = $1`,
+    [req.params.id]
+  );
+
   const rows = await getMany(
-    `SELECT m.id, m.title, m.type, m.status, m.impact_level, m.scheduled_start, m.scheduled_end
+    `SELECT DISTINCT m.id, m.title, m.type, m.status, m.impact_level,
+            m.scheduled_start, m.scheduled_end, m.actual_start, m.actual_end,
+            m.ticket_ref, m.reopened_at, m.reopen_reason, m.reopen_count,
+            m.owner_approval_required, m.owner_approval_status,
+            m.description, m.notes
      FROM maintenance_windows m
      JOIN maintenance_assets ma ON ma.maintenance_id=m.id
      JOIN service_assets sa ON sa.asset_id=ma.asset_id
      WHERE sa.service_id=$1
-     ORDER BY m.scheduled_start DESC LIMIT 50`,
-    [req.params.id]
+     ORDER BY m.scheduled_start DESC
+     LIMIT $2 OFFSET $3`,
+    [req.params.id, limit, offset]
   );
-  res.json(rows);
+  res.json({ data: rows, total: totalRes.rows[0]?.total || 0, page, limit });
 });
 
 // ─── GET /api/services/:id/users ────────────────────────────────────────────

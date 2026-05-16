@@ -14,6 +14,82 @@ const CATEGORIES = ['application','infrastructure','database','network','hardwar
 const CRITICALITIES = ['critical','high','medium','low'];
 const STATUSES = ['operational','degraded','partial_outage','major_outage','under_maintenance'];
 
+const PROBE_TYPES = ['http','https','tcp','icmp','dns','tls'];
+
+async function _syncLegacyProbeConfig(assetId) {
+  const asset = await getOne(
+    `SELECT probe_enabled, probe_type, probe_url, probe_interval_seconds,
+            probe_timeout_seconds, expected_status_code,
+            failure_threshold, recovery_threshold, pause_during_maintenance,
+            dns_record_type, dns_expected_value, ssl_expiry_warning_days, status
+     FROM assets
+     WHERE id = $1`,
+    [assetId]
+  );
+  if (!asset) return;
+
+  const hasConfig = !!(asset.probe_type && asset.probe_url && String(asset.probe_url).trim().length > 0);
+  if (!hasConfig) {
+    await query(
+      `UPDATE asset_probes
+       SET probe_enabled = false,
+           updated_at = NOW()
+       WHERE asset_id = $1 AND legacy_slot = true`,
+      [assetId]
+    );
+    return;
+  }
+
+  const state = asset.status === 'major_outage' ? 'major_outage' : (asset.status === 'operational' ? 'operational' : 'unknown');
+  await query(
+    `INSERT INTO asset_probes (
+       asset_id, name, probe_enabled, probe_type, probe_target,
+       probe_interval_seconds, probe_timeout_seconds, expected_status_code,
+       failure_threshold, recovery_threshold, pause_during_maintenance,
+       dns_record_type, dns_expected_value, ssl_expiry_warning_days,
+       legacy_slot, next_probe_at, current_state, updated_at
+     )
+     VALUES (
+       $1, 'Default probe', $2, $3, $4,
+       $5, $6, $7,
+       $8, $9, $10,
+       $11, $12, $13,
+       true, NOW(), $14, NOW()
+     )
+     ON CONFLICT (asset_id) WHERE legacy_slot = true
+     DO UPDATE SET
+       probe_enabled = EXCLUDED.probe_enabled,
+       probe_type = EXCLUDED.probe_type,
+       probe_target = EXCLUDED.probe_target,
+       probe_interval_seconds = EXCLUDED.probe_interval_seconds,
+       probe_timeout_seconds = EXCLUDED.probe_timeout_seconds,
+       expected_status_code = EXCLUDED.expected_status_code,
+       failure_threshold = EXCLUDED.failure_threshold,
+       recovery_threshold = EXCLUDED.recovery_threshold,
+       pause_during_maintenance = EXCLUDED.pause_during_maintenance,
+       dns_record_type = EXCLUDED.dns_record_type,
+       dns_expected_value = EXCLUDED.dns_expected_value,
+       ssl_expiry_warning_days = EXCLUDED.ssl_expiry_warning_days,
+       updated_at = NOW()`,
+    [
+      assetId,
+      !!asset.probe_enabled,
+      asset.probe_type,
+      asset.probe_url,
+      asset.probe_interval_seconds || 300,
+      asset.probe_timeout_seconds || 10,
+      asset.expected_status_code || 200,
+      asset.failure_threshold || 2,
+      asset.recovery_threshold || 2,
+      asset.pause_during_maintenance !== false,
+      asset.dns_record_type || 'A',
+      asset.dns_expected_value || null,
+      asset.ssl_expiry_warning_days || 30,
+      state,
+    ]
+  );
+}
+
 function normalizeOwnerTargets(value) {
   if (!Array.isArray(value)) return [];
   const out = [];
@@ -88,7 +164,19 @@ router.get('/', async (req, res) => {
            ELSE u.display_name
          END, '') as owner_label,
        COALESCE(jsonb_array_length(a.owner_targets), 0)::int as owner_count,
-       COALESCE(jsonb_array_length(a.user_targets), 0)::int as user_count
+       COALESCE(jsonb_array_length(a.user_targets), 0)::int as user_count,
+       lp.latest_probe_success,
+       lp.latest_probe_status_code,
+       lp.latest_probe_error_message,
+       lp.latest_probe_probed_at,
+       lp.latest_probe_ssl_cert_expiry,
+       lp.latest_probe_dns_response,
+       lp.latest_probe_type,
+       lp.latest_probe_state,
+       lp.latest_probe_name,
+       COALESCE(aps.probe_enabled_count, 0) AS probe_enabled_count,
+       COALESCE(aps.failing_probe_count, 0) AS failing_probe_count,
+       COALESCE(aps.primary_probe_name, lp.latest_probe_name) AS primary_probe_name
      FROM assets a
      LEFT JOIN users u ON u.id=a.owner_id
      LEFT JOIN local_groups lg ON lg.id=a.owner_group_id
@@ -113,17 +201,27 @@ router.get('/', async (req, res) => {
        LIMIT 1
      ) prim ON TRUE
      LEFT JOIN LATERAL (
-       SELECT pr.success AS latest_probe_success,
-              pr.status_code AS latest_probe_status_code,
-              pr.error_message AS latest_probe_error_message,
-              pr.probed_at AS latest_probe_probed_at,
-              pr.ssl_cert_expiry AS latest_probe_ssl_cert_expiry,
-              pr.dns_response AS latest_probe_dns_response
+      SELECT pr.success AS latest_probe_success,
+        pr.status_code AS latest_probe_status_code,
+        pr.error_message AS latest_probe_error_message,
+        pr.probed_at AS latest_probe_probed_at,
+        pr.ssl_cert_expiry AS latest_probe_ssl_cert_expiry,
+        pr.dns_response AS latest_probe_dns_response,
+        ap.probe_type AS latest_probe_type,
+        ap.current_state AS latest_probe_state
        FROM probe_results pr
+      LEFT JOIN asset_probes ap ON ap.id = pr.probe_id
        WHERE pr.asset_id = a.id
        ORDER BY pr.probed_at DESC
        LIMIT 1
-     ) lp ON TRUE
+         ) lp ON TRUE
+         LEFT JOIN LATERAL (
+      SELECT COUNT(*) FILTER (WHERE ap.probe_enabled = true)::int AS probe_enabled_count,
+        COUNT(*) FILTER (WHERE ap.probe_enabled = true AND ap.current_state = 'major_outage')::int AS failing_probe_count,
+        (ARRAY_AGG(ap.name ORDER BY ap.legacy_slot DESC) FILTER (WHERE ap.probe_enabled = true))[1] AS primary_probe_name
+      FROM asset_probes ap
+      WHERE ap.asset_id = a.id
+         ) aps ON TRUE
      ${where} ORDER BY a.name LIMIT $${i++} OFFSET $${i}`,
     [...params, parseInt(limit), offset]
   );
@@ -201,6 +299,170 @@ router.get('/:id/probes', async (req, res) => {
   res.json(rows);
 });
 
+// ─── GET /api/assets/:id/probe-configs ───────────────────────────────────────
+router.get('/:id/probe-configs', async (req, res) => {
+  const rows = await getMany(
+    `SELECT id, asset_id, name, probe_enabled, probe_type, probe_target,
+            probe_interval_seconds, probe_timeout_seconds, expected_status_code,
+            failure_threshold, recovery_threshold, pause_during_maintenance,
+            dns_record_type, dns_expected_value, ssl_expiry_warning_days,
+            legacy_slot, last_probed_at, next_probe_at,
+            consecutive_failures, consecutive_successes, current_state,
+            created_at, updated_at
+     FROM asset_probes
+     WHERE asset_id = $1
+     ORDER BY legacy_slot DESC, created_at ASC`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+// ─── POST /api/assets/:id/probe-configs ──────────────────────────────────────
+router.post('/:id/probe-configs', requireOperator, [
+  body('name').optional().isString().isLength({ max: 200 }),
+  body('probe_enabled').optional().isBoolean(),
+  body('probe_type').isIn(PROBE_TYPES),
+  body('probe_target').isString().trim().isLength({ min: 1 }),
+  body('probe_interval_seconds').optional().isInt({ min: 15 }),
+  body('probe_timeout_seconds').optional().isInt({ min: 1, max: 60 }),
+  body('expected_status_code').optional({ nullable: true }).isInt({ min: 100, max: 599 }),
+  body('failure_threshold').optional().isInt({ min: 1, max: 10 }),
+  body('recovery_threshold').optional().isInt({ min: 1, max: 10 }),
+  body('pause_during_maintenance').optional().isBoolean(),
+  body('dns_record_type').optional().isIn(['A','AAAA','CNAME','MX','TXT','NS','PTR','SRV']),
+  body('dns_expected_value').optional({ nullable: true }).isString(),
+  body('ssl_expiry_warning_days').optional().isInt({ min: 1, max: 365 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const asset = await getOne('SELECT id FROM assets WHERE id=$1 AND is_active=true', [req.params.id]);
+  if (!asset) return res.status(404).json({ error: 'Asset non trovato' });
+
+  const r = await query(
+    `INSERT INTO asset_probes (
+       asset_id, name, probe_enabled, probe_type, probe_target,
+       probe_interval_seconds, probe_timeout_seconds, expected_status_code,
+       failure_threshold, recovery_threshold, pause_during_maintenance,
+       dns_record_type, dns_expected_value, ssl_expiry_warning_days,
+       next_probe_at, current_state
+     ) VALUES (
+       $1,$2,$3,$4,$5,
+       $6,$7,$8,
+       $9,$10,$11,
+       $12,$13,$14,
+       NOW(),'unknown'
+     )
+     RETURNING id`,
+    [
+      req.params.id,
+      req.body.name || null,
+      req.body.probe_enabled !== false,
+      req.body.probe_type,
+      req.body.probe_target,
+      req.body.probe_interval_seconds || 300,
+      req.body.probe_timeout_seconds || 10,
+      req.body.expected_status_code ?? 200,
+      req.body.failure_threshold || 2,
+      req.body.recovery_threshold || 2,
+      req.body.pause_during_maintenance !== false,
+      req.body.dns_record_type || 'A',
+      req.body.dns_expected_value || null,
+      req.body.ssl_expiry_warning_days || 30,
+    ]
+  );
+  res.status(201).json({ id: r.rows[0].id });
+});
+
+// ─── PUT /api/assets/:id/probe-configs/:probeId ──────────────────────────────
+router.put('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
+  const probe = await getOne(
+    `SELECT id, legacy_slot FROM asset_probes WHERE id=$1 AND asset_id=$2`,
+    [req.params.probeId, req.params.id]
+  );
+  if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
+
+  const allowed = [
+    'name', 'probe_enabled', 'probe_type', 'probe_target',
+    'probe_interval_seconds', 'probe_timeout_seconds', 'expected_status_code',
+    'failure_threshold', 'recovery_threshold', 'pause_during_maintenance',
+    'dns_record_type', 'dns_expected_value', 'ssl_expiry_warning_days'
+  ];
+  const sets = [];
+  const vals = [];
+  let i = 1;
+  for (const field of allowed) {
+    if (req.body[field] === undefined) continue;
+    sets.push(`${field} = $${i++}`);
+    vals.push(req.body[field]);
+  }
+  if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
+  sets.push(`updated_at = NOW()`);
+  vals.push(req.params.probeId, req.params.id);
+
+  await query(`UPDATE asset_probes SET ${sets.join(', ')} WHERE id = $${i++} AND asset_id = $${i}`, vals);
+
+  if (probe.legacy_slot) {
+    // Keep old asset-level probe fields in sync for frontend/API compatibility.
+    const p = await getOne(
+      `SELECT probe_enabled, probe_type, probe_target, probe_interval_seconds,
+              probe_timeout_seconds, expected_status_code,
+              failure_threshold, recovery_threshold, pause_during_maintenance,
+              dns_record_type, dns_expected_value, ssl_expiry_warning_days
+       FROM asset_probes
+       WHERE id = $1`,
+      [req.params.probeId]
+    );
+    await query(
+      `UPDATE assets
+       SET probe_enabled = $1,
+           probe_type = $2,
+           probe_url = $3,
+           probe_interval_seconds = $4,
+           probe_timeout_seconds = $5,
+           expected_status_code = $6,
+           failure_threshold = $7,
+           recovery_threshold = $8,
+           pause_during_maintenance = $9,
+           dns_record_type = $10,
+           dns_expected_value = $11,
+           ssl_expiry_warning_days = $12,
+           updated_at = NOW()
+       WHERE id = $13`,
+      [
+        p.probe_enabled,
+        p.probe_type,
+        p.probe_target,
+        p.probe_interval_seconds,
+        p.probe_timeout_seconds,
+        p.expected_status_code,
+        p.failure_threshold,
+        p.recovery_threshold,
+        p.pause_during_maintenance,
+        p.dns_record_type,
+        p.dns_expected_value,
+        p.ssl_expiry_warning_days,
+        req.params.id,
+      ]
+    );
+  }
+
+  res.json({ message: 'Probe aggiornata' });
+});
+
+// ─── DELETE /api/assets/:id/probe-configs/:probeId ───────────────────────────
+router.delete('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
+  const probe = await getOne(
+    `SELECT id, legacy_slot FROM asset_probes WHERE id=$1 AND asset_id=$2`,
+    [req.params.probeId, req.params.id]
+  );
+  if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
+  if (probe.legacy_slot) return res.status(400).json({ error: 'La probe principale legacy non può essere eliminata' });
+
+  await query(`DELETE FROM asset_probes WHERE id=$1 AND asset_id=$2`, [req.params.probeId, req.params.id]);
+  res.json({ message: 'Probe eliminata' });
+});
+
 // ─── POST /api/assets/:id/probe ───────────────────────────────────────────────
 router.post('/:id/probe', requireOperator, async (req, res) => {
   try {
@@ -211,14 +473,33 @@ router.post('/:id/probe', requireOperator, async (req, res) => {
 
 // ─── GET /api/assets/:id/maintenance ─────────────────────────────────────────
 router.get('/:id/maintenance', async (req, res) => {
-  const rows = await getMany(
-    `SELECT mw.id, mw.title, mw.type, mw.status, mw.scheduled_start, mw.scheduled_end, mw.impact_level
+  const page = Math.max(1, parseInt(req.query.page || '1', 10));
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '25', 10)));
+  const offset = (page - 1) * limit;
+
+  const totalRes = await query(
+    `SELECT COUNT(*)::int AS total
      FROM maintenance_windows mw
-     JOIN maintenance_assets ma ON ma.maintenance_id=mw.id
-     WHERE ma.asset_id=$1 ORDER BY mw.scheduled_start DESC LIMIT 50`,
+     JOIN maintenance_assets ma ON ma.maintenance_id = mw.id
+     WHERE ma.asset_id = $1`,
     [req.params.id]
   );
-  res.json(rows);
+
+  const rows = await getMany(
+    `SELECT mw.id, mw.title, mw.type, mw.status, mw.scheduled_start, mw.scheduled_end,
+            mw.actual_start, mw.actual_end,
+            mw.impact_level, mw.ticket_ref,
+            mw.reopened_at, mw.reopen_reason, mw.reopen_count,
+            mw.owner_approval_required, mw.owner_approval_status,
+            mw.description, mw.notes
+     FROM maintenance_windows mw
+     JOIN maintenance_assets ma ON ma.maintenance_id=mw.id
+     WHERE ma.asset_id=$1
+     ORDER BY mw.scheduled_start DESC
+     LIMIT $2 OFFSET $3`,
+    [req.params.id, limit, offset]
+  );
+  res.json({ data: rows, total: totalRes.rows[0]?.total || 0, page, limit });
 });
 
 // ─── GET /api/assets/:id/users ───────────────────────────────────────────────
@@ -486,7 +767,7 @@ router.post('/', requireOperator, [
   body('owner_targets').optional().isArray(),
   body('user_targets').optional().isArray(),
   body('probe_enabled').optional().isBoolean(),
-  body('probe_type').optional().isIn(['http','https','tcp']),
+  body('probe_type').optional().isIn(PROBE_TYPES),
   body('probe_url').optional().isString(),
   body('probe_interval_seconds').optional().isInt({ min: 30 }),
   body('probe_timeout_seconds').optional().isInt({ min: 1, max: 60 }),
@@ -547,6 +828,7 @@ router.post('/', requireOperator, [
     // Record initial status
     await query(`INSERT INTO status_history (entity_type, entity_id, status, changed_by) VALUES ('asset',$1,'operational',$2)`,
       [id, req.user.username]);
+    await _syncLegacyProbeConfig(id);
     await auditService.log(req.user.id, req.user.username, 'asset:create', 'asset', id, `name=${req.body.name}`, req.ip, req.get('user-agent'));
     res.status(201).json({ id });
   } catch (err) {
@@ -614,6 +896,7 @@ router.put('/:id', requireOperator, async (req, res) => {
   if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
   sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
   await query(`UPDATE assets SET ${sets.join(',')} WHERE id=$${i}`, vals);
+  await _syncLegacyProbeConfig(req.params.id);
   await auditService.log(req.user.id, req.user.username, 'asset:update', 'asset', req.params.id, null, req.ip, req.get('user-agent'));
   res.json({ message: 'Asset aggiornato' });
 });

@@ -1529,6 +1529,92 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS ticket_ref VARCHAR(100)`);
     }
   },
+  {
+    version: 36,
+    name: 'asset_probes_multi_probe_support',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS asset_probes (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          asset_id UUID NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+          name VARCHAR(200),
+          probe_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          probe_type VARCHAR(20) NOT NULL,
+          probe_target TEXT NOT NULL,
+          probe_interval_seconds INTEGER NOT NULL DEFAULT 300,
+          probe_timeout_seconds INTEGER NOT NULL DEFAULT 10,
+          expected_status_code INTEGER,
+          failure_threshold INTEGER NOT NULL DEFAULT 2,
+          recovery_threshold INTEGER NOT NULL DEFAULT 2,
+          pause_during_maintenance BOOLEAN NOT NULL DEFAULT TRUE,
+          dns_record_type VARCHAR(10) NOT NULL DEFAULT 'A',
+          dns_expected_value TEXT,
+          ssl_expiry_warning_days INTEGER NOT NULL DEFAULT 30,
+          legacy_slot BOOLEAN NOT NULL DEFAULT FALSE,
+          last_probed_at TIMESTAMPTZ,
+          next_probe_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          consecutive_failures INTEGER NOT NULL DEFAULT 0,
+          consecutive_successes INTEGER NOT NULL DEFAULT 0,
+          current_state VARCHAR(30) NOT NULL DEFAULT 'unknown',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_asset_probes_asset ON asset_probes(asset_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_asset_probes_due ON asset_probes(next_probe_at) WHERE probe_enabled = true`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_asset_probes_asset_state ON asset_probes(asset_id, current_state)`);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_asset_probes_legacy_slot ON asset_probes(asset_id) WHERE legacy_slot = true`);
+
+      await client.query(`ALTER TABLE probe_results ADD COLUMN IF NOT EXISTS probe_id UUID REFERENCES asset_probes(id) ON DELETE SET NULL`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_probe_results_probe_recent ON probe_results(probe_id, probed_at DESC)`);
+
+      // Backfill one legacy probe row per asset using existing asset-level probe config.
+      await client.query(`
+        INSERT INTO asset_probes (
+          asset_id, name, probe_enabled, probe_type, probe_target,
+          probe_interval_seconds, probe_timeout_seconds, expected_status_code,
+          failure_threshold, recovery_threshold, pause_during_maintenance,
+          dns_record_type, dns_expected_value, ssl_expiry_warning_days,
+          legacy_slot, next_probe_at, current_state
+        )
+        SELECT
+          a.id,
+          'Default probe',
+          COALESCE(a.probe_enabled, false),
+          COALESCE(a.probe_type, 'http'),
+          COALESCE(a.probe_url, ''),
+          COALESCE(a.probe_interval_seconds, 300),
+          COALESCE(a.probe_timeout_seconds, 10),
+          COALESCE(a.expected_status_code, 200),
+          COALESCE(a.failure_threshold, 2),
+          COALESCE(a.recovery_threshold, 2),
+          COALESCE(a.pause_during_maintenance, true),
+          COALESCE(a.dns_record_type, 'A'),
+          a.dns_expected_value,
+          COALESCE(a.ssl_expiry_warning_days, 30),
+          true,
+          NOW(),
+          CASE WHEN a.status = 'major_outage' THEN 'major_outage' WHEN a.status = 'operational' THEN 'operational' ELSE 'unknown' END
+        FROM assets a
+        WHERE a.probe_type IS NOT NULL
+          AND a.probe_url IS NOT NULL
+          AND BTRIM(a.probe_url) <> ''
+          AND NOT EXISTS (
+            SELECT 1 FROM asset_probes ap WHERE ap.asset_id = a.id AND ap.legacy_slot = true
+          )
+      `);
+
+      await client.query(`
+        UPDATE probe_results pr
+        SET probe_id = ap.id
+        FROM asset_probes ap
+        WHERE pr.probe_id IS NULL
+          AND ap.legacy_slot = true
+          AND pr.asset_id = ap.asset_id
+      `);
+    }
+  },
 ];
 
 async function runMigrations(pool) {

@@ -5,7 +5,7 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { ConfirmDialog, Modal } from '../components/Modal'
 import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
-import { servicesApi, usersApi, groupsApi, settingsApi } from '../api'
+import { servicesApi, usersApi, groupsApi, settingsApi, maintenanceApi } from '../api'
 import { format } from 'date-fns'
 import { Trash2, ArrowLeft, Pencil, Save, X, Plus, ExternalLink, User, Mail, Cog, Building2, Search } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -25,6 +25,10 @@ export default function ServiceDetail() {
   const { hasRole } = useAuth()
   const [service, setService] = useState(null)
   const [maintenance, setMaintenance] = useState([])
+  const [maintenancePage, setMaintenancePage] = useState(1)
+  const [maintenanceTotal, setMaintenanceTotal] = useState(0)
+  const [maintenanceDetailOpen, setMaintenanceDetailOpen] = useState(false)
+  const [maintenanceDetail, setMaintenanceDetail] = useState(null)
   const [allServices, setAllServices] = useState([])
   const [tab, setTab] = useState('info')
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -52,9 +56,22 @@ export default function ServiceDetail() {
   const [officesModalOpen, setOfficesModalOpen] = useState(false)
   const [officeSearch, setOfficeSearch] = useState('')
 
+  const loadMaintenance = async (pageNum = 1) => {
+    try {
+      const r = await servicesApi.maintenance(id, { page: pageNum, limit: 25 })
+      const payload = r.data?.data ? r.data : { data: Array.isArray(r.data) ? r.data : [], total: Array.isArray(r.data) ? r.data.length : 0, page: pageNum, limit: 25 }
+      setMaintenance(payload.data || [])
+      setMaintenanceTotal(payload.total || 0)
+      setMaintenancePage(payload.page || pageNum)
+    } catch {
+      setMaintenance([])
+      setMaintenanceTotal(0)
+    }
+  }
+
   const load = () => {
     servicesApi.get(id).then(r => setService(r.data)).catch(() => navigate('/services'))
-    servicesApi.maintenance(id).then(r => setMaintenance(r.data)).catch(() => {})
+    loadMaintenance(1)
   }
 
   useEffect(() => { load() }, [id])
@@ -216,6 +233,16 @@ export default function ServiceDetail() {
       || String(l.supplier_name || '').toLowerCase().includes(q)
   })
   const assignedTargets = Array.isArray(service.user_targets) ? service.user_targets : []
+
+  const openMaintenanceDetail = async (maintenanceId) => {
+    try {
+      const r = await maintenanceApi.get(maintenanceId)
+      setMaintenanceDetail(r.data)
+      setMaintenanceDetailOpen(true)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Cannot load maintenance detail')
+    }
+  }
 
   const ownerFieldsJsx = (
     <div>
@@ -493,20 +520,40 @@ export default function ServiceDetail() {
 
         {/* Maintenance tab */}
         {tab === 'maintenance' && (
-          <div className="space-y-2">
-            {maintenance.length === 0 && <p className="text-gray-500 text-sm">No maintenance records</p>}
-            {maintenance.map(m => (
-              <Link key={m.id} to={`/maintenance/${m.id}`} className="card p-4 flex items-center justify-between hover:border-brand-300">
-                <div className="space-y-1">
-                  <p className="font-medium text-sm">{m.title}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                    <StatusBadge status={m.status} />
-                    <span>{format(new Date(m.scheduled_start), 'MMM dd yyyy HH:mm')}</span>
-                    {m.ticket_ref && <span className="text-brand-600 font-medium">Ticket: {m.ticket_ref}</span>}
-                  </div>
-                </div>
-              </Link>
-            ))}
+          <div className="space-y-3">
+            <div className="card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>{['Title','Status','Impact','Start','End','Ticket'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {maintenance.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-500">No maintenance records</td></tr>}
+                  {maintenance.map((m) => (
+                        <tr
+                          key={m.id}
+                          className="hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer"
+                          onClick={() => openMaintenanceDetail(m.id)}
+                          onDoubleClick={() => navigate(`/maintenance/${m.id}`)}
+                          title="Click: details modal · Double click: open maintenance page"
+                        >
+                          <td className="px-4 py-3 font-medium">{m.title}</td>
+                          <td className="px-4 py-3"><StatusBadge status={m.status} /></td>
+                          <td className="px-4 py-3"><CriticalityBadge criticality={m.impact_level || 'medium'} /></td>
+                          <td className="px-4 py-3 text-gray-500">{m.scheduled_start ? format(new Date(m.scheduled_start), 'MM/dd/yyyy HH:mm') : '—'}</td>
+                          <td className="px-4 py-3 text-gray-500">{m.scheduled_end ? format(new Date(m.scheduled_end), 'MM/dd/yyyy HH:mm') : '—'}</td>
+                          <td className="px-4 py-3 text-xs text-brand-600 font-medium">{m.ticket_ref || '—'}</td>
+                        </tr>
+                      ))}
+                </tbody>
+              </table>
+            </div>
+            {maintenanceTotal > 25 && (
+              <div className="flex items-center justify-end gap-2 text-sm">
+                <button className="btn-secondary" disabled={maintenancePage <= 1} onClick={() => loadMaintenance(maintenancePage - 1)}>Prev</button>
+                <span className="text-gray-500">Page {maintenancePage} / {Math.max(1, Math.ceil(maintenanceTotal / 25))}</span>
+                <button className="btn-secondary" disabled={maintenancePage >= Math.ceil(maintenanceTotal / 25)} onClick={() => loadMaintenance(maintenancePage + 1)}>Next</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -638,6 +685,50 @@ export default function ServiceDetail() {
           </div>
         )}
       </div>
+
+      {maintenanceDetailOpen && maintenanceDetail && (
+        <Modal title={`Maintenance: ${maintenanceDetail.title || 'Detail'}`} onClose={() => { setMaintenanceDetailOpen(false); setMaintenanceDetail(null) }} size="lg">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={maintenanceDetail.status} />
+              <CriticalityBadge criticality={maintenanceDetail.impact_level || 'medium'} />
+              {maintenanceDetail.ticket_ref && <span className="badge bg-indigo-100 text-indigo-700">Ticket: {maintenanceDetail.ticket_ref}</span>}
+              {maintenanceDetail.owner_approval_required && <span className={`badge ${maintenanceDetail.owner_approval_status === 'approved' ? 'bg-green-100 text-green-700' : maintenanceDetail.owner_approval_status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>Owner approval: {maintenanceDetail.owner_approval_status || 'pending'}</span>}
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm text-gray-600 dark:text-gray-300">
+              <div><span className="font-medium">Start:</span> {maintenanceDetail.scheduled_start ? format(new Date(maintenanceDetail.scheduled_start), 'MM/dd/yyyy HH:mm') : '—'}</div>
+              <div><span className="font-medium">End:</span> {maintenanceDetail.scheduled_end ? format(new Date(maintenanceDetail.scheduled_end), 'MM/dd/yyyy HH:mm') : '—'}</div>
+              <div><span className="font-medium">Actual start:</span> {maintenanceDetail.actual_start ? format(new Date(maintenanceDetail.actual_start), 'MM/dd/yyyy HH:mm') : '—'}</div>
+              <div><span className="font-medium">Actual end:</span> {maintenanceDetail.actual_end ? format(new Date(maintenanceDetail.actual_end), 'MM/dd/yyyy HH:mm') : '—'}</div>
+            </div>
+            {(maintenanceDetail.description || maintenanceDetail.notes || maintenanceDetail.reopen_reason) && (
+              <div className="space-y-1 text-sm">
+                {maintenanceDetail.description && <p className="text-gray-700 dark:text-gray-200">{maintenanceDetail.description}</p>}
+                {maintenanceDetail.notes && <p className="text-gray-600 dark:text-gray-300"><span className="font-medium">Notes:</span> {maintenanceDetail.notes}</p>}
+                {maintenanceDetail.reopen_reason && <p className="text-amber-700"><span className="font-medium">Reopen reason:</span> {maintenanceDetail.reopen_reason}</p>}
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-semibold mb-2">Timeline</p>
+              <div className="space-y-2 max-h-56 overflow-auto">
+                {(maintenanceDetail.statusHistory || []).length === 0 && <p className="text-xs text-gray-500">No timeline entries.</p>}
+                {(maintenanceDetail.statusHistory || []).map((h) => (
+                  <div key={h.id} className="text-xs rounded border border-gray-200 dark:border-gray-700 px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-gray-700 dark:text-gray-200">{h.status}</span>
+                      <span className="text-gray-500">{h.created_at ? format(new Date(h.created_at), 'MM/dd HH:mm') : '—'}</span>
+                    </div>
+                    {h.reason && <div className="text-gray-600 dark:text-gray-300 mt-0.5">{h.reason}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button type="button" className="btn-secondary" onClick={() => navigate(`/maintenance/${maintenanceDetail.id}`)}>Open maintenance page</button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {deleteConfirm && <ConfirmDialog title="Delete Service" message={`Delete "${service.name}"?`} danger confirmLabel="Delete" onConfirm={handleDelete} onCancel={() => setDeleteConfirm(false)} />}
 

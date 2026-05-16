@@ -5,7 +5,7 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { ConfirmDialog, Modal } from '../components/Modal'
 import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
-import { assetsApi, usersApi, groupsApi, settingsApi } from '../api'
+import { assetsApi, usersApi, groupsApi, settingsApi, maintenanceApi } from '../api'
 import { format } from 'date-fns'
 import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Mail, Cog, Building2, Search, Info } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -51,7 +51,12 @@ export default function AssetDetail() {
   const { hasRole } = useAuth()
   const [asset, setAsset] = useState(null)
   const [probes, setProbes] = useState([])
+  const [probeConfigs, setProbeConfigs] = useState([])
   const [maintenance, setMaintenance] = useState([])
+  const [maintenancePage, setMaintenancePage] = useState(1)
+  const [maintenanceTotal, setMaintenanceTotal] = useState(0)
+  const [maintenanceDetailOpen, setMaintenanceDetailOpen] = useState(false)
+  const [maintenanceDetail, setMaintenanceDetail] = useState(null)
   const [assetUsers, setAssetUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
   const [tab, setTab] = useState('info')
@@ -84,12 +89,36 @@ export default function AssetDetail() {
   // probe config modal
   const [probeConfigOpen, setProbeConfigOpen] = useState(false)
   const [probeForm, setProbeForm] = useState(null)
+  const [editingProbeId, setEditingProbeId] = useState(null)
   const [savingProbe, setSavingProbe] = useState(false)
+
+  const loadMaintenance = async (pageNum = 1) => {
+    try {
+      const r = await assetsApi.maintenance(id, { page: pageNum, limit: 25 })
+      const payload = r.data?.data ? r.data : { data: Array.isArray(r.data) ? r.data : [], total: Array.isArray(r.data) ? r.data.length : 0, page: pageNum, limit: 25 }
+      setMaintenance(payload.data || [])
+      setMaintenanceTotal(payload.total || 0)
+      setMaintenancePage(payload.page || pageNum)
+    } catch {
+      setMaintenance([])
+      setMaintenanceTotal(0)
+    }
+  }
+
+  const loadProbeConfigs = async () => {
+    try {
+      const r = await assetsApi.probeConfigs(id)
+      setProbeConfigs(Array.isArray(r.data) ? r.data : [])
+    } catch {
+      setProbeConfigs([])
+    }
+  }
 
   const load = () => {
     assetsApi.get(id).then(r => setAsset(r.data)).catch(() => navigate('/assets'))
     assetsApi.probes(id, { limit: 200 }).then(r => setProbes(r.data))
-    assetsApi.maintenance(id).then(r => setMaintenance(r.data))
+    loadProbeConfigs()
+    loadMaintenance(1)
   }
   
   useEffect(() => { load() }, [id])
@@ -184,19 +213,44 @@ export default function AssetDetail() {
 
   const openProbeConfig = () => {
     if (!asset) return
+    const probe = probeConfigs.find(p => p.legacy_slot) || null
+    const probeType = probe?.probe_type || asset.probe_type || 'https'
+    const probeTarget = probe?.probe_target || asset.probe_url || ''
+    setEditingProbeId(probe?.id || null)
     setProbeForm({
-      probe_enabled: asset.probe_enabled || false,
-      probe_type: asset.probe_type || 'https',
-      probe_url: asset.probe_url || '',
-      probe_interval_seconds: asset.probe_interval_seconds ?? 300,
-      probe_timeout_seconds: asset.probe_timeout_seconds ?? 10,
-      expected_status_code: asset.expected_status_code ?? 200,
-      failure_threshold: asset.failure_threshold ?? 2,
-      recovery_threshold: asset.recovery_threshold ?? 2,
-      pause_during_maintenance: asset.pause_during_maintenance !== false,
-      dns_record_type: asset.dns_record_type || 'A',
-      dns_expected_value: asset.dns_expected_value || '',
-      ssl_expiry_warning_days: asset.ssl_expiry_warning_days ?? 30,
+      name: probe?.name || 'Default probe',
+      probe_enabled: probe ? !!probe.probe_enabled : (asset.probe_enabled || false),
+      probe_type: probeType,
+      probe_url: probeTarget,
+      probe_interval_seconds: probe?.probe_interval_seconds ?? asset.probe_interval_seconds ?? 300,
+      probe_timeout_seconds: probe?.probe_timeout_seconds ?? asset.probe_timeout_seconds ?? 10,
+      expected_status_code: probe?.expected_status_code ?? asset.expected_status_code ?? 200,
+      failure_threshold: probe?.failure_threshold ?? asset.failure_threshold ?? 2,
+      recovery_threshold: probe?.recovery_threshold ?? asset.recovery_threshold ?? 2,
+      pause_during_maintenance: probe ? probe.pause_during_maintenance !== false : asset.pause_during_maintenance !== false,
+      dns_record_type: probe?.dns_record_type || asset.dns_record_type || 'A',
+      dns_expected_value: probe?.dns_expected_value || asset.dns_expected_value || '',
+      ssl_expiry_warning_days: probe?.ssl_expiry_warning_days ?? asset.ssl_expiry_warning_days ?? 30,
+    })
+    setProbeConfigOpen(true)
+  }
+
+  const openAdditionalProbeConfig = (probe = null) => {
+    setEditingProbeId(probe?.id || null)
+    setProbeForm({
+      name: probe?.name || '',
+      probe_enabled: probe ? !!probe.probe_enabled : true,
+      probe_type: probe?.probe_type || 'https',
+      probe_url: probe?.probe_target || '',
+      probe_interval_seconds: probe?.probe_interval_seconds ?? 300,
+      probe_timeout_seconds: probe?.probe_timeout_seconds ?? 10,
+      expected_status_code: probe?.expected_status_code ?? 200,
+      failure_threshold: probe?.failure_threshold ?? 2,
+      recovery_threshold: probe?.recovery_threshold ?? 2,
+      pause_during_maintenance: probe ? probe.pause_during_maintenance !== false : true,
+      dns_record_type: probe?.dns_record_type || 'A',
+      dns_expected_value: probe?.dns_expected_value || '',
+      ssl_expiry_warning_days: probe?.ssl_expiry_warning_days ?? 30,
     })
     setProbeConfigOpen(true)
   }
@@ -205,25 +259,54 @@ export default function AssetDetail() {
     if (!probeForm) return
     setSavingProbe(true)
     try {
-      await assetsApi.update(id, {
-        probe_enabled: probeForm.probe_enabled,
-        probe_type: probeForm.probe_type || null,
-        probe_url: probeForm.probe_url || null,
+      const payload = {
+        name: probeForm.name || null,
+        probe_enabled: !!probeForm.probe_enabled,
+        probe_type: probeForm.probe_type,
+        probe_target: probeForm.probe_url || '',
         probe_interval_seconds: Number(probeForm.probe_interval_seconds) || 300,
         probe_timeout_seconds: Number(probeForm.probe_timeout_seconds) || 10,
         expected_status_code: Number(probeForm.expected_status_code) || 200,
         failure_threshold: Number(probeForm.failure_threshold) || 2,
         recovery_threshold: Number(probeForm.recovery_threshold) || 2,
-        pause_during_maintenance: probeForm.pause_during_maintenance,
+        pause_during_maintenance: !!probeForm.pause_during_maintenance,
         dns_record_type: probeForm.dns_record_type || 'A',
         dns_expected_value: probeForm.dns_expected_value || null,
         ssl_expiry_warning_days: Number(probeForm.ssl_expiry_warning_days) || 30,
-      })
+      }
+      if (editingProbeId) {
+        await assetsApi.updateProbeConfig(id, editingProbeId, payload)
+      } else {
+        await assetsApi.createProbeConfig(id, payload)
+      }
       toast.success('Probe configuration saved')
       setProbeConfigOpen(false)
+      setEditingProbeId(null)
       load()
     } catch (err) { toast.error(err.response?.data?.error || 'Error saving probe config') }
     finally { setSavingProbe(false) }
+  }
+
+  const deleteProbeConfig = async (probeId) => {
+    try {
+      await assetsApi.deleteProbeConfig(id, probeId)
+      toast.success('Probe removed')
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error removing probe')
+    }
+  }
+
+
+
+  const openMaintenanceDetail = async (maintenanceId) => {
+    try {
+      const r = await maintenanceApi.get(maintenanceId)
+      setMaintenanceDetail(r.data)
+      setMaintenanceDetailOpen(true)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Cannot load maintenance detail')
+    }
   }
 
   const saveEdit = async () => {
@@ -499,34 +582,49 @@ export default function AssetDetail() {
 
         {tab === 'probes' && (
           <div className="space-y-4">
-            {/* Probe config header card */}
-            <div className="card p-4">
+            <div className="card p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2.5 h-2.5 rounded-full ${asset.probe_enabled ? 'bg-green-500' : 'bg-gray-300'}`} />
-                  {asset.probe_enabled
-                    ? <><ProbeFavicon probeType={asset.probe_type} probeUrl={asset.probe_url} /><span className="font-medium text-sm">Probe active — {asset.probe_type?.toUpperCase()} · {asset.probe_url}</span></>
-                    : <span className="font-medium text-sm">Probe not configured</span>
-                  }
-                </div>
+                <span className="text-sm font-semibold">Probe configurations ({probeConfigs.length})</span>
                 {canEdit && (
-                  <button className="btn-secondary text-xs" onClick={openProbeConfig}>
-                    {asset.probe_enabled ? 'Edit probe config' : 'Configure probe'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button className="btn-secondary text-xs" onClick={openProbeConfig}>Edit default</button>
+                    <button className="btn-primary text-xs" onClick={() => openAdditionalProbeConfig(null)}>Add probe</button>
+                  </div>
                 )}
               </div>
-              {asset.probe_enabled && (
-                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 dark:text-gray-400 pl-5">
-                  <span><span className="font-medium">Interval:</span> {asset.probe_interval_seconds}s</span>
-                  <span><span className="font-medium">Timeout:</span> {asset.probe_timeout_seconds}s</span>
-                  {['http','https'].includes(asset.probe_type) && <span><span className="font-medium">Expected HTTP:</span> {asset.expected_status_code}</span>}
-                  {asset.probe_type === 'dns' && <span><span className="font-medium">Record type:</span> {asset.dns_record_type || 'A'}{asset.dns_expected_value ? ` · expects: ${asset.dns_expected_value}` : ''}</span>}
-                  {asset.probe_type === 'tls' && <span><span className="font-medium">Warn if expiry &lt;</span> {asset.ssl_expiry_warning_days ?? 30} days</span>}
-                  <span><span className="font-medium">Fail threshold:</span> {asset.failure_threshold ?? 2}</span>
-                  <span><span className="font-medium">Recovery:</span> {asset.recovery_threshold ?? 2}</span>
-                  {asset.pause_during_maintenance && <span className="text-amber-600">⏸ Paused during maintenance</span>}
-                </div>
-              )}
+              {probeConfigs.length === 0 && <p className="text-sm text-gray-500">No probe configured.</p>}
+              {probeConfigs.map((p) => {
+                const state = p.current_state === 'major_outage' ? 'bg-red-500' : (p.current_state === 'operational' ? 'bg-green-500' : 'bg-gray-400')
+                return (
+                  <div key={p.id} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <span className={`w-2.5 h-2.5 rounded-full ${state}`} />
+                          <ProbeFavicon probeType={p.probe_type} probeUrl={p.probe_target} />
+                          <span className="truncate">{p.name || 'Probe'}</span>
+                          {p.legacy_slot && <span className="badge bg-brand-100 text-brand-700">Default</span>}
+                          {!p.probe_enabled && <span className="badge bg-gray-100 text-gray-600">Disabled</span>}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">{String(p.probe_type || '').toUpperCase()} · {p.probe_target}</div>
+                      </div>
+                      {canEdit && (
+                        <div className="flex items-center gap-1">
+                          <button className="btn-secondary text-xs" onClick={() => openAdditionalProbeConfig(p)}>Edit</button>
+                          {!p.legacy_slot && <button className="btn-danger text-xs" onClick={() => deleteProbeConfig(p.id)}>Delete</button>}
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
+                      <span>Interval: {p.probe_interval_seconds}s</span>
+                      <span>Timeout: {p.probe_timeout_seconds}s</span>
+                      <span>Fail/Rec: {p.failure_threshold}/{p.recovery_threshold}</span>
+                      {p.probe_type === 'dns' && <span>DNS: {p.dns_record_type}{p.dns_expected_value ? ` · ${p.dns_expected_value}` : ''}</span>}
+                      {p.probe_type === 'tls' && <span>TLS warn: {p.ssl_expiry_warning_days}d</span>}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
             <div className="card overflow-hidden">
               <table className="w-full text-sm">
@@ -548,7 +646,7 @@ export default function AssetDetail() {
                         type="button"
                         className="inline-flex items-center gap-1 text-brand-600 hover:underline text-xs"
                         title={[
-                          `Type: ${p.status_code ? 'HTTP' : p.dns_response ? 'DNS' : p.ssl_cert_expiry ? 'TLS' : asset.probe_type?.toUpperCase() || 'Probe'}`,
+                          `Type: ${p.status_code ? 'HTTP' : p.dns_response ? 'DNS' : p.ssl_cert_expiry ? 'TLS' : 'Probe'}`, 
                           `Status: ${p.status_code || '—'}`,
                           `Error: ${p.error_message || '—'}`,
                           `TLS expiry: ${p.ssl_cert_expiry ? String(p.ssl_cert_expiry).slice(0, 10) : '—'}`,
@@ -648,20 +746,40 @@ export default function AssetDetail() {
         )}
 
         {tab === 'maintenance' && (
-          <div className="space-y-2">
-            {maintenance.length === 0 && <p className="text-gray-500 text-sm">No maintenance records</p>}
-            {maintenance.map(m => (
-              <Link key={m.id} to={`/maintenance/${m.id}`} className="card p-4 flex items-center justify-between hover:border-brand-300">
-                <div className="space-y-1">
-                  <p className="font-medium text-sm">{m.title}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                    <StatusBadge status={m.status} />
-                    <span>{format(new Date(m.scheduled_start), 'MMM dd yyyy HH:mm')}</span>
-                    {m.ticket_ref && <span className="text-brand-600 font-medium">Ticket: {m.ticket_ref}</span>}
-                  </div>
-                </div>
-              </Link>
-            ))}
+          <div className="space-y-3">
+            <div className="card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                  <tr>{['Title','Status','Impact','Start','End','Ticket'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {maintenance.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-500">No maintenance records</td></tr>}
+                  {maintenance.map((m) => (
+                        <tr
+                          key={m.id}
+                          className="hover:bg-gray-50 dark:hover:bg-gray-700/40 cursor-pointer"
+                          onClick={() => openMaintenanceDetail(m.id)}
+                          onDoubleClick={() => navigate(`/maintenance/${m.id}`)}
+                          title="Click: details modal · Double click: open maintenance page"
+                        >
+                          <td className="px-4 py-3 font-medium">{m.title}</td>
+                          <td className="px-4 py-3"><StatusBadge status={m.status} /></td>
+                          <td className="px-4 py-3"><CriticalityBadge criticality={m.impact_level || 'medium'} /></td>
+                          <td className="px-4 py-3 text-gray-500">{m.scheduled_start ? format(new Date(m.scheduled_start), 'MM/dd/yyyy HH:mm') : '—'}</td>
+                          <td className="px-4 py-3 text-gray-500">{m.scheduled_end ? format(new Date(m.scheduled_end), 'MM/dd/yyyy HH:mm') : '—'}</td>
+                          <td className="px-4 py-3 text-xs text-brand-600 font-medium">{m.ticket_ref || '—'}</td>
+                        </tr>
+                      ))}
+                </tbody>
+              </table>
+            </div>
+            {maintenanceTotal > 25 && (
+              <div className="flex items-center justify-end gap-2 text-sm">
+                <button className="btn-secondary" disabled={maintenancePage <= 1} onClick={() => loadMaintenance(maintenancePage - 1)}>Prev</button>
+                <span className="text-gray-500">Page {maintenancePage} / {Math.max(1, Math.ceil(maintenanceTotal / 25))}</span>
+                <button className="btn-secondary" disabled={maintenancePage >= Math.ceil(maintenanceTotal / 25)} onClick={() => loadMaintenance(maintenancePage + 1)}>Next</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -830,9 +948,53 @@ export default function AssetDetail() {
         ldapEnabled={ldapEnabled}
       />
 
+      {maintenanceDetailOpen && maintenanceDetail && (
+        <Modal title={`Maintenance: ${maintenanceDetail.title || 'Detail'}`} onClose={() => { setMaintenanceDetailOpen(false); setMaintenanceDetail(null) }} size="lg">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={maintenanceDetail.status} />
+              <CriticalityBadge criticality={maintenanceDetail.impact_level || 'medium'} />
+              {maintenanceDetail.ticket_ref && <span className="badge bg-indigo-100 text-indigo-700">Ticket: {maintenanceDetail.ticket_ref}</span>}
+              {maintenanceDetail.owner_approval_required && <span className={`badge ${maintenanceDetail.owner_approval_status === 'approved' ? 'bg-green-100 text-green-700' : maintenanceDetail.owner_approval_status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>Owner approval: {maintenanceDetail.owner_approval_status || 'pending'}</span>}
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm text-gray-600 dark:text-gray-300">
+              <div><span className="font-medium">Start:</span> {maintenanceDetail.scheduled_start ? format(new Date(maintenanceDetail.scheduled_start), 'MM/dd/yyyy HH:mm') : '—'}</div>
+              <div><span className="font-medium">End:</span> {maintenanceDetail.scheduled_end ? format(new Date(maintenanceDetail.scheduled_end), 'MM/dd/yyyy HH:mm') : '—'}</div>
+              <div><span className="font-medium">Actual start:</span> {maintenanceDetail.actual_start ? format(new Date(maintenanceDetail.actual_start), 'MM/dd/yyyy HH:mm') : '—'}</div>
+              <div><span className="font-medium">Actual end:</span> {maintenanceDetail.actual_end ? format(new Date(maintenanceDetail.actual_end), 'MM/dd/yyyy HH:mm') : '—'}</div>
+            </div>
+            {(maintenanceDetail.description || maintenanceDetail.notes || maintenanceDetail.reopen_reason) && (
+              <div className="space-y-1 text-sm">
+                {maintenanceDetail.description && <p className="text-gray-700 dark:text-gray-200">{maintenanceDetail.description}</p>}
+                {maintenanceDetail.notes && <p className="text-gray-600 dark:text-gray-300"><span className="font-medium">Notes:</span> {maintenanceDetail.notes}</p>}
+                {maintenanceDetail.reopen_reason && <p className="text-amber-700"><span className="font-medium">Reopen reason:</span> {maintenanceDetail.reopen_reason}</p>}
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-semibold mb-2">Timeline</p>
+              <div className="space-y-2 max-h-56 overflow-auto">
+                {(maintenanceDetail.statusHistory || []).length === 0 && <p className="text-xs text-gray-500">No timeline entries.</p>}
+                {(maintenanceDetail.statusHistory || []).map((h) => (
+                  <div key={h.id} className="text-xs rounded border border-gray-200 dark:border-gray-700 px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-gray-700 dark:text-gray-200">{h.status}</span>
+                      <span className="text-gray-500">{h.created_at ? format(new Date(h.created_at), 'MM/dd HH:mm') : '—'}</span>
+                    </div>
+                    {h.reason && <div className="text-gray-600 dark:text-gray-300 mt-0.5">{h.reason}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button type="button" className="btn-secondary" onClick={() => navigate(`/maintenance/${maintenanceDetail.id}`)}>Open maintenance page</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* ── Probe Configuration Modal ────────────────────────────────────── */}
       {probeConfigOpen && probeForm && (
-        <Modal title="Probe Configuration" onClose={() => setProbeConfigOpen(false)} size="md">
+        <Modal title={editingProbeId ? 'Edit Probe Configuration' : 'Add Probe Configuration'} onClose={() => { setProbeConfigOpen(false); setEditingProbeId(null) }} size="md">
           <div className="space-y-4">
             <label className="flex items-center gap-3 cursor-pointer select-none">
               <input
@@ -947,7 +1109,7 @@ export default function AssetDetail() {
             )}
 
             <div className="flex justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
-              <button type="button" className="btn-secondary" onClick={() => setProbeConfigOpen(false)}>Cancel</button>
+              <button type="button" className="btn-secondary" onClick={() => { setProbeConfigOpen(false); setEditingProbeId(null) }}>Cancel</button>
               <button type="button" className="btn-primary" onClick={saveProbeConfig} disabled={savingProbe}>
                 {savingProbe ? 'Saving...' : 'Save'}
               </button>
