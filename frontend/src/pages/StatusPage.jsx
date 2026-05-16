@@ -481,14 +481,16 @@ export default function StatusPage() {
               <div key={s.id}>
                 <div
                   className="flex items-center justify-between px-4 sm:px-5 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 select-none"
-                  onDoubleClick={() => setExpandedService(expandedService === s.id ? null : s.id)}
-                  title="Double-click to expand details"
+                  onClick={() => setExpandedService(expandedService === s.id ? null : s.id)}
                 >
                   <div className="flex items-center gap-3">
                     <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${STATUS_DOT[s.status] || STATUS_DOT.unknown}`} />
                     <span className="font-medium text-sm">{s.name}</span>
                   </div>
-                  <span className="text-xs text-gray-500 capitalize">{s.status?.replace(/_/g, ' ')}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 capitalize">{s.status?.replace(/_/g, ' ')}</span>
+                    {expandedService === s.id ? <ChevronUp size={13} className="text-gray-400" /> : <ChevronDown size={13} className="text-gray-400" />}
+                  </div>
                 </div>
                 {expandedService === s.id && (
                   <div className="px-4 sm:px-5 pb-4 pt-1 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 space-y-1">
