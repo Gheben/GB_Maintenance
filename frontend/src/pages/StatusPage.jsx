@@ -84,9 +84,16 @@ function MaintenanceCard({ m, colorClass }) {
     <div className="px-4 sm:px-5 py-4">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <p className="font-medium text-sm">{m.title}</p>
-        <span className={`text-xs badge ${colorClass} shrink-0`}>
-          {m.status === 'in_progress' ? 'In Progress' : m.status === 'completed' ? 'Completed' : 'Scheduled'}
-        </span>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className={`text-xs badge ${colorClass}`}>
+            {m.status === 'in_progress' ? 'In Progress' : m.status === 'completed' ? 'Completed' : 'Scheduled'}
+          </span>
+          {m.impact_level && (
+            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${IMPACT_BADGE[m.impact_level] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+              Impact: {impactLabel(m.impact_level)}
+            </span>
+          )}
+        </div>
       </div>
       <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
         {m.status === 'in_progress' && m.actual_start && (
@@ -97,11 +104,6 @@ function MaintenanceCard({ m, colorClass }) {
         )}
         {m.status === 'scheduled' && m.scheduled_start && (
           <span>{fmt(m.scheduled_start)} → {fmt(m.scheduled_end, 'HH:mm MM/dd')}</span>
-        )}
-        {m.impact_level && (
-          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-medium ${IMPACT_BADGE[m.impact_level] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-            Impact: {impactLabel(m.impact_level)}
-          </span>
         )}
       </div>
       {m.description && <p className="text-xs text-gray-400 mt-1">{m.description}</p>}
