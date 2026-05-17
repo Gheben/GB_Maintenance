@@ -86,6 +86,7 @@ export default function AssetDetail() {
   const [officesModalOpen, setOfficesModalOpen] = useState(false)
   const [officeSearch, setOfficeSearch] = useState('')
   const [probeHistoryOpen, setProbeHistoryOpen] = useState(false)
+  const [probeHistoryForProbeId, setProbeHistoryForProbeId] = useState(null)
   const [probeDetails, setProbeDetails] = useState(null)
   // probe config modal
   const [probeConfigOpen, setProbeConfigOpen] = useState(false)
@@ -532,19 +533,9 @@ export default function AssetDetail() {
                 {asset.owner_email && <a href={`mailto:${asset.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs"><Mail size={12} />{asset.owner_email}</a>}
               </div>
             )}
-            {asset.probe_enabled && (
-              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm space-y-1">
-                <div className="font-semibold text-gray-700 dark:text-gray-200 mb-1">Probe</div>
-                <div className="flex flex-wrap gap-x-6 gap-y-1 text-gray-600 dark:text-gray-300 text-xs">
-                  <span><span className="font-medium">Type:</span> {asset.probe_type}</span>
-                  <span><span className="font-medium">Target:</span> {asset.probe_url}</span>
-                  <span><span className="font-medium">Interval:</span> {asset.probe_interval_seconds}s</span>
-                  <span><span className="font-medium">Timeout:</span> {asset.probe_timeout_seconds}s</span>
-                  {asset.probe_type !== 'tcp' && <span><span className="font-medium">Expected:</span> {asset.expected_status_code}</span>}
-                  <span><span className="font-medium">Fail threshold:</span> {asset.failure_threshold ?? 2}</span>
-                  <span><span className="font-medium">Recovery threshold:</span> {asset.recovery_threshold ?? 2}</span>
-                  {asset.pause_during_maintenance && <span className="text-amber-600">⏸ Paused during maintenance</span>}
-                </div>
+            {probeConfigs.length > 0 && (
+              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm">
+                <div className="font-semibold text-gray-700 dark:text-gray-200">Probes configured: {probeConfigs.length}</div>
               </div>
             )}
           </div>
@@ -612,10 +603,7 @@ export default function AssetDetail() {
                     </button>
                   )}
                   {canEdit && (
-                    <>
-                      <button className="btn-secondary text-xs" onClick={openProbeConfig}>Edit default</button>
-                      <button className="btn-primary text-xs" onClick={() => openAdditionalProbeConfig(null)}>Add probe</button>
-                    </>
+                    <button className="btn-primary text-xs" onClick={() => openAdditionalProbeConfig(null)}>Add probe</button>
                   )}
                 </div>
               </div>
@@ -673,6 +661,13 @@ export default function AssetDetail() {
                             </div>
                           ))}
                         </div>
+                        {probes.filter(res => res.probe_id === p.id).length > 3 && (
+                          <div className="mt-2 flex justify-end">
+                            <button type="button" className="btn-secondary text-xs" onClick={() => { setProbeHistoryForProbeId(p.id); setProbeHistoryOpen(true) }}>
+                              Show all ({probes.filter(res => res.probe_id === p.id).length})
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1116,15 +1111,15 @@ export default function AssetDetail() {
         </Modal>
       )}
 
-      {probeHistoryOpen && (
-        <Modal title="All probe history" onClose={() => setProbeHistoryOpen(false)} size="xl">
+      {probeHistoryOpen && probeHistoryForProbeId && (
+        <Modal title={`Probe history - ${probeConfigs.find(p => p.id === probeHistoryForProbeId)?.name || 'Probe'}`} onClose={() => { setProbeHistoryOpen(false); setProbeHistoryForProbeId(null) }} size="xl">
           <div className="max-h-[70vh] overflow-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
                 <tr>{['Result','Resp. ms','Info','Date'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {probes.map(p => (
+                {probes.filter(p => p.probe_id === probeHistoryForProbeId).map(p => (
                   <tr key={p.id}>
                     <td className="px-4 py-2">{p.success ? '✅' : '❌'}</td>
                     <td className="px-4 py-2">{p.response_time_ms ?? '—'}</td>

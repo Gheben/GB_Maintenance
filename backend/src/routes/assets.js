@@ -293,9 +293,10 @@ router.get('/:id/history', async (req, res) => {
 // ─── GET /api/assets/:id/probes ───────────────────────────────────────────────
 router.get('/:id/probes', async (req, res) => {
   const { limit = 100 } = req.query;
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const rows = await getMany(
-    `SELECT * FROM probe_results WHERE asset_id=$1 ORDER BY probed_at DESC LIMIT $2`,
-    [req.params.id, parseInt(limit)]
+    `SELECT * FROM probe_results WHERE asset_id=$1 AND probed_at >= $3 ORDER BY probed_at DESC LIMIT $2`,
+    [req.params.id, parseInt(limit), thirtyDaysAgo]
   );
   res.json(rows);
 });
