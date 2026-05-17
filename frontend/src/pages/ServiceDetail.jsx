@@ -11,7 +11,7 @@ import { Trash2, ArrowLeft, Pencil, Save, X, Plus, ExternalLink, User, Mail, Cog
 import { useAuth } from '../contexts/AuthContext'
 
 const CRITICALITIES = ['critical','high','medium','low']
-const TABS = [['info','Info'],['deps','Dependencies'],['assets','Linked Assets'],['probes','Probes'],['licenses','Licenses'],['maintenance','Maintenance'],['users','Users']]
+const TABS = [['info','Info'],['deps','Dependencies'],['assets','Linked Assets'],['licenses','Licenses'],['probes','Probes'],['maintenance','Maintenance'],['users','Users']]
 
 function approvalStatusMeta(status) {
   if (status === 'approved') return { label: 'Approved', cls: 'bg-green-100 text-green-700' }
@@ -68,6 +68,7 @@ export default function ServiceDetail() {
   const [probeHistoryOpen, setProbeHistoryOpen] = useState(false)
   const [probeHistoryForProbeId, setProbeHistoryForProbeId] = useState(null)
   const [probeDetails, setProbeDetails] = useState(null)
+  const [probeDeleteTarget, setProbeDeleteTarget] = useState(null)
 
   const loadMaintenance = async (pageNum = 1) => {
     try {
@@ -317,6 +318,7 @@ export default function ServiceDetail() {
       toast.success('Probe removed')
       const r = await servicesApi.probeConfigs(id)
       setProbeConfigs(Array.isArray(r.data) ? r.data : [])
+      setProbeDeleteTarget(null)
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error removing probe')
     }
@@ -605,7 +607,7 @@ export default function ServiceDetail() {
                         {canEdit && (
                           <>
                             <button className="btn-secondary text-xs" onClick={() => openAdditionalProbeConfig(p)}>Edit</button>
-                            <button className="btn-danger text-xs" onClick={() => { if (window.confirm('Delete this probe?')) deleteProbeConfig(p.id) }}>Delete</button>
+                            <button className="btn-danger text-xs" onClick={() => setProbeDeleteTarget({ id: p.id, name: p.name })}>Delete</button>
                           </>
                         )}
                       </div>
@@ -1055,6 +1057,17 @@ export default function ServiceDetail() {
           confirmLabel="Remove"
           onConfirm={confirmRemoveDependency}
           onCancel={() => setDepDeleteTarget(null)}
+        />
+      )}
+
+      {probeDeleteTarget && (
+        <ConfirmDialog
+          title="Delete Probe"
+          message={`Delete probe "${probeDeleteTarget.name}"?`}
+          danger
+          confirmLabel="Delete"
+          onConfirm={() => deleteProbeConfig(probeDeleteTarget.id)}
+          onCancel={() => setProbeDeleteTarget(null)}
         />
       )}
 
