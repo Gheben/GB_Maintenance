@@ -533,11 +533,6 @@ export default function AssetDetail() {
                 {asset.owner_email && <a href={`mailto:${asset.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs"><Mail size={12} />{asset.owner_email}</a>}
               </div>
             )}
-            {probeConfigs.length > 0 && (
-              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-sm">
-                <div className="font-semibold text-gray-700 dark:text-gray-200">Probes configured: {probeConfigs.length}</div>
-              </div>
-            )}
           </div>
         ))}
 

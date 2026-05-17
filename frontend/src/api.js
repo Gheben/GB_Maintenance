@@ -112,6 +112,14 @@ export const servicesApi = {
   users: (id) => api.get(`/services/${id}/users`),
   licenses: (id) => api.get(`/services/${id}/licenses`),
   updateLicenses: (id, licenseIds) => api.put(`/services/${id}/licenses`, { license_ids: licenseIds }),
+  // Probe endpoints
+  probeConfigs: (id) => api.get(`/services/${id}/probe-configs`),
+  createProbeConfig: (id, data) => api.post(`/services/${id}/probe-configs`, data),
+  updateProbeConfig: (id, probeId, data) => api.put(`/services/${id}/probe-configs/${probeId}`, data),
+  deleteProbeConfig: (id, probeId) => api.delete(`/services/${id}/probe-configs/${probeId}`),
+  probeNow: (id) => api.post(`/services/${id}/probe`),
+  probeNowById: (id, probeId) => api.post(`/services/${id}/probe-configs/${probeId}/run`),
+  probes: (id, params) => api.get(`/services/${id}/probes`, { params }),
 }
 
 // ─── Maintenance ──────────────────────────────────────────────────────────────

@@ -1615,6 +1615,63 @@ const MIGRATIONS = [
       `);
     }
   },
+  {
+    version: 37,
+    name: 'service_probes_multi_probe_support',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS service_probes (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+          name VARCHAR(200),
+          probe_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          probe_type VARCHAR(20) NOT NULL,
+          probe_target TEXT NOT NULL,
+          probe_interval_seconds INTEGER NOT NULL DEFAULT 300,
+          probe_timeout_seconds INTEGER NOT NULL DEFAULT 10,
+          expected_status_code INTEGER,
+          failure_threshold INTEGER NOT NULL DEFAULT 2,
+          recovery_threshold INTEGER NOT NULL DEFAULT 2,
+          pause_during_maintenance BOOLEAN NOT NULL DEFAULT TRUE,
+          dns_record_type VARCHAR(10) NOT NULL DEFAULT 'A',
+          dns_expected_value TEXT,
+          ssl_expiry_warning_days INTEGER NOT NULL DEFAULT 30,
+          legacy_slot BOOLEAN NOT NULL DEFAULT FALSE,
+          last_probed_at TIMESTAMPTZ,
+          next_probe_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          consecutive_failures INTEGER NOT NULL DEFAULT 0,
+          consecutive_successes INTEGER NOT NULL DEFAULT 0,
+          current_state VARCHAR(30) NOT NULL DEFAULT 'unknown',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_service_probes_service ON service_probes(service_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_service_probes_due ON service_probes(next_probe_at) WHERE probe_enabled = true`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_service_probes_service_state ON service_probes(service_id, current_state)`);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_service_probes_legacy_slot ON service_probes(service_id) WHERE legacy_slot = true`);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS service_probe_results (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          service_id UUID NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+          probe_id UUID REFERENCES service_probes(id) ON DELETE SET NULL,
+          success BOOLEAN NOT NULL,
+          response_time_ms INTEGER,
+          status_code INTEGER,
+          error_message TEXT,
+          ssl_cert_expiry DATE,
+          dns_response TEXT,
+          probed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_service_probe_results_service ON service_probe_results(service_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_service_probe_results_probe_recent ON service_probe_results(probe_id, probed_at DESC)`);
+    }
+  },
 ];
 
 async function runMigrations(pool) {

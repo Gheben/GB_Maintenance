@@ -7,11 +7,11 @@ import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { servicesApi, usersApi, groupsApi, settingsApi, maintenanceApi } from '../api'
 import { format } from 'date-fns'
-import { Trash2, ArrowLeft, Pencil, Save, X, Plus, ExternalLink, User, Mail, Cog, Building2, Search } from 'lucide-react'
+import { Trash2, ArrowLeft, Pencil, Save, X, Plus, ExternalLink, User, Mail, Cog, Building2, Search, Play, Info } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CRITICALITIES = ['critical','high','medium','low']
-const TABS = [['info','Info'],['deps','Dependencies'],['assets','Linked Assets'],['licenses','Licenses'],['maintenance','Maintenance'],['users','Users']]
+const TABS = [['info','Info'],['deps','Dependencies'],['assets','Linked Assets'],['probes','Probes'],['licenses','Licenses'],['maintenance','Maintenance'],['users','Users']]
 
 function approvalStatusMeta(status) {
   if (status === 'approved') return { label: 'Approved', cls: 'bg-green-100 text-green-700' }
@@ -56,6 +56,19 @@ export default function ServiceDetail() {
   const [officesModalOpen, setOfficesModalOpen] = useState(false)
   const [officeSearch, setOfficeSearch] = useState('')
 
+  // Probe states
+  const [probeConfigs, setProbeConfigs] = useState([])
+  const [probes, setProbes] = useState([])
+  const [probeForm, setProbeForm] = useState(null)
+  const [probeConfigOpen, setProbeConfigOpen] = useState(false)
+  const [editingProbeId, setEditingProbeId] = useState(null)
+  const [probing, setProbing] = useState(false)
+  const [probingProbeId, setProbingProbeId] = useState(null)
+  const [savingProbe, setSavingProbe] = useState(false)
+  const [probeHistoryOpen, setProbeHistoryOpen] = useState(false)
+  const [probeHistoryForProbeId, setProbeHistoryForProbeId] = useState(null)
+  const [probeDetails, setProbeDetails] = useState(null)
+
   const loadMaintenance = async (pageNum = 1) => {
     try {
       const r = await servicesApi.maintenance(id, { page: pageNum, limit: 25 })
@@ -85,6 +98,10 @@ export default function ServiceDetail() {
     }
     if (tab === 'licenses') {
       servicesApi.licenses(id).then(r => setLicenseRows(Array.isArray(r.data) ? r.data : [])).catch(() => setLicenseRows([]))
+    }
+    if (tab === 'probes') {
+      servicesApi.probeConfigs(id).then(r => setProbeConfigs(Array.isArray(r.data) ? r.data : [])).catch(() => setProbeConfigs([]))
+      servicesApi.probes(id, { limit: 200 }).then(r => setProbes(Array.isArray(r.data) ? r.data : [])).catch(() => setProbes([]))
     }
     if (tab === 'users') {
       servicesApi.users(id).then(r => setServiceUsers(Array.isArray(r.data) ? r.data : [])).catch(() => setServiceUsers([]))
@@ -206,6 +223,106 @@ export default function ServiceDetail() {
     setLicenseRows((rows) => rows.map((x) => x.id === licenseRemoveTarget.id ? { ...x, assigned: false } : x))
     setLicenseRemoveTarget(null)
   }
+
+  const handleProbeNow = async () => {
+    setProbing(true)
+    try {
+      await servicesApi.probeNow(id)
+      toast.success('Probe started')
+      const r = await servicesApi.probes(id, { limit: 200 })
+      setProbes(r.data)
+      const sr = await servicesApi.get(id)
+      setService(sr.data)
+    } catch (err) { toast.error('Probe error') }
+    finally { setProbing(false) }
+  }
+
+  const handleProbeNowById = async (probeId) => {
+    setProbingProbeId(probeId)
+    try {
+      await servicesApi.probeNowById(id, probeId)
+      toast.success('Probe running')
+      const r = await servicesApi.probes(id, { limit: 200 })
+      setProbes(r.data)
+      const sr = await servicesApi.get(id)
+      setService(sr.data)
+    } catch (err) { toast.error('Probe error') }
+    finally { setProbingProbeId(null) }
+  }
+
+  const openAdditionalProbeConfig = (probe = null) => {
+    setEditingProbeId(probe?.id || null)
+    setProbeForm({
+      name: probe?.name || '',
+      probe_type: probe?.probe_type || 'https',
+      probe_url: probe?.probe_target || '',
+      probe_interval_seconds: probe?.probe_interval_seconds ?? 300,
+      probe_timeout_seconds: probe?.probe_timeout_seconds ?? 10,
+      expected_status_code: probe?.expected_status_code ?? 200,
+      failure_threshold: probe?.failure_threshold ?? 2,
+      recovery_threshold: probe?.recovery_threshold ?? 2,
+      pause_during_maintenance: probe ? probe.pause_during_maintenance !== false : true,
+      dns_record_type: probe?.dns_record_type || 'A',
+      dns_expected_value: probe?.dns_expected_value || '',
+      ssl_expiry_warning_days: probe?.ssl_expiry_warning_days ?? 30,
+    })
+    setProbeConfigOpen(true)
+  }
+
+  const saveProbeConfig = async () => {
+    if (!probeForm) return
+    if (!probeForm.probe_url || probeForm.probe_url.trim() === '') {
+      toast.error('Probe target URL is required')
+      return
+    }
+    setSavingProbe(true)
+    try {
+      const payload = {
+        name: probeForm.name || null,
+        probe_enabled: true,
+        probe_type: probeForm.probe_type,
+        probe_target: probeForm.probe_url.trim(),
+        probe_interval_seconds: Number(probeForm.probe_interval_seconds) || 300,
+        probe_timeout_seconds: Number(probeForm.probe_timeout_seconds) || 10,
+        expected_status_code: Number(probeForm.expected_status_code) || 200,
+        failure_threshold: Number(probeForm.failure_threshold) || 2,
+        recovery_threshold: Number(probeForm.recovery_threshold) || 2,
+        pause_during_maintenance: !!probeForm.pause_during_maintenance,
+        dns_record_type: probeForm.dns_record_type || 'A',
+        dns_expected_value: probeForm.dns_expected_value || null,
+        ssl_expiry_warning_days: Number(probeForm.ssl_expiry_warning_days) || 30,
+      }
+      if (editingProbeId) {
+        await servicesApi.updateProbeConfig(id, editingProbeId, payload)
+      } else {
+        await servicesApi.createProbeConfig(id, payload)
+      }
+      toast.success('Probe configuration saved')
+      setProbeConfigOpen(false)
+      setEditingProbeId(null)
+      const r = await servicesApi.probeConfigs(id)
+      setProbeConfigs(Array.isArray(r.data) ? r.data : [])
+    } catch (err) {
+      const errData = err.response?.data
+      const msg = errData?.error || errData?.errors?.[0]?.msg || 'Error saving probe config'
+      toast.error(msg)
+      console.error('[ProbeConfig] save error:', errData)
+    }
+    finally { setSavingProbe(false) }
+  }
+
+  const deleteProbeConfig = async (probeId) => {
+    try {
+      await servicesApi.deleteProbeConfig(id, probeId)
+      toast.success('Probe removed')
+      const r = await servicesApi.probeConfigs(id)
+      setProbeConfigs(Array.isArray(r.data) ? r.data : [])
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error removing probe')
+    }
+  }
+
+  const openProbeDetails = (probe) => setProbeDetails(probe)
 
   if (!service) return <Layout title="Service"><div className="text-center py-16 text-gray-500">Loading...</div></Layout>
 
@@ -447,6 +564,91 @@ export default function ServiceDetail() {
           </div>
         )}
 
+        {/* Probes tab */}
+        {tab === 'probes' && (
+          <div className="space-y-4">
+            <div className="card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold">Probe configurations ({probeConfigs.length})</span>
+                <div className="flex items-center gap-2">
+                  {probeConfigs.length === 1 && probeConfigs[0].probe_enabled && (
+                    <button className="btn-secondary text-xs flex items-center gap-1" disabled={probing} onClick={handleProbeNow}>
+                      <Play size={12} />{probing ? 'Probing...' : 'Run Now'}
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button className="btn-primary text-xs" onClick={() => openAdditionalProbeConfig(null)}>Add probe</button>
+                  )}
+                </div>
+              </div>
+              {probeConfigs.length === 0 && <p className="text-sm text-gray-500">No probe configured.</p>}
+              {probeConfigs.map((p) => {
+                const state = p.current_state === 'major_outage' ? 'bg-red-500' : (p.current_state === 'operational' ? 'bg-green-500' : 'bg-gray-400')
+                const probeResults = probes.filter(res => res.probe_id === p.id).slice(0, 3)
+                return (
+                  <div key={p.id} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <span className={`w-2.5 h-2.5 rounded-full ${state}`} />
+                          <span className="truncate">{p.name || 'Probe'}</span>
+                          {!p.probe_enabled && <span className="badge bg-gray-100 text-gray-600">Disabled</span>}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">{String(p.probe_type || '').toUpperCase()} · {p.probe_target}</div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {probeConfigs.length > 1 && p.probe_enabled && (
+                          <button className="btn-secondary text-xs flex items-center gap-1" disabled={probingProbeId === p.id} onClick={() => handleProbeNowById(p.id)}>
+                            <Play size={11} />{probingProbeId === p.id ? 'Running...' : 'Run'}
+                          </button>
+                        )}
+                        {canEdit && (
+                          <>
+                            <button className="btn-secondary text-xs" onClick={() => openAdditionalProbeConfig(p)}>Edit</button>
+                            <button className="btn-danger text-xs" onClick={() => { if (window.confirm('Delete this probe?')) deleteProbeConfig(p.id) }}>Delete</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
+                      <span>Interval: {p.probe_interval_seconds}s</span>
+                      <span>Timeout: {p.probe_timeout_seconds}s</span>
+                      <span>Fail/Rec: {p.failure_threshold}/{p.recovery_threshold}</span>
+                      {p.probe_type === 'dns' && <span>DNS: {p.dns_record_type}{p.dns_expected_value ? ` · ${p.dns_expected_value}` : ''}</span>}
+                      {p.probe_type === 'tls' && <span>TLS warn: {p.ssl_expiry_warning_days}d</span>}
+                    </div>
+                    {/* Probe results for this specific probe */}
+                    {probeResults.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-gray-600 mb-2">Recent results</div>
+                        <div className="space-y-1">
+                          {probeResults.map(pr => (
+                            <div key={pr.id} className="flex items-center justify-between text-xs px-2 py-1 rounded bg-gray-50 dark:bg-gray-700/30">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-1.5 h-1.5 rounded-full ${pr.success ? 'bg-green-500' : 'bg-red-500'}`} />
+                                <span className={`font-semibold ${pr.success ? 'text-green-700' : 'text-red-700'}`}>{pr.success ? 'OK' : 'Fail'}</span>
+                                <span className="text-gray-500">{pr.response_time_ms ?? '—'}ms</span>
+                              </div>
+                              <span className="text-gray-400">{format(new Date(pr.probed_at), 'MM/dd HH:mm')}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {probes.filter(res => res.probe_id === p.id).length > 3 && (
+                          <div className="mt-2 flex justify-end">
+                            <button type="button" className="btn-secondary text-xs" onClick={() => { setProbeHistoryForProbeId(p.id); setProbeHistoryOpen(true) }}>
+                              Show all ({probes.filter(res => res.probe_id === p.id).length})
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {tab === 'licenses' && (
           <div className="card p-5 space-y-4">
             {assignedLicenseRows.length === 0 && <p className="text-gray-500 text-sm">No assigned licenses.</p>}
@@ -680,6 +882,116 @@ export default function ServiceDetail() {
                   <div className="flex justify-end">
                     <button type="button" className="btn-secondary" onClick={() => setOfficesModalOpen(false)}>Close</button>
                   </div>
+                </div>
+              </Modal>
+            )}
+
+            {/* Probe Configuration Modal */}
+            {probeConfigOpen && (
+              <Modal title={editingProbeId ? 'Edit probe' : 'Add probe'} onClose={() => { setProbeConfigOpen(false); setProbeForm(null); setEditingProbeId(null) }} size="md">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Name</label>
+                    <input type="text" className="w-full input" placeholder="e.g., Health check" value={probeForm?.name || ''} onChange={(e) => setProbeForm({ ...probeForm, name: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Probe type *</label>
+                    <select className="w-full input" value={probeForm?.probe_type || 'https'} onChange={(e) => setProbeForm({ ...probeForm, probe_type: e.target.value })}>
+                      <option value="https">HTTPS</option>
+                      <option value="http">HTTP</option>
+                      <option value="tcp">TCP</option>
+                      <option value="icmp">ICMP (ping)</option>
+                      <option value="dns">DNS</option>
+                      <option value="tls">TLS</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Probe target *</label>
+                    <input type="text" className="w-full input" placeholder={probeForm?.probe_type === 'dns' ? 'example.com' : probeForm?.probe_type === 'icmp' ? 'IP address' : probeForm?.probe_type === 'tcp' ? 'host:port' : 'https://example.com/path'} value={probeForm?.probe_url || ''} onChange={(e) => setProbeForm({ ...probeForm, probe_url: e.target.value })} />
+                    {probeForm?.probe_type === 'dns' && <p className="text-xs text-gray-500 mt-1">Hostname to resolve (use DNS record type below)</p>}
+                  </div>
+                  {probeForm?.probe_type === 'http' || probeForm?.probe_type === 'https' ? (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Expected HTTP status code</label>
+                      <input type="number" className="w-full input" min="100" max="599" value={probeForm?.expected_status_code || 200} onChange={(e) => setProbeForm({ ...probeForm, expected_status_code: parseInt(e.target.value) || 200 })} />
+                    </div>
+                  ) : null}
+                  {probeForm?.probe_type === 'dns' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">DNS record type</label>
+                        <select className="w-full input" value={probeForm?.dns_record_type || 'A'} onChange={(e) => setProbeForm({ ...probeForm, dns_record_type: e.target.value })}>
+                          <option value="A">A</option>
+                          <option value="AAAA">AAAA</option>
+                          <option value="MX">MX</option>
+                          <option value="CNAME">CNAME</option>
+                          <option value="TXT">TXT</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Expected value (optional)</label>
+                        <input type="text" className="w-full input" placeholder="e.g., 192.0.2.1" value={probeForm?.dns_expected_value || ''} onChange={(e) => setProbeForm({ ...probeForm, dns_expected_value: e.target.value })} />
+                      </div>
+                    </>
+                  )}
+                  {probeForm?.probe_type === 'tls' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">TLS expiry warning (days)</label>
+                      <input type="number" className="w-full input" min="1" value={probeForm?.ssl_expiry_warning_days || 30} onChange={(e) => setProbeForm({ ...probeForm, ssl_expiry_warning_days: parseInt(e.target.value) || 30 })} />
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Interval (seconds)</label>
+                      <input type="number" className="w-full input" min="30" value={probeForm?.probe_interval_seconds || 300} onChange={(e) => setProbeForm({ ...probeForm, probe_interval_seconds: parseInt(e.target.value) || 300 })} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Timeout (seconds)</label>
+                      <input type="number" className="w-full input" min="1" value={probeForm?.probe_timeout_seconds || 10} onChange={(e) => setProbeForm({ ...probeForm, probe_timeout_seconds: parseInt(e.target.value) || 10 })} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Failure threshold</label>
+                      <input type="number" className="w-full input" min="1" value={probeForm?.failure_threshold || 2} onChange={(e) => setProbeForm({ ...probeForm, failure_threshold: parseInt(e.target.value) || 2 })} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Recovery threshold</label>
+                      <input type="number" className="w-full input" min="1" value={probeForm?.recovery_threshold || 2} onChange={(e) => setProbeForm({ ...probeForm, recovery_threshold: parseInt(e.target.value) || 2 })} />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={probeForm?.pause_during_maintenance || false} onChange={(e) => setProbeForm({ ...probeForm, pause_during_maintenance: e.target.checked })} />
+                    <span>Pause during maintenance</span>
+                  </label>
+                  <div className="flex gap-2 justify-end">
+                    <button type="button" className="btn-secondary" onClick={() => { setProbeConfigOpen(false); setProbeForm(null); setEditingProbeId(null) }}>Cancel</button>
+                    <button type="button" className="btn-primary" disabled={savingProbe} onClick={saveProbeConfig}>{savingProbe ? 'Saving...' : 'Save'}</button>
+                  </div>
+                </div>
+              </Modal>
+            )}
+
+            {/* Probe History Modal */}
+            {probeHistoryOpen && probeHistoryForProbeId && (
+              <Modal title="Probe history" onClose={() => { setProbeHistoryOpen(false); setProbeHistoryForProbeId(null) }} size="xl">
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {probes.filter(res => res.probe_id === probeHistoryForProbeId).length === 0 && <p className="text-sm text-gray-500">No results yet.</p>}
+                  {probes.filter(res => res.probe_id === probeHistoryForProbeId).map(pr => (
+                    <div key={pr.id} className="flex items-start justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <div className="flex items-start gap-3">
+                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${pr.success ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <div className="text-sm flex-1">
+                          <div className={`font-semibold ${pr.success ? 'text-green-700' : 'text-red-700'}`}>{pr.success ? 'Success' : 'Failed'}</div>
+                          {pr.success && pr.response_time_ms && <div className="text-xs text-gray-500">Response: {pr.response_time_ms}ms</div>}
+                          {pr.status_code && <div className="text-xs text-gray-500">Status: {pr.status_code}</div>}
+                          {pr.error_message && <div className="text-xs text-red-600 mt-1">{pr.error_message}</div>}
+                          {pr.ssl_cert_expiry && <div className="text-xs text-gray-500">SSL expiry: {pr.ssl_cert_expiry}</div>}
+                        </div>
+                      </div>
+                      <span className="text-xs text-gray-400 flex-shrink-0">{format(new Date(pr.probed_at), 'MM/dd HH:mm')}</span>
+                    </div>
+                  ))}
                 </div>
               </Modal>
             )}

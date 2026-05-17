@@ -324,4 +324,178 @@ async function probeNowById(assetId, probeId) {
   return await _probeAsset(probe, { forceRun: true });
 }
 
-module.exports = { start, stop, probeNow, probeNowById };
+async function probeNowService(serviceId) {
+  const probes = await getMany(
+    `SELECT sp.id, sp.service_id, sp.name,
+            sp.probe_type, sp.probe_target, sp.probe_timeout_seconds,
+            sp.expected_status_code, sp.probe_interval_seconds,
+            sp.failure_threshold, sp.recovery_threshold,
+            sp.pause_during_maintenance,
+            sp.dns_record_type, sp.dns_expected_value, sp.ssl_expiry_warning_days,
+            sp.consecutive_failures, sp.consecutive_successes, sp.current_state,
+            s.status AS service_status
+     FROM service_probes sp
+     JOIN services s ON s.id = sp.service_id
+     WHERE sp.service_id = $1
+       AND sp.probe_enabled = true
+       AND s.is_active = true`,
+    [serviceId]
+  );
+  if (probes.length === 0) throw new Error('Service non trovato o nessuna probe abilitata');
+
+  const results = [];
+  for (const probe of probes) {
+    results.push(await _probeService(probe, { forceRun: true }));
+  }
+
+  if (results.length === 1) {
+    return results[0];
+  }
+
+  return {
+    serviceId,
+    probeCount: results.length,
+    success: results.every((r) => !!r.success),
+    results,
+  };
+}
+
+async function probeNowByIdService(serviceId, probeId) {
+  const probe = await getOne(
+    `SELECT sp.id, sp.service_id, sp.name,
+            sp.probe_type, sp.probe_target, sp.probe_timeout_seconds,
+            sp.expected_status_code, sp.probe_interval_seconds,
+            sp.failure_threshold, sp.recovery_threshold,
+            sp.pause_during_maintenance,
+            sp.dns_record_type, sp.dns_expected_value, sp.ssl_expiry_warning_days,
+            sp.consecutive_failures, sp.consecutive_successes, sp.current_state,
+            s.status AS service_status
+     FROM service_probes sp
+     JOIN services s ON s.id = sp.service_id
+     WHERE sp.id = $1
+       AND sp.service_id = $2
+       AND sp.probe_enabled = true
+       AND s.is_active = true`,
+    [probeId, serviceId]
+  );
+  if (!probe) throw new Error('Probe non trovato o non abilitato');
+
+  return await _probeService(probe, { forceRun: true });
+}
+
+async function _probeService(probe, options = {}) {
+  // Similar to _probeAsset but for services
+  // Executes probe and saves result in service_probe_results table
+  const startTime = Date.now();
+  let success = false;
+  let responseTime = null;
+  let statusCode = null;
+  let errorMessage = null;
+  let sslCertExpiry = null;
+  let dnsResponse = null;
+
+  try {
+    switch (probe.probe_type) {
+      case 'http':
+      case 'https':
+        ({ success, responseTime, statusCode, errorMessage } = await _httpProbe(probe));
+        break;
+      case 'tcp':
+        ({ success, responseTime, errorMessage } = await _tcpProbe(probe));
+        break;
+      case 'icmp':
+        ({ success, responseTime, errorMessage } = await _icmpProbe(probe));
+        break;
+      case 'dns':
+        ({ success, responseTime, errorMessage, dnsResponse } = await _dnsProbe(probe));
+        break;
+      case 'tls':
+        ({ success, responseTime, errorMessage, sslCertExpiry } = await _tlsProbe(probe));
+        break;
+      default:
+        throw new Error(`Probe type ${probe.probe_type} not supported`);
+    }
+  } catch (err) {
+    success = false;
+    errorMessage = err.message;
+    responseTime = Date.now() - startTime;
+  }
+
+  // Update probe configuration state
+  if (success) {
+    await query(
+      `UPDATE service_probes SET consecutive_successes = consecutive_successes + 1,
+       consecutive_failures = 0, last_probed_at = NOW() WHERE id = $1`,
+      [probe.id]
+    );
+    const rThreshold = probe.recovery_threshold || 2;
+    const { consecutive_successes } = await getOne(
+      `SELECT consecutive_successes FROM service_probes WHERE id = $1`,
+      [probe.id]
+    );
+    if (consecutive_successes >= rThreshold) {
+      await query(`UPDATE service_probes SET current_state = 'operational' WHERE id = $1`, [probe.id]);
+    }
+  } else {
+    await query(
+      `UPDATE service_probes SET consecutive_failures = consecutive_failures + 1,
+       consecutive_successes = 0, last_probed_at = NOW() WHERE id = $1`,
+      [probe.id]
+    );
+    const fThreshold = probe.failure_threshold || 2;
+    const { consecutive_failures } = await getOne(
+      `SELECT consecutive_failures FROM service_probes WHERE id = $1`,
+      [probe.id]
+    );
+    if (consecutive_failures >= fThreshold) {
+      await query(`UPDATE service_probes SET current_state = 'major_outage' WHERE id = $1`, [probe.id]);
+    }
+  }
+
+  // Save probe result
+  await query(
+    `INSERT INTO service_probe_results (
+      service_id, probe_id, success, response_time_ms, status_code,
+      error_message, ssl_cert_expiry, dns_response
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      probe.service_id,
+      probe.id,
+      success,
+      responseTime,
+      statusCode,
+      errorMessage || null,
+      sslCertExpiry || null,
+      dnsResponse || null,
+    ]
+  );
+
+  // Broadcast update via WebSocket
+  if (wsService && wsService.broadcast) {
+    wsService.broadcast({
+      type: 'probe_result',
+      data: {
+        serviceId: probe.service_id,
+        probeId: probe.id,
+        success,
+        responseTime,
+        statusCode,
+        errorMessage,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  }
+
+  return {
+    probeId: probe.id,
+    serviceId: probe.service_id,
+    success,
+    responseTime,
+    statusCode,
+    errorMessage,
+    sslCertExpiry,
+    dnsResponse,
+  };
+}
+
+module.exports = { start, stop, probeNow, probeNowById, probeNowService, probeNowByIdService };

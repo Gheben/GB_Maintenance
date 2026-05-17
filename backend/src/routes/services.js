@@ -705,6 +705,171 @@ router.put('/:id/licenses', requireOperator, [
   res.json({ message: 'Licenses updated' });
 });
 
+// ─── Service Probes Endpoints ─────────────────────────────────────────────────
+
+const PROBE_TYPES = ['http', 'https', 'tcp', 'icmp', 'dns', 'tls'];
+const probeService = require('../services/probeService');
+
+// ─── GET /api/services/:id/probes ────────────────────────────────────────────
+router.get('/:id/probes', async (req, res) => {
+  const { limit = 100 } = req.query;
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const rows = await getMany(
+    `SELECT * FROM service_probe_results WHERE service_id=$1 AND probed_at >= $3 ORDER BY probed_at DESC LIMIT $2`,
+    [req.params.id, parseInt(limit), thirtyDaysAgo]
+  );
+  res.json(rows);
+});
+
+// ─── GET /api/services/:id/probe-configs ────────────────────────────────────
+router.get('/:id/probe-configs', async (req, res) => {
+  const rows = await getMany(
+    `SELECT id, service_id, name, probe_enabled, probe_type, probe_target,
+            probe_interval_seconds, probe_timeout_seconds, expected_status_code,
+            failure_threshold, recovery_threshold, pause_during_maintenance,
+            dns_record_type, dns_expected_value, ssl_expiry_warning_days,
+            legacy_slot, last_probed_at, next_probe_at,
+            consecutive_failures, consecutive_successes, current_state,
+            created_at, updated_at
+     FROM service_probes
+     WHERE service_id = $1
+     ORDER BY legacy_slot DESC, created_at ASC`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+// ─── POST /api/services/:id/probe-configs ───────────────────────────────────
+router.post('/:id/probe-configs', requireOperator, [
+  body('name').optional({ nullable: true }).isString().isLength({ max: 200 }),
+  body('probe_enabled').optional().isBoolean(),
+  body('probe_type').isIn(PROBE_TYPES),
+  body('probe_target').isString().trim().isLength({ min: 1 }),
+  body('probe_interval_seconds').optional().toInt().isInt({ min: 15 }),
+  body('probe_timeout_seconds').optional().toInt().isInt({ min: 1, max: 60 }),
+  body('expected_status_code').optional({ nullable: true }).toInt().isInt({ min: 100, max: 599 }),
+  body('failure_threshold').optional().toInt().isInt({ min: 1, max: 10 }),
+  body('recovery_threshold').optional().toInt().isInt({ min: 1, max: 10 }),
+  body('pause_during_maintenance').optional().isBoolean(),
+  body('dns_record_type').optional().isIn(['A','AAAA','CNAME','MX','TXT','NS','PTR','SRV']),
+  body('dns_expected_value').optional({ nullable: true }).isString(),
+  body('ssl_expiry_warning_days').optional().toInt().isInt({ min: 1, max: 365 }),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array(), error: errors.array()[0]?.msg });
+    }
+
+    const service = await getOne('SELECT id FROM services WHERE id=$1 AND is_active=true', [req.params.id]);
+    if (!service) return res.status(404).json({ error: 'Service non trovato' });
+
+    const r = await query(
+      `INSERT INTO service_probes (
+         service_id, name, probe_enabled, probe_type, probe_target,
+         probe_interval_seconds, probe_timeout_seconds, expected_status_code,
+         failure_threshold, recovery_threshold, pause_during_maintenance,
+         dns_record_type, dns_expected_value, ssl_expiry_warning_days,
+         next_probe_at, current_state
+       ) VALUES (
+         $1,$2,$3,$4,$5,
+         $6,$7,$8,
+         $9,$10,$11,
+         $12,$13,$14,
+         NOW(),'unknown'
+       )
+       RETURNING id`,
+      [
+        req.params.id,
+        req.body.name || null,
+        req.body.probe_enabled !== false,
+        req.body.probe_type,
+        req.body.probe_target,
+        req.body.probe_interval_seconds || 300,
+        req.body.probe_timeout_seconds || 10,
+        req.body.expected_status_code ?? 200,
+        req.body.failure_threshold || 2,
+        req.body.recovery_threshold || 2,
+        req.body.pause_during_maintenance !== false,
+        req.body.dns_record_type || 'A',
+        req.body.dns_expected_value || null,
+        req.body.ssl_expiry_warning_days || 30,
+      ]
+    );
+    res.status(201).json({ id: r.rows[0].id });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Error creating probe config' });
+  }
+});
+
+// ─── PUT /api/services/:id/probe-configs/:probeId ────────────────────────────
+router.put('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
+  try {
+    const probe = await getOne(
+      `SELECT id, legacy_slot FROM service_probes WHERE id=$1 AND service_id=$2`,
+      [req.params.probeId, req.params.id]
+    );
+    if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
+
+    const allowed = [
+      'name', 'probe_enabled', 'probe_type', 'probe_target',
+      'probe_interval_seconds', 'probe_timeout_seconds', 'expected_status_code',
+      'failure_threshold', 'recovery_threshold', 'pause_during_maintenance',
+      'dns_record_type', 'dns_expected_value', 'ssl_expiry_warning_days'
+    ];
+    const sets = [];
+    const vals = [];
+    let i = 1;
+    for (const field of allowed) {
+      if (req.body[field] === undefined) continue;
+      sets.push(`${field} = $${i++}`);
+      vals.push(req.body[field]);
+    }
+    if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
+    sets.push(`updated_at = NOW()`);
+    vals.push(req.params.probeId, req.params.id);
+
+    await query(`UPDATE service_probes SET ${sets.join(', ')} WHERE id = $${i++} AND service_id = $${i}`, vals);
+
+    res.json({ message: 'Probe aggiornata' });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Error updating probe config' });
+  }
+});
+
+// ─── DELETE /api/services/:id/probe-configs/:probeId ──────────────────────────
+router.delete('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
+  try {
+    const probe = await getOne(
+      `SELECT id, legacy_slot FROM service_probes WHERE id=$1 AND service_id=$2`,
+      [req.params.probeId, req.params.id]
+    );
+    if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
+    if (probe.legacy_slot) return res.status(400).json({ error: 'La probe principale legacy non può essere eliminata' });
+
+    await query(`DELETE FROM service_probes WHERE id=$1 AND service_id=$2`, [req.params.probeId, req.params.id]);
+    res.json({ message: 'Probe eliminata' });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Error deleting probe config' });
+  }
+});
+
+// ─── POST /api/services/:id/probe ────────────────────────────────────────────
+router.post('/:id/probe', requireOperator, async (req, res) => {
+  try {
+    const result = await probeService.probeNowService(req.params.id);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// ─── POST /api/services/:id/probe-configs/:probeId/run ────────────────────────
+router.post('/:id/probe-configs/:probeId/run', requireOperator, async (req, res) => {
+  try {
+    const result = await probeService.probeNowByIdService(req.params.id, req.params.probeId);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 function _slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
