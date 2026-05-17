@@ -35,7 +35,7 @@ export default function Calendar() {
   const [allServices, setAllServices] = useState([])
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState({
-    title: '', type: 'planned', impact_level: 'medium', description: '',
+    title: '', type: 'planned', impact_level: 'medium', description: '', ticket_ref: '',
     scheduled_start: '', scheduled_end: '',
     asset_ids: [], service_ids: [], owner_approval_required: false,
   })
@@ -67,7 +67,7 @@ export default function Calendar() {
   const openCreate = (day) => {
     const dateStr = format(day, 'yyyy-MM-dd')
     setForm({
-      title: '', type: 'planned', impact_level: 'medium', description: '',
+      title: '', type: 'planned', impact_level: 'medium', description: '', ticket_ref: '',
       scheduled_start: `${dateStr}T09:00`,
       scheduled_end: `${dateStr}T18:00`,
       asset_ids: [], service_ids: [], owner_approval_required: false,
@@ -81,7 +81,7 @@ export default function Calendar() {
     const startStr = format(start, 'yyyy-MM-dd')
     const endStr = format(end, 'yyyy-MM-dd')
     setForm({
-      title: '', type: 'planned', impact_level: 'medium', description: '',
+      title: '', type: 'planned', impact_level: 'medium', description: '', ticket_ref: '',
       scheduled_start: `${startStr}T00:00`,
       scheduled_end: `${endStr}T00:00`,
       asset_ids: [], service_ids: [], owner_approval_required: false,
@@ -260,6 +260,11 @@ export default function Calendar() {
                   {IMPACTS.map(i => <option key={i} value={i}>{i}</option>)}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Ticket Ref</label>
+              <input className="input" placeholder="e.g., TKT-12345" value={form.ticket_ref} onChange={e => setForm(f => ({...f, ticket_ref: e.target.value}))} />
             </div>
 
             <div className="grid grid-cols-1 gap-4">
