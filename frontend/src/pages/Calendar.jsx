@@ -263,7 +263,7 @@ export default function Calendar() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Ticket Ref</label>
+              <label className="block text-sm font-medium mb-1">Ticket ref</label>
               <input className="input" placeholder="e.g., TKT-12345" value={form.ticket_ref} onChange={e => setForm(f => ({...f, ticket_ref: e.target.value}))} />
             </div>
 
