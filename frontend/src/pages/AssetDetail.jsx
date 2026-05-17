@@ -622,7 +622,7 @@ export default function AssetDetail() {
                       {canEdit && (
                         <div className="flex items-center gap-1">
                           <button className="btn-secondary text-xs" onClick={() => openAdditionalProbeConfig(p)}>Edit</button>
-                          {!p.legacy_slot && <button className="btn-danger text-xs" onClick={() => deleteProbeConfig(p.id)}>Delete</button>}
+                          {!p.legacy_slot && <button className="btn-danger text-xs" onClick={() => { if (window.confirm('Delete this probe?')) deleteProbeConfig(p.id) }}>Delete</button>}
                         </div>
                       )}
                     </div>
