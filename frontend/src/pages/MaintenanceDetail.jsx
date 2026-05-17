@@ -330,7 +330,7 @@ export default function MaintenanceDetail() {
 
             <div>
               <label className="block text-sm font-medium mb-1">Ticket ref</label>
-              <input className="input" value={editForm.ticket_ref || ''} onChange={e => setEditForm(f => ({...f, ticket_ref: e.target.value}))} placeholder="Optional ticket reference" />
+              <input className="input" value={editForm.ticket_ref || ''} onChange={e => setEditForm(f => ({...f, ticket_ref: e.target.value}))} placeholder="e.g., TKT-12345" />
             </div>
 
             <div>

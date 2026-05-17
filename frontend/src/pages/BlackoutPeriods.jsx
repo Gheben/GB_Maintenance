@@ -75,7 +75,7 @@ export default function BlackoutPeriods() {
         <div><label className="block text-sm font-medium mb-1">To *</label><input type="date" className="input" required value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} /></div>
       </div>
       <div><label className="block text-sm font-medium mb-1">Description</label><textarea className="input" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-      <div><label className="block text-sm font-medium mb-1">Ticket ref</label><input className="input" value={form.ticket_ref} onChange={e => setForm(f => ({ ...f, ticket_ref: e.target.value }))} placeholder="Optional ticket reference" /></div>
+      <div><label className="block text-sm font-medium mb-1">Ticket ref</label><input className="input" value={form.ticket_ref} onChange={e => setForm(f => ({ ...f, ticket_ref: e.target.value }))} placeholder="e.g., TKT-12345" /></div>
       <ItemPicker
         label="Affected Services"
         allItems={allServices}
