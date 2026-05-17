@@ -490,6 +490,14 @@ router.post('/:id/probe', requireOperator, async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+// ─── POST /api/assets/:id/probe-configs/:probeId/run ───────────────────────────
+router.post('/:id/probe-configs/:probeId/run', requireOperator, async (req, res) => {
+  try {
+    const result = await probeService.probeNowById(req.params.id, req.params.probeId);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 // ─── GET /api/assets/:id/maintenance ─────────────────────────────────────────
 router.get('/:id/maintenance', async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page || '1', 10));

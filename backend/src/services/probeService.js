@@ -301,4 +301,27 @@ async function probeNow(assetId) {
   };
 }
 
-module.exports = { start, stop, probeNow };
+async function probeNowById(assetId, probeId) {
+  const probe = await getOne(
+    `SELECT ap.id, ap.asset_id, ap.name,
+            ap.probe_type, ap.probe_target, ap.probe_timeout_seconds,
+            ap.expected_status_code, ap.probe_interval_seconds,
+            ap.failure_threshold, ap.recovery_threshold,
+            ap.pause_during_maintenance,
+            ap.dns_record_type, ap.dns_expected_value, ap.ssl_expiry_warning_days,
+            ap.consecutive_failures, ap.consecutive_successes, ap.current_state,
+            a.status AS asset_status
+     FROM asset_probes ap
+     JOIN assets a ON a.id = ap.asset_id
+     WHERE ap.id = $1
+       AND ap.asset_id = $2
+       AND ap.probe_enabled = true
+       AND a.is_active = true`,
+    [probeId, assetId]
+  );
+  if (!probe) throw new Error('Probe non trovato o non abilitato');
+
+  return await _probeAsset(probe, { forceRun: true });
+}
+
+module.exports = { start, stop, probeNow, probeNowById };

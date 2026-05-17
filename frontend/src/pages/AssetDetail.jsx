@@ -62,6 +62,7 @@ export default function AssetDetail() {
   const [tab, setTab] = useState('info')
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [probing, setProbing] = useState(false)
+  const [probingProbeId, setProbingProbeId] = useState(null)
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -176,6 +177,19 @@ export default function AssetDetail() {
     finally { setProbing(false) }
   }
 
+  const handleProbeNowById = async (probeId) => {
+    setProbingProbeId(probeId)
+    try {
+      await assetsApi.probeNowById(id, probeId)
+      toast.success('Probe running')
+      const r = await assetsApi.probes(id, { limit: 200 })
+      setProbes(r.data)
+      const ar = await assetsApi.get(id)
+      setAsset(ar.data)
+    } catch (err) { toast.error('Probe error') }
+    finally { setProbingProbeId(null) }
+  }
+
   const handleDelete = async () => {
     try { await assetsApi.delete(id); toast.success('Asset deleted'); navigate('/assets') }
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
@@ -219,7 +233,6 @@ export default function AssetDetail() {
     setEditingProbeId(probe?.id || null)
     setProbeForm({
       name: probe?.name || 'Default probe',
-      probe_enabled: probe ? !!probe.probe_enabled : (asset.probe_enabled || false),
       probe_type: probeType,
       probe_url: probeTarget,
       probe_interval_seconds: probe?.probe_interval_seconds ?? asset.probe_interval_seconds ?? 300,
@@ -239,7 +252,6 @@ export default function AssetDetail() {
     setEditingProbeId(probe?.id || null)
     setProbeForm({
       name: probe?.name || '',
-      probe_enabled: probe ? !!probe.probe_enabled : true,
       probe_type: probe?.probe_type || 'https',
       probe_url: probe?.probe_target || '',
       probe_interval_seconds: probe?.probe_interval_seconds ?? 300,
@@ -265,7 +277,7 @@ export default function AssetDetail() {
     try {
       const payload = {
         name: probeForm.name || null,
-        probe_enabled: !!probeForm.probe_enabled,
+        probe_enabled: true,
         probe_type: probeForm.probe_type,
         probe_target: probeForm.probe_url.trim(),
         probe_interval_seconds: Number(probeForm.probe_interval_seconds) || 300,
@@ -594,7 +606,11 @@ export default function AssetDetail() {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">Probe configurations ({probeConfigs.length})</span>
                 <div className="flex items-center gap-2">
-                  {asset.probe_enabled && <button className="btn-secondary text-xs flex items-center gap-1" disabled={probing} onClick={handleProbeNow}><Play size={12} />{probing ? 'Probing...' : 'Probe now'}</button>}
+                  {probeConfigs.length === 1 && probeConfigs[0].probe_enabled && (
+                    <button className="btn-secondary text-xs flex items-center gap-1" disabled={probing} onClick={handleProbeNow}>
+                      <Play size={12} />{probing ? 'Probing...' : 'Run Now'}
+                    </button>
+                  )}
                   {canEdit && (
                     <>
                       <button className="btn-secondary text-xs" onClick={openProbeConfig}>Edit default</button>
@@ -606,10 +622,11 @@ export default function AssetDetail() {
               {probeConfigs.length === 0 && <p className="text-sm text-gray-500">No probe configured.</p>}
               {probeConfigs.map((p) => {
                 const state = p.current_state === 'major_outage' ? 'bg-red-500' : (p.current_state === 'operational' ? 'bg-green-500' : 'bg-gray-400')
+                const probeResults = probes.filter(res => res.probe_id === p.id).slice(0, 3)
                 return (
                   <div key={p.id} className="rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <span className={`w-2.5 h-2.5 rounded-full ${state}`} />
                           <ProbeFavicon probeType={p.probe_type} probeUrl={p.probe_target} />
@@ -619,12 +636,19 @@ export default function AssetDetail() {
                         </div>
                         <div className="text-xs text-gray-500 mt-1">{String(p.probe_type || '').toUpperCase()} · {p.probe_target}</div>
                       </div>
-                      {canEdit && (
-                        <div className="flex items-center gap-1">
-                          <button className="btn-secondary text-xs" onClick={() => openAdditionalProbeConfig(p)}>Edit</button>
-                          {!p.legacy_slot && <button className="btn-danger text-xs" onClick={() => { if (window.confirm('Delete this probe?')) deleteProbeConfig(p.id) }}>Delete</button>}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {probeConfigs.length > 1 && p.probe_enabled && (
+                          <button className="btn-secondary text-xs flex items-center gap-1" disabled={probingProbeId === p.id} onClick={() => handleProbeNowById(p.id)}>
+                            <Play size={11} />{probingProbeId === p.id ? 'Running...' : 'Run'}
+                          </button>
+                        )}
+                        {canEdit && (
+                          <>
+                            <button className="btn-secondary text-xs" onClick={() => openAdditionalProbeConfig(p)}>Edit</button>
+                            {!p.legacy_slot && <button className="btn-danger text-xs" onClick={() => { if (window.confirm('Delete this probe?')) deleteProbeConfig(p.id) }}>Delete</button>}
+                          </>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
                       <span>Interval: {p.probe_interval_seconds}s</span>
@@ -633,56 +657,29 @@ export default function AssetDetail() {
                       {p.probe_type === 'dns' && <span>DNS: {p.dns_record_type}{p.dns_expected_value ? ` · ${p.dns_expected_value}` : ''}</span>}
                       {p.probe_type === 'tls' && <span>TLS warn: {p.ssl_expiry_warning_days}d</span>}
                     </div>
+                    {/* Probe results for this specific probe */}
+                    {probeResults.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                        <div className="text-xs font-semibold text-gray-600 mb-2">Recent results</div>
+                        <div className="space-y-1">
+                          {probeResults.map(pr => (
+                            <div key={pr.id} className="flex items-center justify-between text-xs px-2 py-1 rounded bg-gray-50 dark:bg-gray-700/30">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-1.5 h-1.5 rounded-full ${pr.success ? 'bg-green-500' : 'bg-red-500'}`} />
+                                <span className={`font-semibold ${pr.success ? 'text-green-700' : 'text-red-700'}`}>{pr.success ? 'OK' : 'Fail'}</span>
+                                <span className="text-gray-500">{pr.response_time_ms ?? '—'}ms</span>
+                              </div>
+                              <span className="text-gray-400">{format(new Date(pr.probed_at), 'MM/dd HH:mm')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
             </div>
-            <div className="card overflow-hidden">
-              <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-700/50">
-                <tr>{['Result','Resp. ms','Method','Date'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {visibleProbes.map(p => (
-                  <tr key={p.id}>
-                    <td className="px-4 py-2">
-                      <span className={`inline-flex items-center gap-2 text-xs font-semibold ${p.success ? 'text-green-700' : 'text-red-700'}`}>
-                        <span className={`w-2.5 h-2.5 rounded-full ${p.success ? 'bg-green-500' : 'bg-red-500'}`} />
-                        {p.success ? 'OK' : 'Fail'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">{p.response_time_ms ?? '—'}</td>
-                    <td className="px-4 py-2">
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 text-brand-600 hover:underline text-xs"
-                        title={[
-                          `Type: ${p.status_code ? 'HTTP' : p.dns_response ? 'DNS' : p.ssl_cert_expiry ? 'TLS' : 'Probe'}`, 
-                          `Status: ${p.status_code || '—'}`,
-                          `Error: ${p.error_message || '—'}`,
-                          `TLS expiry: ${p.ssl_cert_expiry ? String(p.ssl_cert_expiry).slice(0, 10) : '—'}`,
-                          `DNS: ${p.dns_response || '—'}`,
-                        ].join(' | ')}
-                        onClick={() => openProbeDetails(p)}
-                      >
-                        <Info size={13} />Info
-                      </button>
-                    </td>
-                    <td className="px-4 py-2 text-gray-500">{format(new Date(p.probed_at), 'MM/dd HH:mm:ss')}</td>
-                  </tr>
-                ))}
-                {probes.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">No probe history</td></tr>}
-              </tbody>
-            </table>
-            {probes.length > 3 && (
-              <div className="border-t border-gray-100 dark:border-gray-700 p-3 flex justify-end">
-                <button type="button" className="btn-secondary text-xs" onClick={() => setProbeHistoryOpen(true)}>
-                  Show more ({probes.length - 3})
-                </button>
-              </div>
-            )}
           </div>
-        </div>
         )}
 
         {tab === 'licenses' && (
@@ -1010,19 +1007,7 @@ export default function AssetDetail() {
       {probeConfigOpen && probeForm && (
         <Modal title={editingProbeId ? 'Edit Probe Configuration' : 'Add Probe Configuration'} onClose={() => { setProbeConfigOpen(false); setEditingProbeId(null) }} size="md">
           <div className="space-y-4">
-            <label className="flex items-center gap-3 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={probeForm.probe_enabled}
-                onChange={e => setProbeForm(f => ({...f, probe_enabled: e.target.checked}))}
-              />
-              <div className="relative w-10 h-6 bg-gray-300 peer-checked:bg-brand-500 rounded-full transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:w-5 after:h-5 after:transition-all peer-checked:after:translate-x-4" />
-              <span className="text-sm font-semibold">{probeForm.probe_enabled ? 'Probe enabled' : 'Probe disabled'}</span>
-            </label>
-
-            {probeForm.probe_enabled && (
-              <>
+            <>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Type</label>
@@ -1120,7 +1105,6 @@ export default function AssetDetail() {
                   <span className="text-xs text-gray-600 dark:text-gray-300">Pause probing during maintenance windows</span>
                 </label>
               </>
-            )}
 
             <div className="flex justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
               <button type="button" className="btn-secondary" onClick={() => { setProbeConfigOpen(false); setEditingProbeId(null) }}>Cancel</button>

@@ -262,7 +262,7 @@ export default function Calendar() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Start *</label>
                 <input type="datetime-local" className="input" value={form.scheduled_start} onChange={e => setForm(f => ({...f, scheduled_start: e.target.value}))} />

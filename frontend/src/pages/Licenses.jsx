@@ -1836,7 +1836,7 @@ export default function Licenses() {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="min-w-0">
                 <label className="block text-sm font-medium mb-1">Activation date</label>
                 <input className="input" type="date" value={licenseForm.activation_date} onChange={e => setLicenseForm(f => ({ ...f, activation_date: e.target.value }))} />
@@ -1865,7 +1865,7 @@ export default function Licenses() {
                 <label className="block text-sm font-medium mb-1">Reminder days</label>
                 <input className="input" type="number" min="1" max="365" value={licenseForm.reminder_days} onChange={e => setLicenseForm(f => ({ ...f, reminder_days: e.target.value }))} />
               </div>
-              <div className="min-w-0 sm:col-span-2 2xl:col-span-1">
+              <div className="min-w-0">
                 <label className="block text-sm font-medium mb-1">Approval status</label>
                 <div className="input flex items-center">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${approvalStatusMeta(licenseForm.approval_status, licenseForm.approval_required !== false).cls}`}>

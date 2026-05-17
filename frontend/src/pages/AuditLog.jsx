@@ -175,7 +175,7 @@ export default function AuditLog() {
 
         {/* Filters */}
         <div className="card p-4">
-          <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-end">
             <div className="flex-1 min-w-[130px]">
               <label className="block text-xs font-medium text-gray-500 mb-1">User</label>
               <div className="relative">

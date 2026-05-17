@@ -83,6 +83,7 @@ export const assetsApi = {
   updateProbeConfig: (id, probeId, data) => api.put(`/assets/${id}/probe-configs/${probeId}`, data),
   deleteProbeConfig: (id, probeId) => api.delete(`/assets/${id}/probe-configs/${probeId}`),
   probeNow: (id) => api.post(`/assets/${id}/probe`),
+  probeNowById: (id, probeId) => api.post(`/assets/${id}/probe-configs/${probeId}/run`),
   users: (id) => api.get(`/assets/${id}/users`),
   maintenance: (id, params) => api.get(`/assets/${id}/maintenance`, { params }),
   licenses: (id) => api.get(`/assets/${id}/licenses`),
