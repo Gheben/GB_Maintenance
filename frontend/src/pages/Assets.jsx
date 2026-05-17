@@ -367,12 +367,12 @@ export default function Assets() {
                       />
                     </th>
                   )}
-                  {['Name','Category','Criticality','Status','Licenses','Probe',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{h}</th>)}
+                  {['Name','Category','Criticality','Status','Licenses','Probe','Owner',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300">{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {loading ? (
-                  <tr><td colSpan={canBulkDelete ? 8 : 7} className="text-center py-8 text-gray-500">Loading...</td></tr>
+                  <tr><td colSpan={canBulkDelete ? 9 : 8} className="text-center py-8 text-gray-500">Loading...</td></tr>
                 ) : assets.map(a => (
                   <tr
                     key={a.id}
@@ -403,6 +403,7 @@ export default function Assets() {
                     <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
                     <td className="px-4 py-3"><LicenseState row={a} /></td>
                     <td className="px-4 py-3 text-gray-500"><ProbeState row={a} /></td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{(a.owner_label || a.owner_name || '—')}{(a.owner_count || 0) > 1 ? ` +${a.owner_count - 1}` : ''}</td>
                     <td className="px-4 py-3">
                       {canEdit && (
                         <button onClick={() => openEdit(a)} className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">

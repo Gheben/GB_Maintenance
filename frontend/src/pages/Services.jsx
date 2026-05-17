@@ -38,6 +38,39 @@ function LicenseState({ row }) {
   )
 }
 
+function ProbeState({ row }) {
+  if (!row.probe_enabled && !row.probe_enabled_count) return <span className="text-gray-400">—</span>
+  const hasAnyFailingProbe = Number(row.failing_probe_count || 0) > 0
+  const hasWarning = !!row.latest_probe_error_message && row.latest_probe_success !== false && !hasAnyFailingProbe
+  const dotClass = hasAnyFailingProbe || row.latest_probe_success === false
+    ? 'bg-red-500'
+    : hasWarning
+      ? 'bg-amber-500 animate-pulse'
+      : 'bg-green-500'
+  const method = String(row.latest_probe_type || row.probe_type || 'probe').toUpperCase()
+  const label = hasAnyFailingProbe || row.latest_probe_success === false
+    ? (row.latest_probe_error_message || 'Probe failed')
+    : hasWarning
+      ? row.latest_probe_error_message
+      : 'Probe healthy'
+  const probeCount = Number(row.probe_enabled_count || 0)
+  const probeName = row.primary_probe_name || 'Probe'
+  
+  return (
+    <span className="inline-flex items-center gap-2 text-xs">
+      <span className={`w-2.5 h-2.5 rounded-full ${dotClass}`} title={label} />
+      <span className="font-medium text-gray-700 dark:text-gray-200">{method}</span>
+      {probeCount > 1 ? (
+        <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+          {probeName} <span className="font-semibold">+{probeCount - 1}</span>
+        </span>
+      ) : probeCount === 1 && probeName && (
+        <span className="text-[10px] text-gray-600">{probeName}</span>
+      )}
+    </span>
+  )
+}
+
 export default function Services() {
   const { hasPermission, hasRole } = useAuth()
   const canEdit = hasPermission('services')
@@ -374,11 +407,11 @@ export default function Services() {
                       />
                     </th>
                   )}
-                  {['Name','System','Criticality','Status','Licenses','Owner','Assets','SLA %','Public',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
+                  {['Name','Criticality','Status','Probes','Licenses','Owner','Assets','Public',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {loading ? <tr><td colSpan={canBulkDelete ? 11 : 10} className="text-center py-8 text-gray-500">Loading...</td></tr>
+                {loading ? <tr><td colSpan={canBulkDelete ? 10 : 9} className="text-center py-8 text-gray-500">Loading...</td></tr>
                   : services.map(s => (
                     <tr
                       key={s.id}
@@ -399,13 +432,12 @@ export default function Services() {
                       <td className="px-4 py-3 font-medium">
                         <Link to={`/services/${s.id}`} className="text-brand-600 hover:underline">{s.name}</Link>
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{s.system_name ? <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 font-medium">{s.system_name}</span> : '—'}</td>
                       <td className="px-4 py-3"><CriticalityBadge criticality={s.criticality} /></td>
                       <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                      <td className="px-4 py-3 text-gray-500"><ProbeState row={s} /></td>
                       <td className="px-4 py-3"><LicenseState row={s} /></td>
                       <td className="px-4 py-3 text-sm text-gray-600">{(s.owner_label || s.owner_name || '—')}{(s.owner_count || 0) > 1 ? ` +${s.owner_count - 1}` : ''}</td>
                       <td className="px-4 py-3 text-gray-500">{s.asset_count ?? 0}</td>
-                      <td className="px-4 py-3 text-gray-500">{s.sla_uptime_percent}%</td>
                       <td className="px-4 py-3">{s.is_public ? '✅' : '—'}</td>
                       <td className="px-4 py-3">
                         {canEdit && (
