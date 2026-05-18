@@ -221,7 +221,6 @@ export default function AssetDetail() {
       owner_ldap_name: asset.owner_ldap_name || '',
     })
     setEditMode(true)
-    setTab('info')
   }
 
   const cancelEdit = () => { setEditMode(false); setEditForm(null) }

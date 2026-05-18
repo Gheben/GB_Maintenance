@@ -19,6 +19,31 @@ function approvalStatusMeta(status) {
   return { label: 'Pending', cls: 'bg-amber-100 text-amber-700' }
 }
 
+function ProbeFavicon({ probeType, probeUrl }) {
+  if (!probeUrl || !['http', 'https', 'tls'].includes(probeType)) return null
+  let host = ''
+  try {
+    if (probeType === 'tls') {
+      host = probeUrl.split(':')[0]
+    } else {
+      const u = probeUrl.startsWith('http') ? probeUrl : `https://${probeUrl}`
+      host = new URL(u).hostname
+    }
+    if (!host) return null
+  } catch { return null }
+  return (
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=32`}
+      alt=""
+      width={20} height={20}
+      className="w-5 h-5 rounded-sm object-contain flex-shrink-0"
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={e => { e.target.style.display = 'none' }}
+    />
+  )
+}
+
 export default function ServiceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -166,7 +191,6 @@ export default function ServiceDetail() {
       owner_ldap_name: service.owner_ldap_name || '',
     })
     setEditMode(true)
-    setTab('info')
   }
 
   const cancelEdit = () => { setEditMode(false); setEditForm(null) }
@@ -593,6 +617,7 @@ export default function ServiceDetail() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <span className={`w-2.5 h-2.5 rounded-full ${state}`} />
+                          <ProbeFavicon probeType={p.probe_type} probeUrl={p.probe_target} />
                           <span className="truncate">{p.name || 'Probe'}</span>
                           {!p.probe_enabled && <span className="badge bg-gray-100 text-gray-600">Disabled</span>}
                         </div>
@@ -893,7 +918,7 @@ export default function ServiceDetail() {
       </div>
 
       {/* Probe Configuration Modal - outside tab blocks so it always renders */}
-      {probeConfigOpen && (
+      {probeConfigOpen && probeForm && (
         <Modal title={editingProbeId ? 'Edit probe' : 'Add probe'} onClose={() => { setProbeConfigOpen(false); setProbeForm(null); setEditingProbeId(null) }} size="md">
           <div className="space-y-4">
             <div>
@@ -916,7 +941,10 @@ export default function ServiceDetail() {
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                   {{'tcp':'Host:Port','icmp':'Host or IP','dns':'Hostname','tls':'Host:Port'}[probeForm?.probe_type] || 'URL'}
                 </label>
-                <input type="text" className="w-full input text-sm" placeholder={{'tcp':'hostname:443','icmp':'192.168.1.1','dns':'example.com','tls':'hostname:443','https':'https://example.com/health','http':'http://example.com/health'}[probeForm?.probe_type] || ''} value={probeForm?.probe_url || ''} onChange={(e) => setProbeForm({ ...probeForm, probe_url: e.target.value })} />
+                <div className="flex items-center gap-1.5">
+                  <ProbeFavicon probeType={probeForm?.probe_type} probeUrl={probeForm?.probe_url} />
+                  <input type="text" className="input text-sm flex-1" placeholder={{'tcp':'hostname:443','icmp':'192.168.1.1','dns':'example.com','tls':'hostname:443','https':'https://example.com/health','http':'http://example.com/health'}[probeForm?.probe_type] || ''} value={probeForm?.probe_url || ''} onChange={(e) => setProbeForm({ ...probeForm, probe_url: e.target.value })} />
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
@@ -981,24 +1009,44 @@ export default function ServiceDetail() {
 
       {/* Probe History Modal - outside tab blocks so it always renders */}
       {probeHistoryOpen && probeHistoryForProbeId && (
-        <Modal title="Probe history" onClose={() => { setProbeHistoryOpen(false); setProbeHistoryForProbeId(null) }} size="xl">
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {probes.filter(res => res.probe_id === probeHistoryForProbeId).length === 0 && <p className="text-sm text-gray-500">No results yet.</p>}
-            {probes.filter(res => res.probe_id === probeHistoryForProbeId).map(pr => (
-              <div key={pr.id} className="flex items-start justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="flex items-start gap-3">
-                  <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${pr.success ? 'bg-green-500' : 'bg-red-500'}`} />
-                  <div className="text-sm flex-1">
-                    <div className={`font-semibold ${pr.success ? 'text-green-700' : 'text-red-700'}`}>{pr.success ? 'Success' : 'Failed'}</div>
-                    {pr.success && pr.response_time_ms && <div className="text-xs text-gray-500">Response: {pr.response_time_ms}ms</div>}
-                    {pr.status_code && <div className="text-xs text-gray-500">Status: {pr.status_code}</div>}
-                    {pr.error_message && <div className="text-xs text-red-600 mt-1">{pr.error_message}</div>}
-                    {pr.ssl_cert_expiry && <div className="text-xs text-gray-500">SSL expiry: {pr.ssl_cert_expiry}</div>}
-                  </div>
-                </div>
-                <span className="text-xs text-gray-400 flex-shrink-0">{format(new Date(pr.probed_at), 'MM/dd HH:mm')}</span>
-              </div>
-            ))}
+        <Modal title={`Probe history - ${probeConfigs.find(p => p.id === probeHistoryForProbeId)?.name || 'Probe'}`} onClose={() => { setProbeHistoryOpen(false); setProbeHistoryForProbeId(null) }} size="xl">
+          <div className="max-h-[70vh] overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
+                <tr>{['Result','Resp. ms','Info','Date'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {probes.filter(p => p.probe_id === probeHistoryForProbeId).length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-500">No results yet.</td></tr>
+                )}
+                {probes.filter(p => p.probe_id === probeHistoryForProbeId).map(p => (
+                  <tr key={p.id}>
+                    <td className="px-4 py-2">{p.success ? '✅' : '❌'}</td>
+                    <td className="px-4 py-2">{p.response_time_ms ?? '—'}</td>
+                    <td className="px-4 py-2">
+                      <button type="button" className="inline-flex items-center gap-1 text-brand-600 hover:underline text-xs" onClick={() => openProbeDetails(p)}>
+                        <Info size={13} />Info
+                      </button>
+                    </td>
+                    <td className="px-4 py-2 text-gray-500">{format(new Date(p.probed_at), 'MM/dd HH:mm:ss')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Modal>
+      )}
+
+      {probeDetails && (
+        <Modal title="Probe details" onClose={() => setProbeDetails(null)} size="md">
+          <div className="space-y-2 text-sm">
+            <div><span className="text-gray-500">Type:</span> <strong>{probeConfigs.find(p => p.id === probeDetails.probe_id)?.probe_type?.toUpperCase() ?? '—'}</strong></div>
+            <div><span className="text-gray-500">Success:</span> <strong>{probeDetails.success ? 'Yes' : 'No'}</strong></div>
+            <div><span className="text-gray-500">Response time:</span> <strong>{probeDetails.response_time_ms ?? '—'} ms</strong></div>
+            <div><span className="text-gray-500">Status code:</span> <strong>{probeDetails.status_code ?? '—'}</strong></div>
+            <div><span className="text-gray-500">Error:</span> <strong>{probeDetails.error_message || '—'}</strong></div>
+            <div><span className="text-gray-500">TLS expiry:</span> <strong>{probeDetails.ssl_cert_expiry ? format(new Date(probeDetails.ssl_cert_expiry), 'MM/dd/yyyy') : '—'}</strong></div>
+            <div><span className="text-gray-500">DNS response:</span> <strong className="break-all">{probeDetails.dns_response || '—'}</strong></div>
           </div>
         </Modal>
       )}
