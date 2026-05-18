@@ -407,7 +407,7 @@ export default function Services() {
                       />
                     </th>
                   )}
-                  {['Name','Criticality','Status','Probes','Licenses','Owner','Assets','Public',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
+                  {['Name','Probes','Criticality','Status','Licenses','Owner','Assets','Public',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -432,9 +432,9 @@ export default function Services() {
                       <td className="px-4 py-3 font-medium">
                         <Link to={`/services/${s.id}`} className="text-brand-600 hover:underline">{s.name}</Link>
                       </td>
+                      <td className="px-4 py-3 text-gray-500"><ProbeState row={s} /></td>
                       <td className="px-4 py-3"><CriticalityBadge criticality={s.criticality} /></td>
                       <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                      <td className="px-4 py-3 text-gray-500"><ProbeState row={s} /></td>
                       <td className="px-4 py-3"><LicenseState row={s} /></td>
                       <td className="px-4 py-3 text-sm text-gray-600">{(s.owner_label || s.owner_name || '—')}{(s.owner_count || 0) > 1 ? ` +${s.owner_count - 1}` : ''}</td>
                       <td className="px-4 py-3 text-gray-500">{s.asset_count ?? 0}</td>

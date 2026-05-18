@@ -888,92 +888,6 @@ export default function ServiceDetail() {
               </Modal>
             )}
 
-            {/* Probe Configuration Modal */}
-            {probeConfigOpen && (
-              <Modal title={editingProbeId ? 'Edit probe' : 'Add probe'} onClose={() => { setProbeConfigOpen(false); setProbeForm(null); setEditingProbeId(null) }} size="md">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Name</label>
-                    <input type="text" className="w-full input" placeholder="e.g., Health check" value={probeForm?.name || ''} onChange={(e) => setProbeForm({ ...probeForm, name: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Probe type *</label>
-                    <select className="w-full input" value={probeForm?.probe_type || 'https'} onChange={(e) => setProbeForm({ ...probeForm, probe_type: e.target.value })}>
-                      <option value="https">HTTPS</option>
-                      <option value="http">HTTP</option>
-                      <option value="tcp">TCP</option>
-                      <option value="icmp">ICMP (ping)</option>
-                      <option value="dns">DNS</option>
-                      <option value="tls">TLS</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Probe target *</label>
-                    <input type="text" className="w-full input" placeholder={probeForm?.probe_type === 'dns' ? 'example.com' : probeForm?.probe_type === 'icmp' ? 'IP address' : probeForm?.probe_type === 'tcp' ? 'host:port' : 'https://example.com/path'} value={probeForm?.probe_url || ''} onChange={(e) => setProbeForm({ ...probeForm, probe_url: e.target.value })} />
-                    {probeForm?.probe_type === 'dns' && <p className="text-xs text-gray-500 mt-1">Hostname to resolve (use DNS record type below)</p>}
-                  </div>
-                  {probeForm?.probe_type === 'http' || probeForm?.probe_type === 'https' ? (
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Expected HTTP status code</label>
-                      <input type="number" className="w-full input" min="100" max="599" value={probeForm?.expected_status_code || 200} onChange={(e) => setProbeForm({ ...probeForm, expected_status_code: parseInt(e.target.value) || 200 })} />
-                    </div>
-                  ) : null}
-                  {probeForm?.probe_type === 'dns' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">DNS record type</label>
-                        <select className="w-full input" value={probeForm?.dns_record_type || 'A'} onChange={(e) => setProbeForm({ ...probeForm, dns_record_type: e.target.value })}>
-                          <option value="A">A</option>
-                          <option value="AAAA">AAAA</option>
-                          <option value="MX">MX</option>
-                          <option value="CNAME">CNAME</option>
-                          <option value="TXT">TXT</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Expected value (optional)</label>
-                        <input type="text" className="w-full input" placeholder="e.g., 192.0.2.1" value={probeForm?.dns_expected_value || ''} onChange={(e) => setProbeForm({ ...probeForm, dns_expected_value: e.target.value })} />
-                      </div>
-                    </>
-                  )}
-                  {probeForm?.probe_type === 'tls' && (
-                    <div>
-                      <label className="block text-sm font-medium mb-1">TLS expiry warning (days)</label>
-                      <input type="number" className="w-full input" min="1" value={probeForm?.ssl_expiry_warning_days || 30} onChange={(e) => setProbeForm({ ...probeForm, ssl_expiry_warning_days: parseInt(e.target.value) || 30 })} />
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Interval (seconds)</label>
-                      <input type="number" className="w-full input" min="30" value={probeForm?.probe_interval_seconds || 300} onChange={(e) => setProbeForm({ ...probeForm, probe_interval_seconds: parseInt(e.target.value) || 300 })} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Timeout (seconds)</label>
-                      <input type="number" className="w-full input" min="1" value={probeForm?.probe_timeout_seconds || 10} onChange={(e) => setProbeForm({ ...probeForm, probe_timeout_seconds: parseInt(e.target.value) || 10 })} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Failure threshold</label>
-                      <input type="number" className="w-full input" min="1" value={probeForm?.failure_threshold || 2} onChange={(e) => setProbeForm({ ...probeForm, failure_threshold: parseInt(e.target.value) || 2 })} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Recovery threshold</label>
-                      <input type="number" className="w-full input" min="1" value={probeForm?.recovery_threshold || 2} onChange={(e) => setProbeForm({ ...probeForm, recovery_threshold: parseInt(e.target.value) || 2 })} />
-                    </div>
-                  </div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={probeForm?.pause_during_maintenance || false} onChange={(e) => setProbeForm({ ...probeForm, pause_during_maintenance: e.target.checked })} />
-                    <span>Pause during maintenance</span>
-                  </label>
-                  <div className="flex gap-2 justify-end">
-                    <button type="button" className="btn-secondary" onClick={() => { setProbeConfigOpen(false); setProbeForm(null); setEditingProbeId(null) }}>Cancel</button>
-                    <button type="button" className="btn-primary" disabled={savingProbe} onClick={saveProbeConfig}>{savingProbe ? 'Saving...' : 'Save'}</button>
-                  </div>
-                </div>
-              </Modal>
-            )}
-
             {/* Probe History Modal */}
             {probeHistoryOpen && probeHistoryForProbeId && (
               <Modal title="Probe history" onClose={() => { setProbeHistoryOpen(false); setProbeHistoryForProbeId(null) }} size="xl">
@@ -1000,6 +914,117 @@ export default function ServiceDetail() {
           </div>
         )}
       </div>
+
+      {/* Probe Configuration Modal - outside tab blocks so it always renders */}
+      {probeConfigOpen && (
+        <Modal title={editingProbeId ? 'Edit probe' : 'Add probe'} onClose={() => { setProbeConfigOpen(false); setProbeForm(null); setEditingProbeId(null) }} size="md">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Name</label>
+              <input type="text" className="w-full input" placeholder="e.g., Health check" value={probeForm?.name || ''} onChange={(e) => setProbeForm({ ...probeForm, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Type</label>
+                <select className="w-full input text-sm" value={probeForm?.probe_type || 'https'} onChange={(e) => setProbeForm({ ...probeForm, probe_type: e.target.value })}>
+                  <option value="https">HTTPS</option>
+                  <option value="http">HTTP</option>
+                  <option value="tcp">TCP</option>
+                  <option value="icmp">ICMP (ping)</option>
+                  <option value="dns">DNS</option>
+                  <option value="tls">TLS</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  {{'tcp':'Host:Port','icmp':'Host or IP','dns':'Hostname','tls':'Host:Port'}[probeForm?.probe_type] || 'URL'}
+                </label>
+                <input type="text" className="w-full input text-sm" placeholder={{'tcp':'hostname:443','icmp':'192.168.1.1','dns':'example.com','tls':'hostname:443','https':'https://example.com/health','http':'http://example.com/health'}[probeForm?.probe_type] || ''} value={probeForm?.probe_url || ''} onChange={(e) => setProbeForm({ ...probeForm, probe_url: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Interval (s)</label>
+                <input type="number" className="w-full input text-sm" min="30" value={probeForm?.probe_interval_seconds || 300} onChange={(e) => setProbeForm({ ...probeForm, probe_interval_seconds: parseInt(e.target.value) || 300 })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Timeout (s)</label>
+                <input type="number" className="w-full input text-sm" min="1" value={probeForm?.probe_timeout_seconds || 10} onChange={(e) => setProbeForm({ ...probeForm, probe_timeout_seconds: parseInt(e.target.value) || 10 })} />
+              </div>
+              {['http','https'].includes(probeForm?.probe_type) && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Expected HTTP</label>
+                  <input type="number" className="w-full input text-sm" min="100" max="599" value={probeForm?.expected_status_code || 200} onChange={(e) => setProbeForm({ ...probeForm, expected_status_code: parseInt(e.target.value) || 200 })} />
+                </div>
+              )}
+            </div>
+            {probeForm?.probe_type === 'dns' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Record type</label>
+                  <select className="w-full input text-sm" value={probeForm?.dns_record_type || 'A'} onChange={(e) => setProbeForm({ ...probeForm, dns_record_type: e.target.value })}>
+                    {['A','AAAA','CNAME','MX','TXT','NS','PTR','SRV'].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Expected value <span className="font-normal text-gray-400">(optional)</span></label>
+                  <input className="w-full input text-sm" placeholder="e.g. 93.184.216.34" value={probeForm?.dns_expected_value || ''} onChange={(e) => setProbeForm({ ...probeForm, dns_expected_value: e.target.value })} />
+                </div>
+              </div>
+            )}
+            {probeForm?.probe_type === 'tls' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Warn if cert expires within (days)</label>
+                <input type="number" className="input text-sm w-32" min="1" max="365" value={probeForm?.ssl_expiry_warning_days || 30} onChange={(e) => setProbeForm({ ...probeForm, ssl_expiry_warning_days: parseInt(e.target.value) || 30 })} />
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Failure threshold</label>
+                <input type="number" className="w-full input text-sm" min="1" value={probeForm?.failure_threshold || 2} onChange={(e) => setProbeForm({ ...probeForm, failure_threshold: parseInt(e.target.value) || 2 })} />
+                <p className="text-xs text-gray-400 mt-0.5">Consecutive failures → major outage</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Recovery threshold</label>
+                <input type="number" className="w-full input text-sm" min="1" value={probeForm?.recovery_threshold || 2} onChange={(e) => setProbeForm({ ...probeForm, recovery_threshold: parseInt(e.target.value) || 2 })} />
+                <p className="text-xs text-gray-400 mt-0.5">Consecutive successes → operational</p>
+              </div>
+            </div>
+            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" className="rounded border-gray-300 text-brand-600" checked={probeForm?.pause_during_maintenance || false} onChange={(e) => setProbeForm({ ...probeForm, pause_during_maintenance: e.target.checked })} />
+              <span className="text-xs text-gray-600 dark:text-gray-300">Pause probing during maintenance windows</span>
+            </label>
+            <div className="flex gap-2 justify-end pt-2 border-t border-gray-100 dark:border-gray-700">
+              <button type="button" className="btn-secondary" onClick={() => { setProbeConfigOpen(false); setProbeForm(null); setEditingProbeId(null) }}>Cancel</button>
+              <button type="button" className="btn-primary" disabled={savingProbe} onClick={saveProbeConfig}>{savingProbe ? 'Saving...' : 'Save'}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Probe History Modal - outside tab blocks so it always renders */}
+      {probeHistoryOpen && probeHistoryForProbeId && (
+        <Modal title="Probe history" onClose={() => { setProbeHistoryOpen(false); setProbeHistoryForProbeId(null) }} size="xl">
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {probes.filter(res => res.probe_id === probeHistoryForProbeId).length === 0 && <p className="text-sm text-gray-500">No results yet.</p>}
+            {probes.filter(res => res.probe_id === probeHistoryForProbeId).map(pr => (
+              <div key={pr.id} className="flex items-start justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="flex items-start gap-3">
+                  <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${pr.success ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <div className="text-sm flex-1">
+                    <div className={`font-semibold ${pr.success ? 'text-green-700' : 'text-red-700'}`}>{pr.success ? 'Success' : 'Failed'}</div>
+                    {pr.success && pr.response_time_ms && <div className="text-xs text-gray-500">Response: {pr.response_time_ms}ms</div>}
+                    {pr.status_code && <div className="text-xs text-gray-500">Status: {pr.status_code}</div>}
+                    {pr.error_message && <div className="text-xs text-red-600 mt-1">{pr.error_message}</div>}
+                    {pr.ssl_cert_expiry && <div className="text-xs text-gray-500">SSL expiry: {pr.ssl_cert_expiry}</div>}
+                  </div>
+                </div>
+                <span className="text-xs text-gray-400 flex-shrink-0">{format(new Date(pr.probed_at), 'MM/dd HH:mm')}</span>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
 
       {maintenanceDetailOpen && maintenanceDetail && (
         <Modal title={`Maintenance: ${maintenanceDetail.title || 'Detail'}`} onClose={() => { setMaintenanceDetailOpen(false); setMaintenanceDetail(null) }} size="lg">
