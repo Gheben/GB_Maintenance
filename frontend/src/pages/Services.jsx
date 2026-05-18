@@ -8,7 +8,7 @@ import { ItemPicker } from '../components/ItemPicker'
 import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { servicesApi, usersApi, groupsApi, settingsApi, licensesApi } from '../api'
-import { Plus, Search, RefreshCw, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Search, RefreshCw, Pencil, Trash2, Globe } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const BLANK_FORM = { name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, owner_targets: [], user_targets: [], system_name: '' }
@@ -407,11 +407,11 @@ export default function Services() {
                       />
                     </th>
                   )}
-                  {['Name','Criticality','Status','Licenses','Probes','Owner','Assets','Public',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
+                  {['Name','Criticality','Status','Assets','Licenses','Probes','Owner',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {loading ? <tr><td colSpan={canBulkDelete ? 10 : 9} className="text-center py-8 text-gray-500">Loading...</td></tr>
+                {loading ? <tr><td colSpan={canBulkDelete ? 9 : 8} className="text-center py-8 text-gray-500">Loading...</td></tr>
                   : services.map(s => (
                     <tr
                       key={s.id}
@@ -430,15 +430,17 @@ export default function Services() {
                         </td>
                       )}
                       <td className="px-4 py-3 font-medium">
-                        <Link to={`/services/${s.id}`} className="text-brand-600 hover:underline">{s.name}</Link>
+                        <Link to={`/services/${s.id}`} className="text-brand-600 hover:underline flex items-center gap-1.5">
+                          {s.is_public && <Globe size={13} className="text-green-500 flex-shrink-0" />}
+                          {s.name}
+                        </Link>
                       </td>
                       <td className="px-4 py-3"><CriticalityBadge criticality={s.criticality} /></td>
                       <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                      <td className="px-4 py-3 text-gray-500">{s.asset_count ?? 0}</td>
                       <td className="px-4 py-3"><LicenseState row={s} /></td>
                       <td className="px-4 py-3 text-gray-500"><ProbeState row={s} /></td>
                       <td className="px-4 py-3 text-sm text-gray-600">{(s.owner_label || s.owner_name || '—')}{(s.owner_count || 0) > 1 ? ` +${s.owner_count - 1}` : ''}</td>
-                      <td className="px-4 py-3 text-gray-500">{s.asset_count ?? 0}</td>
-                      <td className="px-4 py-3">{s.is_public ? '✅' : '—'}</td>
                       <td className="px-4 py-3">
                         {canEdit && (
                           <button onClick={() => openEdit(s)} className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">
