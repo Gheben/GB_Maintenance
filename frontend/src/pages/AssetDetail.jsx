@@ -597,7 +597,7 @@ export default function AssetDetail() {
                       <Play size={12} />{probing ? 'Probing...' : 'Run Now'}
                     </button>
                   )}
-                  {canEdit && (
+                  {canEdit && editMode && (
                     <button className="btn-primary text-xs" onClick={() => openAdditionalProbeConfig(null)}>Add probe</button>
                   )}
                 </div>
@@ -625,7 +625,7 @@ export default function AssetDetail() {
                             <Play size={11} />{probingProbeId === p.id ? 'Running...' : 'Run'}
                           </button>
                         )}
-                        {canEdit && (
+                        {canEdit && editMode && (
                           <>
                             <button className="btn-secondary text-xs" onClick={() => openAdditionalProbeConfig(p)}>Edit</button>
                             {!p.legacy_slot && <button className="btn-danger text-xs" onClick={() => { if (window.confirm('Delete this probe?')) deleteProbeConfig(p.id) }}>Delete</button>}

@@ -578,7 +578,7 @@ export default function ServiceDetail() {
                       <Play size={12} />{probing ? 'Probing...' : 'Run Now'}
                     </button>
                   )}
-                  {canEdit && (
+                  {canEdit && editMode && (
                     <button className="btn-primary text-xs" onClick={() => openAdditionalProbeConfig(null)}>Add probe</button>
                   )}
                 </div>
@@ -604,7 +604,7 @@ export default function ServiceDetail() {
                             <Play size={11} />{probingProbeId === p.id ? 'Running...' : 'Run'}
                           </button>
                         )}
-                        {canEdit && (
+                        {canEdit && editMode && (
                           <>
                             <button className="btn-secondary text-xs" onClick={() => openAdditionalProbeConfig(p)}>Edit</button>
                             <button className="btn-danger text-xs" onClick={() => setProbeDeleteTarget({ id: p.id, name: p.name })}>Delete</button>
@@ -888,29 +888,6 @@ export default function ServiceDetail() {
               </Modal>
             )}
 
-            {/* Probe History Modal */}
-            {probeHistoryOpen && probeHistoryForProbeId && (
-              <Modal title="Probe history" onClose={() => { setProbeHistoryOpen(false); setProbeHistoryForProbeId(null) }} size="xl">
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {probes.filter(res => res.probe_id === probeHistoryForProbeId).length === 0 && <p className="text-sm text-gray-500">No results yet.</p>}
-                  {probes.filter(res => res.probe_id === probeHistoryForProbeId).map(pr => (
-                    <div key={pr.id} className="flex items-start justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700">
-                      <div className="flex items-start gap-3">
-                        <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${pr.success ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <div className="text-sm flex-1">
-                          <div className={`font-semibold ${pr.success ? 'text-green-700' : 'text-red-700'}`}>{pr.success ? 'Success' : 'Failed'}</div>
-                          {pr.success && pr.response_time_ms && <div className="text-xs text-gray-500">Response: {pr.response_time_ms}ms</div>}
-                          {pr.status_code && <div className="text-xs text-gray-500">Status: {pr.status_code}</div>}
-                          {pr.error_message && <div className="text-xs text-red-600 mt-1">{pr.error_message}</div>}
-                          {pr.ssl_cert_expiry && <div className="text-xs text-gray-500">SSL expiry: {pr.ssl_cert_expiry}</div>}
-                        </div>
-                      </div>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{format(new Date(pr.probed_at), 'MM/dd HH:mm')}</span>
-                    </div>
-                  ))}
-                </div>
-              </Modal>
-            )}
           </div>
         )}
       </div>
