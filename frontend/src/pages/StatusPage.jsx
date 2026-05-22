@@ -724,6 +724,16 @@ export default function StatusPage() {
           icon={<Wrench size={16} />}
         />
 
+        <MaintenanceList
+          items={upcoming}
+          colorClass="bg-blue-100 text-blue-800"
+          title="Scheduled Maintenance Windows"
+          headerClass="text-blue-600"
+          icon={<Clock size={16} />}
+        />
+
+        <MaintenanceHistorySection items={finishedMaintenanceHistory} />
+
         {finishedBlackoutHistory.length > 0 && (
           <LatestListSection
             items={finishedBlackoutHistory}
@@ -746,16 +756,6 @@ export default function StatusPage() {
             )}
           />
         )}
-
-        <MaintenanceList
-          items={upcoming}
-          colorClass="bg-blue-100 text-blue-800"
-          title="Scheduled Maintenance Windows"
-          headerClass="text-blue-600"
-          icon={<Clock size={16} />}
-        />
-
-        <MaintenanceHistorySection items={finishedMaintenanceHistory} />
 
         {finishedIncidentHistory.length > 0 && (
           <LatestListSection
