@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { body, validationResult } = require('express-validator');
 const { requireAuth, requireAdmin, requireSuperAdmin } = require('../middleware/authMiddleware');
-const { query, getOne, getMany } = require('../db/database');
+const { query, getOne, getMany, transaction } = require('../db/database');
 const { encrypt, isEncrypted } = require('../utils/encryption');
 const ldapService = require('../services/ldapService');
 const samlService = require('../services/samlService');
@@ -56,6 +56,27 @@ function getDefaultGeneralSettings() {
     approval_page_missing_token_text: 'Missing approval token',
     approval_page_load_error_text: 'Cannot load approval request',
   };
+}
+
+async function getDemoRegistry() {
+  const row = await getOne("SELECT value FROM settings WHERE key='demo_seed_registry'");
+  if (!row?.value) return null;
+  try {
+    const parsed = JSON.parse(row.value);
+    return {
+      asset_ids: Array.isArray(parsed.asset_ids) ? parsed.asset_ids : [],
+      service_ids: Array.isArray(parsed.service_ids) ? parsed.service_ids : [],
+      maintenance_ids: Array.isArray(parsed.maintenance_ids) ? parsed.maintenance_ids : [],
+      seeded_at: parsed.seeded_at || null,
+      seeded_by: parsed.seeded_by || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function atFromNow(hoursFromNow) {
+  return new Date(Date.now() + (hoursFromNow * 60 * 60 * 1000)).toISOString();
 }
 
 // ─── GET /api/settings/public-branding ──────────────────────────────────────
@@ -376,6 +397,271 @@ router.put('/role-presets', requireAuth, requireAdmin, async (req, res) => {
   );
   await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'role_presets', null, req.ip);
   res.json({ message: 'Role presets saved' });
+});
+
+// ─── Demo Data (superadmin only) ────────────────────────────────────────────
+router.get('/demo/status', requireAuth, requireSuperAdmin, async (req, res) => {
+  const reg = await getDemoRegistry();
+  if (!reg) {
+    return res.json({
+      exists: false,
+      asset_count: 0,
+      service_count: 0,
+      maintenance_count: 0,
+      seeded_at: null,
+      seeded_by: null,
+    });
+  }
+  return res.json({
+    exists: (reg.asset_ids.length + reg.service_ids.length + reg.maintenance_ids.length) > 0,
+    asset_count: reg.asset_ids.length,
+    service_count: reg.service_ids.length,
+    maintenance_count: reg.maintenance_ids.length,
+    seeded_at: reg.seeded_at,
+    seeded_by: reg.seeded_by,
+  });
+});
+
+router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => {
+  const existing = await getDemoRegistry();
+  if (existing && (existing.asset_ids.length || existing.service_ids.length || existing.maintenance_ids.length)) {
+    return res.status(409).json({ error: 'Demo data already exists. Remove it first.' });
+  }
+
+  const tag = Date.now();
+  const assetsDef = [
+    { key: 'portal-web', name: 'Demo Portal Web', category: 'application', criticality: 'high', status: 'operational', desc: 'Frontend portal' },
+    { key: 'portal-api', name: 'Demo Portal API', category: 'api', criticality: 'high', status: 'degraded', desc: 'Public API layer' },
+    { key: 'auth-service', name: 'Demo Auth Service', category: 'application', criticality: 'critical', status: 'operational', desc: 'Authentication backend' },
+    { key: 'payments-db', name: 'Demo Payments DB', category: 'database', criticality: 'critical', status: 'operational', desc: 'Payment database' },
+    { key: 'reporting-db', name: 'Demo Reporting DB', category: 'database', criticality: 'medium', status: 'operational', desc: 'Reporting data mart' },
+    { key: 'edge-lb', name: 'Demo Edge Load Balancer', category: 'infrastructure', criticality: 'high', status: 'operational', desc: 'Ingress traffic balancer' },
+    { key: 'redis-cache', name: 'Demo Redis Cache', category: 'infrastructure', criticality: 'medium', status: 'degraded', desc: 'Session and cache layer' },
+    { key: 'vpn-gateway', name: 'Demo VPN Gateway', category: 'network', criticality: 'medium', status: 'operational', desc: 'Remote office VPN' },
+    { key: 'etl-engine', name: 'Demo ETL Engine', category: 'application', criticality: 'low', status: 'operational', desc: 'Nightly ETL process' },
+    { key: 'email-worker', name: 'Demo Email Worker', category: 'application', criticality: 'low', status: 'major_outage', desc: 'Notification sender worker' },
+  ];
+
+  const servicesDef = [
+    { key: 'customer-portal', name: 'Demo Customer Portal', criticality: 'high', status: 'degraded', is_public: true, assets: ['portal-web', 'portal-api', 'edge-lb', 'redis-cache'] },
+    { key: 'identity', name: 'Demo Identity Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['auth-service', 'redis-cache'] },
+    { key: 'billing', name: 'Demo Billing Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['portal-api', 'payments-db'] },
+    { key: 'analytics', name: 'Demo Analytics', criticality: 'medium', status: 'operational', is_public: false, assets: ['etl-engine', 'reporting-db'] },
+    { key: 'internal-vpn', name: 'Demo Internal VPN', criticality: 'medium', status: 'operational', is_public: false, assets: ['vpn-gateway'] },
+    { key: 'mailing', name: 'Demo Mailing', criticality: 'low', status: 'major_outage', is_public: true, assets: ['email-worker'] },
+  ];
+
+  const maintDef = [
+    {
+      key: 'db-upgrade',
+      title: 'DEMO - Payments DB minor upgrade',
+      type: 'upgrade',
+      status: 'scheduled',
+      impact_level: 'high',
+      scheduled_start: atFromNow(24),
+      scheduled_end: atFromNow(26),
+      actual_start: null,
+      actual_end: null,
+      reopened_at: null,
+      reopen_reason: null,
+      note: 'Planned maintenance for schema optimization',
+      assets: ['payments-db'],
+      services: ['billing'],
+    },
+    {
+      key: 'cache-restart',
+      title: 'DEMO - Cache cluster rolling restart',
+      type: 'infrastructure',
+      status: 'in_progress',
+      impact_level: 'medium',
+      scheduled_start: atFromNow(-1),
+      scheduled_end: atFromNow(1),
+      actual_start: atFromNow(-0.8),
+      actual_end: null,
+      reopened_at: null,
+      reopen_reason: null,
+      note: 'Rolling restart in progress',
+      assets: ['redis-cache'],
+      services: ['customer-portal', 'identity'],
+    },
+    {
+      key: 'mail-hotfix',
+      title: 'DEMO - Email worker hotfix',
+      type: 'emergency',
+      status: 'in_progress',
+      impact_level: 'high',
+      scheduled_start: atFromNow(-10),
+      scheduled_end: atFromNow(-8),
+      actual_start: atFromNow(-10),
+      actual_end: atFromNow(-9),
+      reopened_at: atFromNow(-2),
+      reopen_reason: 'Recurring SMTP timeout after previous fix',
+      note: 'Reopened for additional patching',
+      assets: ['email-worker'],
+      services: ['mailing'],
+    },
+    {
+      key: 'vpn-health',
+      title: 'DEMO - VPN certificate rotation',
+      type: 'security_patch',
+      status: 'completed',
+      impact_level: 'low',
+      scheduled_start: atFromNow(-72),
+      scheduled_end: atFromNow(-71),
+      actual_start: atFromNow(-72),
+      actual_end: atFromNow(-71.5),
+      reopened_at: null,
+      reopen_reason: null,
+      note: 'Completed without incidents',
+      assets: ['vpn-gateway'],
+      services: ['internal-vpn'],
+    },
+  ];
+
+  const created = await transaction(async (client) => {
+    const assetsByKey = new Map();
+    const servicesByKey = new Map();
+    const maintenanceByKey = new Map();
+
+    for (const a of assetsDef) {
+      const r = await client.query(
+        `INSERT INTO assets (name, slug, category, criticality, description, status, owner_type, is_active, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,'user',true,$7::jsonb)
+         RETURNING id`,
+        [a.name, `demo-${a.key}-${tag}`, a.category, a.criticality, a.desc, a.status, JSON.stringify({ demo_seed: true, demo_tag: tag })]
+      );
+      assetsByKey.set(a.key, r.rows[0].id);
+    }
+
+    for (const s of servicesDef) {
+      const r = await client.query(
+        `INSERT INTO services (name, slug, description, criticality, status, sla_uptime_percent, is_public, owner_type, is_active)
+         VALUES ($1,$2,$3,$4,$5,99.90,$6,'user',true)
+         RETURNING id`,
+        [s.name, `demo-${s.key}-${tag}`, `Demo service for ${s.name}`, s.criticality, s.status, !!s.is_public]
+      );
+      const sid = r.rows[0].id;
+      servicesByKey.set(s.key, sid);
+      for (const ak of s.assets) {
+        const aid = assetsByKey.get(ak);
+        if (aid) {
+          await client.query(`INSERT INTO service_assets (service_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [sid, aid]);
+        }
+      }
+    }
+
+    for (const m of maintDef) {
+      const r = await client.query(
+        `INSERT INTO maintenance_windows
+          (title, description, type, status, impact_level, scheduled_start, scheduled_end, actual_start, actual_end, created_by, notes, approved_at, reopened_at, reopen_reason, owner_approval_required, owner_approval_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,false,'not_required')
+         RETURNING id`,
+        [m.title, `Demo maintenance: ${m.title}`, m.type, m.status, m.impact_level, m.scheduled_start, m.scheduled_end, m.actual_start, m.actual_end, req.user.id, m.note, m.status !== 'scheduled' ? m.scheduled_start : null, m.reopened_at, m.reopen_reason]
+      );
+      const mid = r.rows[0].id;
+      maintenanceByKey.set(m.key, mid);
+
+      for (const ak of m.assets) {
+        const aid = assetsByKey.get(ak);
+        if (aid) {
+          await client.query(`INSERT INTO maintenance_assets (maintenance_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [mid, aid]);
+        }
+      }
+      for (const sk of m.services) {
+        const sid = servicesByKey.get(sk);
+        if (sid) {
+          await client.query(`INSERT INTO maintenance_services (maintenance_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [mid, sid]);
+        }
+      }
+
+      await client.query(
+        `INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason)
+         VALUES ('maintenance',$1,$2,$3,$4)`,
+        [mid, 'scheduled', req.user.username || req.user.id || 'system', 'Demo maintenance scheduled']
+      ).catch(() => {});
+
+      if (m.status === 'in_progress' || m.status === 'completed') {
+        await client.query(
+          `INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason)
+           VALUES ('maintenance',$1,'in_progress',$2,$3)`,
+          [mid, req.user.username || req.user.id || 'system', 'Demo maintenance started']
+        ).catch(() => {});
+      }
+      if (m.status === 'completed') {
+        await client.query(
+          `INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason)
+           VALUES ('maintenance',$1,'completed',$2,$3)`,
+          [mid, req.user.username || req.user.id || 'system', 'Demo maintenance completed']
+        ).catch(() => {});
+      }
+      if (m.reopened_at) {
+        await client.query(
+          `INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason)
+           VALUES ('maintenance',$1,'reopened',$2,$3)`,
+          [mid, req.user.username || req.user.id || 'system', m.reopen_reason || 'Demo maintenance reopened']
+        ).catch(() => {});
+      }
+    }
+
+    const registry = {
+      asset_ids: Array.from(assetsByKey.values()),
+      service_ids: Array.from(servicesByKey.values()),
+      maintenance_ids: Array.from(maintenanceByKey.values()),
+      seeded_at: new Date().toISOString(),
+      seeded_by: req.user.username || req.user.id || 'system',
+      tag,
+    };
+
+    await client.query(
+      `INSERT INTO settings (key, value, updated_at) VALUES ('demo_seed_registry', $1, NOW())
+       ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
+      [JSON.stringify(registry)]
+    );
+
+    return registry;
+  });
+
+  await auditService.log(req.user.id, req.user.username, 'settings:demo_create', 'settings', 'demo_seed_registry', null, req.ip);
+  res.status(201).json({
+    message: 'Demo data created',
+    counts: {
+      assets: created.asset_ids.length,
+      services: created.service_ids.length,
+      maintenances: created.maintenance_ids.length,
+    },
+    seeded_at: created.seeded_at,
+  });
+});
+
+router.post('/demo/clear', requireAuth, requireSuperAdmin, async (req, res) => {
+  const reg = await getDemoRegistry();
+  if (!reg) return res.json({ message: 'No demo data to remove', removed: { assets: 0, services: 0, maintenances: 0 } });
+
+  await transaction(async (client) => {
+    if (reg.maintenance_ids.length > 0) {
+      await client.query(`DELETE FROM status_history WHERE entity_type='maintenance' AND entity_id = ANY($1::uuid[])`, [reg.maintenance_ids]);
+      await client.query(`DELETE FROM maintenance_services WHERE maintenance_id = ANY($1::uuid[])`, [reg.maintenance_ids]);
+      await client.query(`DELETE FROM maintenance_assets WHERE maintenance_id = ANY($1::uuid[])`, [reg.maintenance_ids]);
+      await client.query(`DELETE FROM maintenance_windows WHERE id = ANY($1::uuid[])`, [reg.maintenance_ids]);
+    }
+    if (reg.service_ids.length > 0) {
+      await client.query(`DELETE FROM services WHERE id = ANY($1::uuid[])`, [reg.service_ids]);
+    }
+    if (reg.asset_ids.length > 0) {
+      await client.query(`DELETE FROM assets WHERE id = ANY($1::uuid[])`, [reg.asset_ids]);
+    }
+    await client.query(`DELETE FROM settings WHERE key='demo_seed_registry'`);
+  });
+
+  await auditService.log(req.user.id, req.user.username, 'settings:demo_clear', 'settings', 'demo_seed_registry', null, req.ip);
+  res.json({
+    message: 'Demo data removed',
+    removed: {
+      assets: reg.asset_ids.length,
+      services: reg.service_ids.length,
+      maintenances: reg.maintenance_ids.length,
+    },
+  });
 });
 
 // ─── GET /api/settings/:key — generic fallback, must be LAST ─────────────────

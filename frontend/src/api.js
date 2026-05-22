@@ -209,6 +209,9 @@ export const settingsApi = {
   queryNtp: (server) => api.post('/settings/ntp/query', { server }),
   getRolePresets: () => api.get('/settings/role-presets'),
   saveRolePresets: (data) => api.put('/settings/role-presets', data),
+  getDemoStatus: () => api.get('/settings/demo/status'),
+  createDemoData: () => api.post('/settings/demo/create'),
+  clearDemoData: () => api.post('/settings/demo/clear'),
 }
 
 // ─── Status ───────────────────────────────────────────────────────────────────

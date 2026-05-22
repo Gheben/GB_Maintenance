@@ -54,6 +54,10 @@ export default function Settings() {
   const [systemGeneralOpen, setSystemGeneralOpen] = useState(false)
   const [systemAuditOpen, setSystemAuditOpen] = useState(false)
   const [systemDateTimeOpen, setSystemDateTimeOpen] = useState(false)
+  const [systemDemoOpen, setSystemDemoOpen] = useState(false)
+  const [demoStatus, setDemoStatus] = useState(null)
+  const [demoLoading, setDemoLoading] = useState(false)
+  const [demoWorking, setDemoWorking] = useState(false)
   const [appBrandUploading, setAppBrandUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showSmtpPass, setShowSmtpPass] = useState(false)
@@ -136,7 +140,14 @@ export default function Settings() {
   useEffect(() => {
     if (tab === 'apikeys') apikeysApi.list().then(r => setKeys(r.data)).catch(() => {})
     if (tab === 'emailtpl') notificationsApi.templates().then(r => setEmailTemplates(r.data)).catch(() => {})
-  }, [tab])
+    if (tab === 'general' && isSuperAdmin) {
+      setDemoLoading(true)
+      settingsApi.getDemoStatus()
+        .then(r => setDemoStatus(r.data))
+        .catch(() => setDemoStatus(null))
+        .finally(() => setDemoLoading(false))
+    }
+  }, [tab, isSuperAdmin])
 
   const saveSmtp = async (e) => {
     e.preventDefault(); setLoading(true); setSmtpResult(null)
@@ -240,6 +251,47 @@ export default function Settings() {
     } catch (err) {
       setSyncResult({ success: false, message: err.response?.data?.error || 'NTP query failed.' })
     } finally { setNtpSyncing(false) }
+  }
+
+  const refreshDemoStatus = async () => {
+    if (!isSuperAdmin) return
+    setDemoLoading(true)
+    try {
+      const r = await settingsApi.getDemoStatus()
+      setDemoStatus(r.data)
+    } catch {
+      setDemoStatus(null)
+    } finally {
+      setDemoLoading(false)
+    }
+  }
+
+  const handleCreateDemoData = async () => {
+    setDemoWorking(true)
+    try {
+      const r = await settingsApi.createDemoData()
+      toast.success(r.data?.message || 'Demo data created')
+      await refreshDemoStatus()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Unable to create demo data')
+    } finally {
+      setDemoWorking(false)
+    }
+  }
+
+  const handleClearDemoData = async () => {
+    const ok = window.confirm('Remove all demo data created by this feature?')
+    if (!ok) return
+    setDemoWorking(true)
+    try {
+      const r = await settingsApi.clearDemoData()
+      toast.success(r.data?.message || 'Demo data removed')
+      await refreshDemoStatus()
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Unable to remove demo data')
+    } finally {
+      setDemoWorking(false)
+    }
   }
 
   const saveSaml = async (e) => {
@@ -1308,6 +1360,61 @@ export default function Settings() {
                     <button type="submit" className="btn-primary">Save</button>
                   </div>
                 </form>
+              )}
+            </div>
+            )}
+
+            {isSuperAdmin && (
+            <div className="card p-5 sm:p-6 space-y-4">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between text-left"
+                onClick={() => setSystemDemoOpen(v => !v)}
+              >
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <Server size={16} className="text-gray-500" />Demo
+                </h2>
+                {systemDemoOpen ? <ChevronDown size={16} className="text-gray-500" /> : <ChevronRight size={16} className="text-gray-500" />}
+              </button>
+
+              {systemDemoOpen && (
+                <div className="space-y-4 pt-1 border-t border-gray-100 dark:border-gray-700">
+                  <p className="text-sm text-gray-500">
+                    Create or remove a full demo dataset (assets, services, maintenances) for product walkthroughs.
+                  </p>
+
+                  <div className="text-xs text-gray-500 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                    {demoLoading ? (
+                      <span>Loading demo status...</span>
+                    ) : demoStatus ? (
+                      <span>
+                        Assets: <strong>{demoStatus.asset_count || 0}</strong> · Services: <strong>{demoStatus.service_count || 0}</strong> · Maintenances: <strong>{demoStatus.maintenance_count || 0}</strong>
+                        {demoStatus.seeded_at ? ` · Seeded at: ${format(new Date(demoStatus.seeded_at), 'MM/dd/yyyy HH:mm')}` : ''}
+                      </span>
+                    ) : (
+                      <span>Demo status unavailable.</span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleCreateDemoData}
+                      disabled={demoWorking || demoLoading || !!demoStatus?.exists}
+                    >
+                      {demoWorking ? 'Working...' : 'Create demo data'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-danger"
+                      onClick={handleClearDemoData}
+                      disabled={demoWorking || demoLoading || !demoStatus?.exists}
+                    >
+                      {demoWorking ? 'Working...' : 'Remove demo data'}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
             )}
