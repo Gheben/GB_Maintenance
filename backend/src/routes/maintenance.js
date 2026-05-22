@@ -459,7 +459,7 @@ router.get('/:id', async (req, res) => {
      WHERE mw.id=$1`,
     [req.params.id]
   );
-  if (!maint) return res.status(404).json({ error: 'Manutenzione non trovata' });
+  if (!maint) return res.status(404).json({ error: 'Maintenance not found' });
 
   // Access control for non-privileged users
   if (!(await userCanAccessMaintenance(req.user, req.params.id))) {
@@ -542,7 +542,7 @@ router.get('/:id/approval-status', async (req, res) => {
      WHERE mw.id=$1`,
     [req.params.id]
   );
-  if (!maint) return res.status(404).json({ error: 'Manutenzione non trovata' });
+  if (!maint) return res.status(404).json({ error: 'Maintenance not found' });
   if (!(await userCanAccessMaintenance(req.user, req.params.id))) return res.status(403).json({ error: 'Access denied' });
 
   const requests = await getOwnerApprovalsForMaintenance(req.params.id, req.user, maint.created_by);
@@ -663,7 +663,7 @@ router.post('/:id/owner-approvals/:approvalId/respond', [
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const maintenance = await getOne('SELECT * FROM maintenance_windows WHERE id=$1', [req.params.id]);
-  if (!maintenance) return res.status(404).json({ error: 'Manutenzione non trovata' });
+  if (!maintenance) return res.status(404).json({ error: 'Maintenance not found' });
 
   const approval = await getOne(
     `SELECT * FROM maintenance_owner_approvals WHERE id=$1 AND maintenance_id=$2`,
@@ -768,7 +768,7 @@ router.post('/:id/owner-approvals/:approvalId/creator-decision', [
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const maintenance = await getOne('SELECT * FROM maintenance_windows WHERE id=$1', [req.params.id]);
-  if (!maintenance) return res.status(404).json({ error: 'Manutenzione non trovata' });
+  if (!maintenance) return res.status(404).json({ error: 'Maintenance not found' });
   if (!isCreatorDecisionUser(req.user, maintenance)) {
     return res.status(403).json({ error: 'Only maintenance creator can decide this proposal' });
   }
@@ -863,7 +863,7 @@ router.post('/:id/owner-approvals/:approvalId/creator-decision', [
 // ─── PUT /api/maintenance/:id ─────────────────────────────────────────────────
 router.put('/:id', requireOperator, async (req, res) => {
   const maint = await getOne('SELECT * FROM maintenance_windows WHERE id=$1', [req.params.id]);
-  if (!maint) return res.status(404).json({ error: 'Manutenzione non trovata' });
+  if (!maint) return res.status(404).json({ error: 'Maintenance not found' });
   if (['completed','cancelled'].includes(maint.status)) {
     return res.status(400).json({ error: 'Non puoi modificare una manutenzione completata o annullata' });
   }
