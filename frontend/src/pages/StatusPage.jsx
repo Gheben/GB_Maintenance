@@ -350,39 +350,52 @@ function MaintenanceList({ items, colorClass, title, icon, headerClass }) {
   )
 }
 
-function LatestListSection({ items, title, icon, headerClass, renderItem, emptyText = 'No results' }) {
-  const [visible, setVisible] = useState(10)
+function LatestListSection({ items, title, icon, headerClass, renderItem, emptyText = 'No results', defaultOpen = false, pageSize = 3 }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const [visible, setVisible] = useState(pageSize)
 
   useEffect(() => {
-    setVisible(10)
-  }, [items])
+    setOpen(defaultOpen)
+    setVisible(pageSize)
+  }, [items, defaultOpen, pageSize])
 
-  const shown = items.slice(0, visible)
-  const hasMore = visible < items.length
+  const shown = open ? items.slice(0, visible) : []
+  const hasMore = open && visible < items.length
 
   if (!items || items.length === 0) return null
 
   return (
     <div className="card overflow-hidden">
-      <div className={`px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold flex items-center justify-between gap-3 ${headerClass}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`w-full px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold flex items-center justify-between gap-3 text-left ${headerClass}`}
+      >
         <span className="flex items-center gap-2">{icon}{title}</span>
-        <span className="text-xs font-normal text-gray-400">{shown.length} of {items.length}</span>
-      </div>
-      <div className="divide-y divide-gray-100 dark:divide-gray-700">
-        {shown.length === 0
-          ? <p className="text-center text-gray-400 py-6 text-sm">{emptyText}</p>
-          : shown.map(renderItem)
-        }
-      </div>
-      {hasMore && (
-        <div className="px-4 sm:px-5 py-3 border-t border-gray-100 dark:border-gray-700 text-center">
-          <button
-            className="text-sm text-brand-600 hover:text-brand-800 font-medium"
-            onClick={() => setVisible(v => v + 10)}
-          >
-            View more ({items.length - visible} remaining)
-          </button>
-        </div>
+        <span className="flex items-center gap-2 text-xs font-normal text-gray-400">
+          <span>{items.length}</span>
+          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </span>
+      </button>
+      {open && (
+        <>
+          <div className="divide-y divide-gray-100 dark:divide-gray-700">
+            {shown.length === 0
+              ? <p className="text-center text-gray-400 py-6 text-sm">{emptyText}</p>
+              : shown.map(renderItem)
+            }
+          </div>
+          {hasMore && (
+            <div className="px-4 sm:px-5 py-3 border-t border-gray-100 dark:border-gray-700 text-center">
+              <button
+                className="text-sm text-brand-600 hover:text-brand-800 font-medium"
+                onClick={() => setVisible(v => v + pageSize)}
+              >
+                View more ({items.length - visible} remaining)
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
@@ -425,12 +438,6 @@ function MaintenanceHistorySection({ items }) {
 
   const yearKeys = Object.keys(grouped.years).sort((a, b) => Number(b) - Number(a))
 
-  useEffect(() => {
-    if (yearKeys.length > 0 && openYears.length === 0) {
-      setOpenYears([yearKeys[0]])
-    }
-  }, [items])
-
   if (!items || items.length === 0) return null
 
   const groupOrder = [
@@ -449,6 +456,8 @@ function MaintenanceHistorySection({ items }) {
           title={label}
           icon={<Clock size={16} />}
           headerClass="text-gray-700"
+          defaultOpen={false}
+          pageSize={3}
           renderItem={(m) => {
             const statusClass = maintenanceBadgeClass(m.status)
             return (
@@ -485,6 +494,8 @@ function MaintenanceHistorySection({ items }) {
                   title={year}
                   icon={<Clock size={16} />}
                   headerClass="text-gray-700"
+                  defaultOpen={openYears.includes(year)}
+                  pageSize={3}
                   renderItem={(m) => <MaintenanceCard key={m.id} m={m} colorClass={maintenanceBadgeClass(m.status)} />}
                 />
               ))}
