@@ -86,6 +86,14 @@ function atFromNow(hoursFromNow) {
   return new Date(Date.now() + (hoursFromNow * 60 * 60 * 1000)).toISOString();
 }
 
+function atCurrentMonth(day, hour, minute = 0) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const safeDay = Math.max(1, Math.min(28, Number(day) || 1));
+  return new Date(year, month, safeDay, hour, minute, 0, 0).toISOString();
+}
+
 // ─── GET /api/settings/public-branding ──────────────────────────────────────
 router.get('/public-branding', async (req, res) => {
   const row = await getOne("SELECT value FROM settings WHERE key='general_config'");
@@ -511,8 +519,8 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       type: 'upgrade',
       status: 'scheduled',
       impact_level: 'high',
-      scheduled_start: atFromNow(24),
-      scheduled_end: atFromNow(26),
+      scheduled_start: atCurrentMonth(5, 9, 0),
+      scheduled_end: atCurrentMonth(5, 11, 0),
       actual_start: null,
       actual_end: null,
       reopened_at: null,
@@ -527,9 +535,9 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       type: 'infrastructure',
       status: 'in_progress',
       impact_level: 'medium',
-      scheduled_start: atFromNow(-1),
-      scheduled_end: atFromNow(1),
-      actual_start: atFromNow(-0.8),
+      scheduled_start: atCurrentMonth(12, 8, 0),
+      scheduled_end: atCurrentMonth(12, 12, 0),
+      actual_start: atCurrentMonth(12, 8, 30),
       actual_end: null,
       reopened_at: null,
       reopen_reason: null,
@@ -543,11 +551,11 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       type: 'emergency',
       status: 'in_progress',
       impact_level: 'high',
-      scheduled_start: atFromNow(-10),
-      scheduled_end: atFromNow(-8),
-      actual_start: atFromNow(-10),
-      actual_end: atFromNow(-9),
-      reopened_at: atFromNow(-2),
+      scheduled_start: atCurrentMonth(18, 14, 0),
+      scheduled_end: atCurrentMonth(18, 16, 0),
+      actual_start: atCurrentMonth(18, 14, 15),
+      actual_end: atCurrentMonth(18, 15, 0),
+      reopened_at: atCurrentMonth(19, 9, 30),
       reopen_reason: 'Recurring SMTP timeout after previous fix',
       note: 'Reopened for additional patching',
       assets: ['email-worker'],
@@ -559,10 +567,10 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       type: 'security_patch',
       status: 'completed',
       impact_level: 'low',
-      scheduled_start: atFromNow(-72),
-      scheduled_end: atFromNow(-71),
-      actual_start: atFromNow(-72),
-      actual_end: atFromNow(-71.5),
+      scheduled_start: atCurrentMonth(24, 10, 0),
+      scheduled_end: atCurrentMonth(24, 11, 30),
+      actual_start: atCurrentMonth(24, 10, 15),
+      actual_end: atCurrentMonth(24, 11, 15),
       reopened_at: null,
       reopen_reason: null,
       note: 'Completed without incidents',
