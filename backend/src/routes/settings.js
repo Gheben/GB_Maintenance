@@ -588,6 +588,8 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
     { key: 'vpn-gateway', name: 'Demo VPN Gateway', category: 'network', criticality: 'medium', status: 'operational', desc: 'Remote office VPN', owner: 'user', user_targets: ['demo.4'] },
     { key: 'etl-engine', name: 'Demo ETL Engine', category: 'application', criticality: 'low', status: 'operational', desc: 'Nightly ETL process', owner: 'user', user_targets: ['demo.3', 'demo.4'] },
     { key: 'email-worker', name: 'Demo Email Worker', category: 'application', criticality: 'low', status: 'major_outage', desc: 'Notification sender worker', owner: 'group', user_targets: ['demo.1', 'demo.4'] },
+    { key: 'collab-hub', name: 'Demo Collaboration Hub', category: 'application', criticality: 'medium', status: 'operational', desc: 'Shared collaboration workspace', owner: 'group', user_targets: ['demo.1', 'demo.2', 'demo.3', 'demo.4'] },
+    { key: 'ops-dashboard', name: 'Demo Operations Dashboard', category: 'dashboard', criticality: 'medium', status: 'operational', desc: 'Operations command dashboard', owner: 'user', user_targets: ['demo.1', 'demo.2'] },
   ];
 
   const assetDependenciesDef = [
@@ -599,12 +601,12 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
   ];
 
   const servicesDef = [
-    { key: 'customer-portal', name: 'Demo Customer Portal', criticality: 'high', status: 'degraded', is_public: true, assets: ['portal-web', 'portal-api', 'edge-lb', 'redis-cache'], owner: 'group', user_targets: ['demo.1', 'demo.3'] },
-    { key: 'identity', name: 'Demo Identity Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['auth-service', 'redis-cache'], owner: 'user', user_targets: ['demo.2'] },
-    { key: 'billing', name: 'Demo Billing Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['portal-api', 'payments-db'], owner: 'user', user_targets: ['demo.1', 'demo.4'] },
-    { key: 'analytics', name: 'Demo Analytics', criticality: 'medium', status: 'operational', is_public: false, assets: ['etl-engine', 'reporting-db'], owner: 'group', user_targets: ['demo.3'] },
+    { key: 'customer-portal', name: 'Demo Customer Portal', criticality: 'high', status: 'degraded', is_public: true, assets: ['portal-web', 'portal-api', 'edge-lb', 'redis-cache', 'collab-hub'], owner: 'group', user_targets: ['demo.1', 'demo.3', 'demo.4'] },
+    { key: 'identity', name: 'Demo Identity Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['auth-service', 'redis-cache', 'ops-dashboard'], owner: 'user', user_targets: ['demo.2', 'demo.3'] },
+    { key: 'billing', name: 'Demo Billing Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['portal-api', 'payments-db', 'ops-dashboard'], owner: 'user', user_targets: ['demo.1', 'demo.4'] },
+    { key: 'analytics', name: 'Demo Analytics', criticality: 'medium', status: 'operational', is_public: false, assets: ['etl-engine', 'reporting-db', 'collab-hub'], owner: 'group', user_targets: ['demo.3', 'demo.4'] },
     { key: 'internal-vpn', name: 'Demo Internal VPN', criticality: 'medium', status: 'operational', is_public: false, assets: ['vpn-gateway'], owner: 'group', user_targets: ['demo.4'] },
-    { key: 'mailing', name: 'Demo Mailing', criticality: 'low', status: 'major_outage', is_public: true, assets: ['email-worker'], owner: 'group', user_targets: ['demo.1', 'demo.4'] },
+    { key: 'mailing', name: 'Demo Mailing', criticality: 'low', status: 'major_outage', is_public: true, assets: ['email-worker', 'collab-hub'], owner: 'group', user_targets: ['demo.1', 'demo.4'] },
   ];
 
   const serviceDependenciesDef = [
