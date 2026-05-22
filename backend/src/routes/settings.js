@@ -600,6 +600,11 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
     ['email-worker', 'portal-api'],
   ];
 
+  function ensureDemoUserTargets(targetKeys, fallbackKeys) {
+    const keys = Array.isArray(targetKeys) && targetKeys.length > 0 ? targetKeys : fallbackKeys;
+    return (Array.isArray(keys) ? keys : []).map((key) => ({ type: 'user', id: key }));
+  }
+
   const servicesDef = [
     { key: 'customer-portal', name: 'Demo Customer Portal', criticality: 'high', status: 'degraded', is_public: true, assets: ['portal-web', 'portal-api', 'edge-lb', 'redis-cache', 'collab-hub'], owner: 'group', user_targets: ['demo.1', 'demo.3', 'demo.4'] },
     { key: 'identity', name: 'Demo Identity Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['auth-service', 'redis-cache', 'ops-dashboard'], owner: 'user', user_targets: ['demo.2', 'demo.3'] },
@@ -1031,8 +1036,8 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       const ownerType = a.owner === 'group' ? 'local_group' : 'user';
       const ownerGroupId = ownerType === 'local_group' ? demoGroupId : null;
       const ownerId = ownerType === 'user' ? ownerUser : null;
-      const userTargets = (a.user_targets || []).map((k) => {
-        const uid = usersByKey.get(k);
+      const userTargets = ensureDemoUserTargets(a.user_targets, ['demo.1', 'demo.3']).map((target) => {
+        const uid = usersByKey.get(target.id);
         return uid ? { type: 'user', id: uid } : null;
       }).filter(Boolean);
       const r = await client.query(
@@ -1056,8 +1061,8 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       const ownerType = s.owner === 'group' ? 'local_group' : 'user';
       const ownerGroupId = ownerType === 'local_group' ? demoGroupId : null;
       const ownerId = ownerType === 'user' ? (usersByKey.get('ops2') || null) : null;
-      const userTargets = (s.user_targets || []).map((k) => {
-        const uid = usersByKey.get(k);
+      const userTargets = ensureDemoUserTargets(s.user_targets, ['demo.2', 'demo.4']).map((target) => {
+        const uid = usersByKey.get(target.id);
         return uid ? { type: 'user', id: uid } : null;
       }).filter(Boolean);
       const r = await client.query(
