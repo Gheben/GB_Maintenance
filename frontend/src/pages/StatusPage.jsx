@@ -138,22 +138,6 @@ function MaintenanceCard({ m, colorClass }) {
             Timeline
           </button>
         )}
-        {users.length > 0 && (
-          isLoggedIn ? (
-            <button
-              onClick={() => { setUsersSearch(''); setShowUsersModal(true) }}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700 px-3 py-1.5 hover:bg-blue-100 transition-colors"
-            >
-              <Users size={13} />
-              Involved users ({users.length})
-            </button>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full border border-gray-200 bg-gray-100 text-gray-600 px-3 py-1.5 cursor-default" title="Login required to view involved users details">
-              <Users size={13} />
-              Involved users ({users.length})
-            </span>
-          )
-        )}
         {showSubscribeBtn && (
           <button
             onClick={handleBellClick}
@@ -177,6 +161,32 @@ function MaintenanceCard({ m, colorClass }) {
           </button>
         )}
       </div>
+
+      {users.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+            <Users size={11} />
+            Involved users:
+          </span>
+          {isLoggedIn ? (
+            <button
+              type="button"
+              onClick={() => { setUsersSearch(''); setShowUsersModal(true) }}
+              className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 px-2.5 py-0.5 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+              title="View involved users"
+            >
+              {users.length}
+            </button>
+          ) : (
+            <span
+              className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 text-gray-600 px-2.5 py-0.5 text-xs font-medium"
+              title="Login required to view involved users details"
+            >
+              {users.length}
+            </span>
+          )}
+        </div>
+      )}
 
       {uniqueOffices.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
