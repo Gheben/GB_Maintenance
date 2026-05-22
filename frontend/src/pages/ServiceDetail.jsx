@@ -520,6 +520,37 @@ export default function ServiceDetail() {
                 {service.owner_email && <a href={`mailto:${service.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs"><Mail size={12} />{service.owner_email}</a>}
               </div>
             )}
+            {assignedTargets.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between gap-3 flex-wrap text-sm">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Assigned users / groups</span>
+                  <span className="text-xs text-gray-500">{assignedTargets.length} target(s)</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {assignedTargets.map((t, idx) => (
+                    <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
+                      {t.name || t.id || t.dn}
+                      <span className="opacity-70">{t.type}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {impactedOffices.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between gap-3 flex-wrap text-sm">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Offices involved</span>
+                  <span className="text-xs text-gray-500">{impactedOffices.length} office(s)</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {impactedOffices.map((office) => (
+                    <span key={office} className="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                      {office}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ))}
 
