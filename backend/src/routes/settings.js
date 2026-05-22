@@ -68,6 +68,7 @@ async function getDemoRegistry() {
       service_ids: Array.isArray(parsed.service_ids) ? parsed.service_ids : [],
       maintenance_ids: Array.isArray(parsed.maintenance_ids) ? parsed.maintenance_ids : [],
       incident_ids: Array.isArray(parsed.incident_ids) ? parsed.incident_ids : [],
+      blackout_ids: Array.isArray(parsed.blackout_ids) ? parsed.blackout_ids : [],
       supplier_ids: Array.isArray(parsed.supplier_ids) ? parsed.supplier_ids : [],
       local_user_ids: Array.isArray(parsed.local_user_ids) ? parsed.local_user_ids : [],
       local_group_ids: Array.isArray(parsed.local_group_ids) ? parsed.local_group_ids : [],
@@ -92,6 +93,13 @@ function atCurrentMonth(day, hour, minute = 0) {
   const month = now.getMonth();
   const safeDay = Math.max(1, Math.min(28, Number(day) || 1));
   return new Date(year, month, safeDay, hour, minute, 0, 0).toISOString();
+}
+
+function atYearMonthDay(year, monthIndex, day, hour, minute = 0) {
+  const safeYear = Number(year) || new Date().getFullYear();
+  const safeMonth = Math.max(0, Math.min(11, Number(monthIndex) || 0));
+  const safeDay = Math.max(1, Math.min(28, Number(day) || 1));
+  return new Date(safeYear, safeMonth, safeDay, hour, minute, 0, 0).toISOString();
 }
 
 // ─── GET /api/settings/public-branding ──────────────────────────────────────
@@ -453,7 +461,7 @@ router.get('/demo/status', requireAuth, requireSuperAdmin, async (req, res) => {
 router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => {
   const existing = await getDemoRegistry();
   if (existing) {
-    const totalExisting = existing.asset_ids.length + existing.service_ids.length + existing.maintenance_ids.length + existing.incident_ids.length + existing.supplier_ids.length + existing.local_user_ids.length + existing.local_group_ids.length;
+    const totalExisting = existing.asset_ids.length + existing.service_ids.length + existing.maintenance_ids.length + existing.incident_ids.length + existing.blackout_ids.length + existing.supplier_ids.length + existing.local_user_ids.length + existing.local_group_ids.length;
     if (totalExisting > 0) {
       return res.status(409).json({ error: 'Demo data already exists. Remove it first.' });
     }
@@ -577,6 +585,38 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       assets: ['vpn-gateway'],
       services: ['internal-vpn'],
     },
+    {
+      key: 'legacy-platform-2025',
+      title: 'DEMO - Legacy platform migration',
+      type: 'upgrade',
+      status: 'completed',
+      impact_level: 'medium',
+      scheduled_start: atYearMonthDay(2025, 4, 14, 21, 0),
+      scheduled_end: atYearMonthDay(2025, 4, 14, 23, 0),
+      actual_start: atYearMonthDay(2025, 4, 14, 21, 10),
+      actual_end: atYearMonthDay(2025, 4, 14, 22, 30),
+      reopened_at: null,
+      reopen_reason: null,
+      note: 'Historical demo maintenance for 2025',
+      assets: ['portal-web', 'portal-api'],
+      services: ['customer-portal'],
+    },
+    {
+      key: 'core-db-2024',
+      title: 'DEMO - Core database hardening',
+      type: 'security_patch',
+      status: 'completed',
+      impact_level: 'high',
+      scheduled_start: atYearMonthDay(2024, 10, 2, 22, 0),
+      scheduled_end: atYearMonthDay(2024, 10, 3, 1, 0),
+      actual_start: atYearMonthDay(2024, 10, 2, 22, 15),
+      actual_end: atYearMonthDay(2024, 10, 3, 0, 45),
+      reopened_at: null,
+      reopen_reason: null,
+      note: 'Historical demo maintenance for 2024',
+      assets: ['payments-db', 'reporting-db'],
+      services: ['billing', 'analytics'],
+    },
   ];
 
   const incidentsDef = [
@@ -627,6 +667,35 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
     },
   ];
 
+  const extraIncidentsDef = [
+    { key: 'dns-slowness', title: 'DEMO - DNS resolution slowness', severity: 'low', status: 'resolved', started_at: atFromNow(-7), resolved_at: atFromNow(-6), description: 'Intermittent DNS delays.', assets: ['edge-lb'], services: ['customer-portal'], updates: [{ status: 'investigating', message: 'Name server latency observed.' }, { status: 'resolved', message: 'Resolver cache warmed and verified.' }] },
+    { key: 'api-errors', title: 'DEMO - API 500 spike', severity: 'high', status: 'monitoring', started_at: atFromNow(-11), resolved_at: null, description: 'Spikes on the public API.', assets: ['portal-api'], services: ['customer-portal', 'billing'], updates: [{ status: 'investigating', message: 'Rolling back last deploy.' }, { status: 'monitoring', message: 'Error rate dropped after rollback.' }] },
+    { key: 'queue-backlog', title: 'DEMO - Queue backlog growth', severity: 'medium', status: 'monitoring', started_at: atFromNow(-16), resolved_at: null, description: 'Notification queue is slower than usual.', assets: ['email-worker'], services: ['mailing'], updates: [{ status: 'investigating', message: 'Workers restarted to clear backlog.' }, { status: 'monitoring', message: 'Queue depth is decreasing.' }] },
+    { key: 'storage-io', title: 'DEMO - Storage IO spike', severity: 'medium', status: 'investigating', started_at: atFromNow(-21), resolved_at: null, description: 'High IO on database volumes.', assets: ['payments-db'], services: ['billing'], updates: [{ status: 'investigating', message: 'IOPS threshold exceeded.' }] },
+    { key: 'auth-logins', title: 'DEMO - Intermittent auth login failures', severity: 'critical', status: 'resolved', started_at: atFromNow(-33), resolved_at: atFromNow(-31), description: 'Login errors on identity flow.', assets: ['auth-service', 'redis-cache'], services: ['identity'], updates: [{ status: 'investigating', message: 'Token cache stale entries found.' }, { status: 'resolved', message: 'Cache cleared and auth flow restored.' }] },
+    { key: 'vpn-loss', title: 'DEMO - Packet loss on VPN', severity: 'low', status: 'resolved', started_at: atFromNow(-44), resolved_at: atFromNow(-43), description: 'Packet loss on branch gateway.', assets: ['vpn-gateway'], services: ['internal-vpn'], updates: [{ status: 'investigating', message: 'WAN provider route instability.' }, { status: 'resolved', message: 'Failover route is stable.' }] },
+    { key: 'etl-lag', title: 'DEMO - ETL lag detected', severity: 'medium', status: 'monitoring', started_at: atFromNow(-61), resolved_at: null, description: 'Nightly ETL is behind schedule.', assets: ['etl-engine', 'reporting-db'], services: ['analytics'], updates: [{ status: 'investigating', message: 'Large input batch delayed the job.' }, { status: 'monitoring', message: 'Processing is catching up.' }] },
+    { key: 'portal-timeout', title: 'DEMO - Portal timeout burst', severity: 'high', status: 'resolved', started_at: atFromNow(-75), resolved_at: atFromNow(-74), description: 'Timeouts on the customer portal.', assets: ['portal-web', 'portal-api'], services: ['customer-portal'], updates: [{ status: 'investigating', message: 'Application pool recycle in progress.' }, { status: 'resolved', message: 'Recycle completed and timeouts stopped.' }] },
+    { key: 'mail-throttle', title: 'DEMO - SMTP throttling alert', severity: 'medium', status: 'monitoring', started_at: atFromNow(-88), resolved_at: null, description: 'Provider is throttling outbound mail.', assets: ['email-worker'], services: ['mailing'], updates: [{ status: 'investigating', message: 'SMTP retries increased.' }, { status: 'monitoring', message: 'Queue is being drained slowly.' }] },
+  ];
+
+  const allIncidentsDef = [...incidentsDef, ...extraIncidentsDef];
+
+  const blackoutsDef = [
+    { key: 'blackout-current', name: 'DEMO - Current release freeze', start_date: atCurrentMonth(19, 0, 0).slice(0, 10), end_date: atCurrentMonth(21, 23, 59).slice(0, 10), description: 'Current demo blackout window.' },
+    { key: 'blackout-upcoming', name: 'DEMO - Upcoming platform freeze', start_date: atCurrentMonth(27, 0, 0).slice(0, 10), end_date: atCurrentMonth(28, 23, 59).slice(0, 10), description: 'Upcoming blackout for next release.' },
+    { key: 'blackout-2025-a', name: 'DEMO - 2025 Q4 change freeze', start_date: atYearMonthDay(2025, 9, 10, 0, 0).slice(0, 10), end_date: atYearMonthDay(2025, 9, 12, 23, 59).slice(0, 10), description: 'Historic blackout 2025.' },
+    { key: 'blackout-2025-b', name: 'DEMO - 2025 Black Friday freeze', start_date: atYearMonthDay(2025, 10, 24, 0, 0).slice(0, 10), end_date: atYearMonthDay(2025, 10, 29, 23, 59).slice(0, 10), description: 'Historic blackout 2025.' },
+    { key: 'blackout-2025-c', name: 'DEMO - 2025 year-end freeze', start_date: atYearMonthDay(2025, 11, 22, 0, 0).slice(0, 10), end_date: atYearMonthDay(2025, 11, 31, 23, 59).slice(0, 10), description: 'Historic blackout 2025.' },
+    { key: 'blackout-2024-a', name: 'DEMO - 2024 summer freeze', start_date: atYearMonthDay(2024, 6, 8, 0, 0).slice(0, 10), end_date: atYearMonthDay(2024, 6, 10, 23, 59).slice(0, 10), description: 'Historic blackout 2024.' },
+    { key: 'blackout-2024-b', name: 'DEMO - 2024 autumn freeze', start_date: atYearMonthDay(2024, 8, 14, 0, 0).slice(0, 10), end_date: atYearMonthDay(2024, 8, 16, 23, 59).slice(0, 10), description: 'Historic blackout 2024.' },
+    { key: 'blackout-2024-c', name: 'DEMO - 2024 winter freeze', start_date: atYearMonthDay(2024, 11, 5, 0, 0).slice(0, 10), end_date: atYearMonthDay(2024, 11, 8, 23, 59).slice(0, 10), description: 'Historic blackout 2024.' },
+    { key: 'blackout-2024-d', name: 'DEMO - 2024 patch freeze', start_date: atYearMonthDay(2024, 3, 3, 0, 0).slice(0, 10), end_date: atYearMonthDay(2024, 3, 5, 23, 59).slice(0, 10), description: 'Historic blackout 2024.' },
+    { key: 'blackout-2023-a', name: 'DEMO - 2023 spring freeze', start_date: atYearMonthDay(2023, 3, 2, 0, 0).slice(0, 10), end_date: atYearMonthDay(2023, 3, 4, 23, 59).slice(0, 10), description: 'Historic blackout 2023.' },
+    { key: 'blackout-2023-b', name: 'DEMO - 2023 autumn freeze', start_date: atYearMonthDay(2023, 9, 11, 0, 0).slice(0, 10), end_date: atYearMonthDay(2023, 9, 13, 23, 59).slice(0, 10), description: 'Historic blackout 2023.' },
+    { key: 'blackout-2022-a', name: 'DEMO - 2022 maintenance freeze', start_date: atYearMonthDay(2022, 5, 6, 0, 0).slice(0, 10), end_date: atYearMonthDay(2022, 5, 8, 23, 59).slice(0, 10), description: 'Historic blackout 2022.' },
+  ];
+
   const created = await transaction(async (client) => {
     const usersByKey = new Map();
     const assetsByKey = new Map();
@@ -634,6 +703,7 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
     const maintenanceByKey = new Map();
     const incidentsByKey = new Map();
     const supplierIds = [];
+    const blackoutIds = [];
 
     const g = await client.query(
       `INSERT INTO local_groups (name, description, permissions, role)
@@ -782,7 +852,7 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       }
     }
 
-    for (const i of incidentsDef) {
+    for (const i of allIncidentsDef) {
       const r = await client.query(
         `INSERT INTO incidents (title, description, severity, status, started_at, resolved_at, created_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7)
@@ -809,11 +879,22 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       }
     }
 
+    for (const b of blackoutsDef) {
+      const r = await client.query(
+        `INSERT INTO blackout_periods (name, description, start_date, end_date, created_by)
+         VALUES ($1,$2,$3,$4,$5)
+         RETURNING id`,
+        [b.name, b.description, b.start_date, b.end_date, req.user.id]
+      );
+      blackoutIds.push(r.rows[0].id);
+    }
+
     const registry = {
       asset_ids: Array.from(assetsByKey.values()),
       service_ids: Array.from(servicesByKey.values()),
       maintenance_ids: Array.from(maintenanceByKey.values()),
       incident_ids: Array.from(incidentsByKey.values()),
+      blackout_ids: blackoutIds,
       supplier_ids: supplierIds,
       local_user_ids: Array.from(usersByKey.values()),
       local_group_ids: [demoGroupId],
@@ -841,6 +922,7 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       services: created.service_ids.length,
       maintenances: created.maintenance_ids.length,
       incidents: created.incident_ids.length,
+      blackouts: created.blackout_ids.length,
       suppliers: created.supplier_ids.length,
       local_users: created.local_user_ids.length,
       local_groups: created.local_group_ids.length,
@@ -861,6 +943,7 @@ router.post('/demo/clear', requireAuth, requireSuperAdmin, async (req, res) => {
         services: 0,
         maintenances: 0,
         incidents: 0,
+        blackouts: 0,
         suppliers: 0,
         local_users: 0,
         local_groups: 0,
@@ -871,6 +954,9 @@ router.post('/demo/clear', requireAuth, requireSuperAdmin, async (req, res) => {
   await transaction(async (client) => {
     if (reg.incident_ids.length > 0) {
       await client.query(`DELETE FROM incidents WHERE id = ANY($1::uuid[])`, [reg.incident_ids]);
+    }
+    if (reg.blackout_ids && reg.blackout_ids.length > 0) {
+      await client.query(`DELETE FROM blackout_periods WHERE id = ANY($1::uuid[])`, [reg.blackout_ids]);
     }
     if (reg.maintenance_ids.length > 0) {
       await client.query(`DELETE FROM status_history WHERE entity_type='maintenance' AND entity_id = ANY($1::uuid[])`, [reg.maintenance_ids]);
@@ -902,6 +988,7 @@ router.post('/demo/clear', requireAuth, requireSuperAdmin, async (req, res) => {
       services: reg.service_ids.length,
       maintenances: reg.maintenance_ids.length,
       incidents: reg.incident_ids.length,
+      blackouts: (reg.blackout_ids || []).length,
       suppliers: reg.supplier_ids.length,
       local_users: reg.local_user_ids.length,
       local_groups: reg.local_group_ids.length,

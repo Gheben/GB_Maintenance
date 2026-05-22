@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Building2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { Modal } from '../components/Modal'
+import { differenceInCalendarDays } from 'date-fns'
 
 const OVERALL_ICONS = {
   operational: <CheckCircle className="text-green-500" size={28} />,
@@ -349,6 +350,152 @@ function MaintenanceList({ items, colorClass, title, icon, headerClass }) {
   )
 }
 
+function LatestListSection({ items, title, icon, headerClass, renderItem, emptyText = 'No results' }) {
+  const [visible, setVisible] = useState(10)
+
+  useEffect(() => {
+    setVisible(10)
+  }, [items])
+
+  const shown = items.slice(0, visible)
+  const hasMore = visible < items.length
+
+  if (!items || items.length === 0) return null
+
+  return (
+    <div className="card overflow-hidden">
+      <div className={`px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold flex items-center justify-between gap-3 ${headerClass}`}>
+        <span className="flex items-center gap-2">{icon}{title}</span>
+        <span className="text-xs font-normal text-gray-400">{shown.length} of {items.length}</span>
+      </div>
+      <div className="divide-y divide-gray-100 dark:divide-gray-700">
+        {shown.length === 0
+          ? <p className="text-center text-gray-400 py-6 text-sm">{emptyText}</p>
+          : shown.map(renderItem)
+        }
+      </div>
+      {hasMore && (
+        <div className="px-4 sm:px-5 py-3 border-t border-gray-100 dark:border-gray-700 text-center">
+          <button
+            className="text-sm text-brand-600 hover:text-brand-800 font-medium"
+            onClick={() => setVisible(v => v + 10)}
+          >
+            View more ({items.length - visible} remaining)
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function maintenanceDate(m) {
+  return new Date(m.actual_end || m.actual_start || m.scheduled_start || m.created_at || Date.now())
+}
+
+function maintenanceBucket(m, now = new Date()) {
+  const date = maintenanceDate(m)
+  const days = Math.abs(differenceInCalendarDays(now, date))
+  if (days === 0) return 'today'
+  if (days <= 7) return 'last_week'
+  if (days <= 30) return 'last_month'
+  if (days <= 365) return 'last_year'
+  return String(date.getFullYear())
+}
+
+function maintenanceBadgeClass(status) {
+  if (status === 'completed') return 'bg-green-100 text-green-800'
+  if (status === 'in_progress') return 'bg-orange-100 text-orange-800'
+  if (status === 'scheduled') return 'bg-blue-100 text-blue-800'
+  return 'bg-gray-100 text-gray-700'
+}
+
+function MaintenanceHistorySection({ items }) {
+  const [openYears, setOpenYears] = useState([])
+
+  const grouped = items.reduce((acc, item) => {
+    const bucket = maintenanceBucket(item)
+    if (bucket === 'today' || bucket === 'last_week' || bucket === 'last_month' || bucket === 'last_year') {
+      acc[bucket].push(item)
+    } else {
+      if (!acc.years[bucket]) acc.years[bucket] = []
+      acc.years[bucket].push(item)
+    }
+    return acc
+  }, { today: [], last_week: [], last_month: [], last_year: [], years: {} })
+
+  const yearKeys = Object.keys(grouped.years).sort((a, b) => Number(b) - Number(a))
+
+  useEffect(() => {
+    if (yearKeys.length > 0 && openYears.length === 0) {
+      setOpenYears([yearKeys[0]])
+    }
+  }, [items])
+
+  if (!items || items.length === 0) return null
+
+  const groupOrder = [
+    ['today', 'Today'],
+    ['last_week', 'Last week'],
+    ['last_month', 'Last month'],
+    ['last_year', 'Last year'],
+  ]
+
+  return (
+    <div className="space-y-4">
+      {groupOrder.map(([key, label]) => grouped[key].length > 0 && (
+        <LatestListSection
+          key={key}
+          items={grouped[key]}
+          title={label}
+          icon={<Clock size={16} />}
+          headerClass="text-gray-700"
+          renderItem={(m) => {
+            const statusClass = maintenanceBadgeClass(m.status)
+            return (
+              <MaintenanceCard key={m.id} m={m} colorClass={statusClass} />
+            )
+          }}
+        />
+      ))}
+
+      {yearKeys.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold flex items-center justify-between gap-3">
+            <span className="flex items-center gap-2"><Clock size={16} />Previous years</span>
+            <span className="text-xs font-normal text-gray-400">{yearKeys.length} years</span>
+          </div>
+          <div className="px-4 sm:px-5 py-4 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {yearKeys.map((year) => (
+                <button
+                  key={year}
+                  type="button"
+                  onClick={() => setOpenYears((current) => current.includes(year) ? current.filter(y => y !== year) : [...current, year])}
+                  className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${openYears.includes(year) ? 'bg-brand-600 text-white border-brand-600' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
+                >
+                  {year} ({grouped.years[year].length})
+                </button>
+              ))}
+            </div>
+            <div className="space-y-4">
+              {openYears.map((year) => (
+                <LatestListSection
+                  key={year}
+                  items={grouped.years[year]}
+                  title={year}
+                  icon={<Clock size={16} />}
+                  headerClass="text-gray-700"
+                  renderItem={(m) => <MaintenanceCard key={m.id} m={m} colorClass={maintenanceBadgeClass(m.status)} />}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const SEV_BADGE = {
   critical: 'bg-red-100 text-red-800',
   high: 'bg-orange-100 text-orange-800',
@@ -434,7 +581,9 @@ export default function StatusPage() {
 
   const inProgress = data.in_progress_maintenance || []
   const upcoming = data.upcoming_maintenance || []
-  const recent = data.recent_maintenance || []
+  const maintenanceHistory = data.maintenance_history || []
+  const incidentHistory = data.incident_history || []
+  const blackoutHistory = data.blackout_history || []
   const blackouts = data.blackout_periods || []
   const now = new Date()
   const activeBlackouts = blackouts.filter(b => {
@@ -576,6 +725,29 @@ export default function StatusPage() {
           </div>
         )}
 
+        {blackoutHistory.length > 0 && (
+          <LatestListSection
+            items={blackoutHistory}
+            title="Blackout history"
+            icon={<Ban size={16} />}
+            headerClass="text-red-600"
+            renderItem={(b) => (
+              <div key={b.id} className="px-4 sm:px-5 py-4">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <p className="font-medium text-sm">{b.name}</p>
+                  <span className="text-xs badge bg-red-100 text-red-800 shrink-0">blackout</span>
+                </div>
+                <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                  <span>{fmt(b.start_date, 'MM/dd/yyyy')}</span>
+                  <span>to</span>
+                  <span>{fmt(b.end_date, 'MM/dd/yyyy')}</span>
+                </div>
+                {b.description && <p className="text-xs text-gray-500 mt-1">{b.description}</p>}
+              </div>
+            )}
+          />
+        )}
+
         <MaintenanceList
           items={inProgress}
           colorClass="bg-orange-100 text-orange-800"
@@ -592,13 +764,17 @@ export default function StatusPage() {
           icon={<Clock size={16} />}
         />
 
-        <MaintenanceList
-          items={recent}
-          colorClass="bg-green-100 text-green-800"
-          title="Recently Completed"
-          headerClass="text-gray-600"
-          icon={<CheckCircle size={16} className="text-green-500" />}
-        />
+        <MaintenanceHistorySection items={maintenanceHistory} />
+
+        {incidentHistory.length > 0 && (
+          <LatestListSection
+            items={incidentHistory}
+            title="Incident history"
+            icon={<Bell size={16} />}
+            headerClass="text-red-600"
+            renderItem={(incident) => <IncidentCard key={incident.id} incident={incident} />}
+          />
+        )}
       </div>
     </div>
   )

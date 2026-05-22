@@ -182,6 +182,30 @@ router.get('/', async (req, res) => {
      ORDER BY mw.actual_end DESC LIMIT 100`
   );
 
+  const maintenance_history = await getMany(
+    `SELECT mw.id, mw.title, mw.type, mw.status, mw.impact_level,
+            mw.scheduled_start, mw.scheduled_end, mw.actual_start, mw.actual_end, mw.reopened_at, mw.reopen_reason, mw.reopen_count, mw.notes, mw.description,
+            mw.created_at, mw.approved_at
+     FROM maintenance_windows mw
+     WHERE mw.status != 'draft'
+     ORDER BY COALESCE(mw.actual_end, mw.actual_start, mw.scheduled_start, mw.created_at) DESC
+     LIMIT 200`
+  );
+
+  const incident_history = await getMany(
+    `SELECT i.id, i.title, i.severity, i.status, i.started_at, i.description, i.resolved_at
+     FROM incidents i
+     ORDER BY i.started_at DESC
+     LIMIT 100`
+  );
+
+  const blackout_history = await getMany(
+    `SELECT id, name, description, start_date, end_date
+     FROM blackout_periods
+     ORDER BY start_date DESC
+     LIMIT 100`
+  ).catch(() => []);
+
   // For each maintenance (in_progress + upcoming + recent), get involved users count
   const allMaintIds = [
     ...in_progress_maintenance,
@@ -295,9 +319,12 @@ router.get('/', async (req, res) => {
     blackout_periods,
     services,
     active_incidents: incidents,
+    incident_history,
     in_progress_maintenance: attachMeta(in_progress_maintenance),
     upcoming_maintenance: attachMeta(upcoming_maintenance),
     recent_maintenance: attachMeta(recent_maintenance),
+    maintenance_history: attachMeta(maintenance_history),
+    blackout_history,
     // Legacy field kept for backward compat
     maintenance_summary: maintenance,
     last_updated: new Date().toISOString(),
