@@ -71,6 +71,7 @@ async function getDemoRegistry() {
       blackout_ids: Array.isArray(parsed.blackout_ids) ? parsed.blackout_ids : [],
       supplier_ids: Array.isArray(parsed.supplier_ids) ? parsed.supplier_ids : [],
       license_ids: Array.isArray(parsed.license_ids) ? parsed.license_ids : [],
+      probe_ids: Array.isArray(parsed.probe_ids) ? parsed.probe_ids : [],
       local_user_ids: Array.isArray(parsed.local_user_ids) ? parsed.local_user_ids : [],
       local_group_ids: Array.isArray(parsed.local_group_ids) ? parsed.local_group_ids : [],
       asset_dependency_count: Number(parsed.asset_dependency_count || 0),
@@ -435,6 +436,7 @@ router.get('/demo/status', requireAuth, requireSuperAdmin, async (req, res) => {
       incident_count: 0,
       supplier_count: 0,
       license_count: 0,
+      probe_count: 0,
       local_user_count: 0,
       local_group_count: 0,
       asset_dependency_count: 0,
@@ -443,7 +445,7 @@ router.get('/demo/status', requireAuth, requireSuperAdmin, async (req, res) => {
       seeded_by: null,
     });
   }
-  const total = reg.asset_ids.length + reg.service_ids.length + reg.maintenance_ids.length + reg.incident_ids.length + reg.supplier_ids.length + reg.license_ids.length + reg.local_user_ids.length + reg.local_group_ids.length;
+  const total = reg.asset_ids.length + reg.service_ids.length + reg.maintenance_ids.length + reg.incident_ids.length + reg.supplier_ids.length + reg.license_ids.length + reg.probe_ids.length + reg.local_user_ids.length + reg.local_group_ids.length;
   return res.json({
     exists: total > 0,
     asset_count: reg.asset_ids.length,
@@ -452,6 +454,7 @@ router.get('/demo/status', requireAuth, requireSuperAdmin, async (req, res) => {
     incident_count: reg.incident_ids.length,
     supplier_count: reg.supplier_ids.length,
     license_count: reg.license_ids.length,
+    probe_count: reg.probe_ids.length,
     local_user_count: reg.local_user_ids.length,
     local_group_count: reg.local_group_ids.length,
     asset_dependency_count: reg.asset_dependency_count,
@@ -464,7 +467,7 @@ router.get('/demo/status', requireAuth, requireSuperAdmin, async (req, res) => {
 router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => {
   const existing = await getDemoRegistry();
   if (existing) {
-    const totalExisting = existing.asset_ids.length + existing.service_ids.length + existing.maintenance_ids.length + existing.incident_ids.length + existing.blackout_ids.length + existing.supplier_ids.length + existing.license_ids.length + existing.local_user_ids.length + existing.local_group_ids.length;
+    const totalExisting = existing.asset_ids.length + existing.service_ids.length + existing.maintenance_ids.length + existing.incident_ids.length + existing.blackout_ids.length + existing.supplier_ids.length + existing.license_ids.length + existing.probe_ids.length + existing.local_user_ids.length + existing.local_group_ids.length;
     if (totalExisting > 0) {
       return res.status(409).json({ error: 'Demo data already exists. Remove it first.' });
     }
@@ -609,6 +612,180 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
     ['customer-portal', 'billing'],
     ['analytics', 'billing'],
     ['mailing', 'customer-portal'],
+  ];
+
+  const assetProbesDef = [
+    {
+      key: 'portal-web-probe',
+      assetKey: 'portal-web',
+      name: 'Primary HTTPS check',
+      probe_type: 'https',
+      probe_target: 'https://example.com',
+      expected_status_code: 200,
+      dns_record_type: 'A',
+      dns_expected_value: null,
+      ssl_expiry_warning_days: 30,
+      probe_interval_seconds: 300,
+      probe_timeout_seconds: 10,
+      failure_threshold: 2,
+      recovery_threshold: 2,
+      pause_during_maintenance: true,
+      legacy_slot: true,
+      current_state: 'operational',
+      next_probe_at: atFromNow(24),
+      last_probed_at: atFromNow(-1),
+      result: { success: true, response_time_ms: 118, status_code: 200, error_message: null, ssl_cert_expiry: '2030-12-31T00:00:00.000Z', dns_response: null },
+    },
+    {
+      key: 'portal-api-probe',
+      assetKey: 'portal-api',
+      name: 'DNS reachability',
+      probe_type: 'dns',
+      probe_target: 'example.com',
+      expected_status_code: null,
+      dns_record_type: 'A',
+      dns_expected_value: '93.184.216.34',
+      ssl_expiry_warning_days: 30,
+      probe_interval_seconds: 600,
+      probe_timeout_seconds: 10,
+      failure_threshold: 2,
+      recovery_threshold: 2,
+      pause_during_maintenance: true,
+      legacy_slot: true,
+      current_state: 'operational',
+      next_probe_at: atFromNow(24),
+      last_probed_at: atFromNow(-2),
+      result: { success: true, response_time_ms: 84, status_code: null, error_message: null, ssl_cert_expiry: null, dns_response: '93.184.216.34' },
+    },
+    {
+      key: 'email-worker-probe',
+      assetKey: 'email-worker',
+      name: 'TCP port check',
+      probe_type: 'tcp',
+      probe_target: 'example.com:443',
+      expected_status_code: null,
+      dns_record_type: 'A',
+      dns_expected_value: null,
+      ssl_expiry_warning_days: 30,
+      probe_interval_seconds: 600,
+      probe_timeout_seconds: 10,
+      failure_threshold: 2,
+      recovery_threshold: 2,
+      pause_during_maintenance: true,
+      legacy_slot: true,
+      current_state: 'operational',
+      next_probe_at: atFromNow(24),
+      last_probed_at: atFromNow(-3),
+      result: { success: true, response_time_ms: 42, status_code: null, error_message: null, ssl_cert_expiry: null, dns_response: null },
+    },
+    {
+      key: 'vpn-gateway-probe',
+      assetKey: 'vpn-gateway',
+      name: 'TLS certificate check',
+      probe_type: 'tls',
+      probe_target: 'example.com:443',
+      expected_status_code: null,
+      dns_record_type: 'A',
+      dns_expected_value: null,
+      ssl_expiry_warning_days: 30,
+      probe_interval_seconds: 900,
+      probe_timeout_seconds: 10,
+      failure_threshold: 2,
+      recovery_threshold: 2,
+      pause_during_maintenance: true,
+      legacy_slot: true,
+      current_state: 'operational',
+      next_probe_at: atFromNow(24),
+      last_probed_at: atFromNow(-4),
+      result: { success: true, response_time_ms: 132, status_code: null, error_message: null, ssl_cert_expiry: '2030-12-31T00:00:00.000Z', dns_response: null },
+    },
+  ];
+
+  const serviceProbesDef = [
+    {
+      key: 'customer-portal-probe',
+      serviceKey: 'customer-portal',
+      name: 'Public HTTPS probe',
+      probe_type: 'https',
+      probe_target: 'https://example.com',
+      expected_status_code: 200,
+      dns_record_type: 'A',
+      dns_expected_value: null,
+      ssl_expiry_warning_days: 30,
+      probe_interval_seconds: 300,
+      probe_timeout_seconds: 10,
+      failure_threshold: 2,
+      recovery_threshold: 2,
+      pause_during_maintenance: true,
+      legacy_slot: true,
+      current_state: 'operational',
+      next_probe_at: atFromNow(24),
+      last_probed_at: atFromNow(-1),
+      result: { success: true, response_time_ms: 109, status_code: 200, error_message: null, ssl_cert_expiry: '2030-12-31T00:00:00.000Z', dns_response: null },
+    },
+    {
+      key: 'identity-probe',
+      serviceKey: 'identity',
+      name: 'Identity DNS probe',
+      probe_type: 'dns',
+      probe_target: 'example.com',
+      expected_status_code: null,
+      dns_record_type: 'A',
+      dns_expected_value: '93.184.216.34',
+      ssl_expiry_warning_days: 30,
+      probe_interval_seconds: 600,
+      probe_timeout_seconds: 10,
+      failure_threshold: 2,
+      recovery_threshold: 2,
+      pause_during_maintenance: true,
+      legacy_slot: true,
+      current_state: 'operational',
+      next_probe_at: atFromNow(24),
+      last_probed_at: atFromNow(-2),
+      result: { success: true, response_time_ms: 79, status_code: null, error_message: null, ssl_cert_expiry: null, dns_response: '93.184.216.34' },
+    },
+    {
+      key: 'billing-probe',
+      serviceKey: 'billing',
+      name: 'Billing TCP probe',
+      probe_type: 'tcp',
+      probe_target: 'example.com:443',
+      expected_status_code: null,
+      dns_record_type: 'A',
+      dns_expected_value: null,
+      ssl_expiry_warning_days: 30,
+      probe_interval_seconds: 600,
+      probe_timeout_seconds: 10,
+      failure_threshold: 2,
+      recovery_threshold: 2,
+      pause_during_maintenance: true,
+      legacy_slot: true,
+      current_state: 'operational',
+      next_probe_at: atFromNow(24),
+      last_probed_at: atFromNow(-3),
+      result: { success: true, response_time_ms: 45, status_code: null, error_message: null, ssl_cert_expiry: null, dns_response: null },
+    },
+    {
+      key: 'mailing-probe',
+      serviceKey: 'mailing',
+      name: 'Mailing TLS probe',
+      probe_type: 'tls',
+      probe_target: 'example.com:443',
+      expected_status_code: null,
+      dns_record_type: 'A',
+      dns_expected_value: null,
+      ssl_expiry_warning_days: 30,
+      probe_interval_seconds: 900,
+      probe_timeout_seconds: 10,
+      failure_threshold: 2,
+      recovery_threshold: 2,
+      pause_during_maintenance: true,
+      legacy_slot: true,
+      current_state: 'operational',
+      next_probe_at: atFromNow(24),
+      last_probed_at: atFromNow(-4),
+      result: { success: true, response_time_ms: 121, status_code: null, error_message: null, ssl_cert_expiry: '2030-12-31T00:00:00.000Z', dns_response: null },
+    },
   ];
 
   const maintDef = [
@@ -812,6 +989,7 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
     const supplierIds = [];
     const supplierByKey = new Map();
     const licenseIds = [];
+    const probeIds = [];
     const blackoutIds = [];
 
     const g = await client.query(
@@ -910,6 +1088,84 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       if (sid && did) {
         await client.query(`INSERT INTO service_dependencies (service_id, depends_on_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [sid, did]);
       }
+    }
+
+    for (const p of assetProbesDef) {
+      const assetId = assetsByKey.get(p.assetKey);
+      if (!assetId) continue;
+      const r = await client.query(
+        `INSERT INTO asset_probes
+          (asset_id, name, probe_enabled, probe_type, probe_target, probe_interval_seconds, probe_timeout_seconds, expected_status_code,
+           failure_threshold, recovery_threshold, pause_during_maintenance, dns_record_type, dns_expected_value, ssl_expiry_warning_days,
+           legacy_slot, last_probed_at, next_probe_at, consecutive_failures, consecutive_successes, current_state)
+         VALUES ($1,$2,true,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,true,$14,$15,0,1,$16)
+         RETURNING id`,
+        [
+          assetId,
+          p.name,
+          p.probe_type,
+          p.probe_target,
+          p.probe_interval_seconds,
+          p.probe_timeout_seconds,
+          p.expected_status_code,
+          p.failure_threshold,
+          p.recovery_threshold,
+          p.pause_during_maintenance,
+          p.dns_record_type,
+          p.dns_expected_value,
+          p.ssl_expiry_warning_days,
+          p.last_probed_at,
+          p.next_probe_at,
+          p.current_state,
+        ]
+      );
+      const probeId = r.rows[0].id;
+      probeIds.push(probeId);
+      const pr = p.result || {};
+      await client.query(
+        `INSERT INTO probe_results (asset_id, probe_id, success, response_time_ms, status_code, error_message, ssl_cert_expiry, dns_response, probed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [assetId, probeId, !!pr.success, pr.response_time_ms ?? null, pr.status_code ?? null, pr.error_message ?? null, pr.ssl_cert_expiry ?? null, pr.dns_response ?? null, p.last_probed_at]
+      );
+    }
+
+    for (const p of serviceProbesDef) {
+      const serviceId = servicesByKey.get(p.serviceKey);
+      if (!serviceId) continue;
+      const r = await client.query(
+        `INSERT INTO service_probes
+          (service_id, name, probe_enabled, probe_type, probe_target, probe_interval_seconds, probe_timeout_seconds, expected_status_code,
+           failure_threshold, recovery_threshold, pause_during_maintenance, dns_record_type, dns_expected_value, ssl_expiry_warning_days,
+           legacy_slot, last_probed_at, next_probe_at, consecutive_failures, consecutive_successes, current_state)
+         VALUES ($1,$2,true,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,true,$14,$15,0,1,$16)
+         RETURNING id`,
+        [
+          serviceId,
+          p.name,
+          p.probe_type,
+          p.probe_target,
+          p.probe_interval_seconds,
+          p.probe_timeout_seconds,
+          p.expected_status_code,
+          p.failure_threshold,
+          p.recovery_threshold,
+          p.pause_during_maintenance,
+          p.dns_record_type,
+          p.dns_expected_value,
+          p.ssl_expiry_warning_days,
+          p.last_probed_at,
+          p.next_probe_at,
+          p.current_state,
+        ]
+      );
+      const probeId = r.rows[0].id;
+      probeIds.push(probeId);
+      const pr = p.result || {};
+      await client.query(
+        `INSERT INTO service_probe_results (service_id, probe_id, success, response_time_ms, status_code, error_message, ssl_cert_expiry, dns_response, probed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [serviceId, probeId, !!pr.success, pr.response_time_ms ?? null, pr.status_code ?? null, pr.error_message ?? null, pr.ssl_cert_expiry ?? null, pr.dns_response ?? null, p.last_probed_at]
+      );
     }
 
     for (const l of licensesDef) {
@@ -1063,6 +1319,7 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       blackout_ids: blackoutIds,
       supplier_ids: supplierIds,
       license_ids: licenseIds,
+      probe_ids: probeIds,
       local_user_ids: Array.from(usersByKey.values()),
       local_group_ids: [demoGroupId],
       asset_dependency_count: assetDependenciesDef.filter(d => assetsByKey.get(d[0]) && assetsByKey.get(d[1])).length,
@@ -1092,6 +1349,7 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       blackouts: created.blackout_ids.length,
       suppliers: created.supplier_ids.length,
       licenses: created.license_ids.length,
+      probes: created.probe_ids.length,
       local_users: created.local_user_ids.length,
       local_groups: created.local_group_ids.length,
       asset_dependencies: created.asset_dependency_count,
@@ -1114,6 +1372,7 @@ router.post('/demo/clear', requireAuth, requireSuperAdmin, async (req, res) => {
         blackouts: 0,
         suppliers: 0,
           licenses: 0,
+          probes: 0,
         local_users: 0,
         local_groups: 0,
       },
@@ -1121,6 +1380,10 @@ router.post('/demo/clear', requireAuth, requireSuperAdmin, async (req, res) => {
   }
 
   await transaction(async (client) => {
+    if (reg.probe_ids.length > 0) {
+      await client.query(`DELETE FROM asset_probes WHERE id = ANY($1::uuid[])`, [reg.probe_ids]);
+      await client.query(`DELETE FROM service_probes WHERE id = ANY($1::uuid[])`, [reg.probe_ids]);
+    }
     if (reg.license_ids.length > 0) {
       await client.query(`DELETE FROM licenses WHERE id = ANY($1::uuid[])`, [reg.license_ids]);
     }
@@ -1163,6 +1426,7 @@ router.post('/demo/clear', requireAuth, requireSuperAdmin, async (req, res) => {
       blackouts: (reg.blackout_ids || []).length,
       suppliers: reg.supplier_ids.length,
       licenses: reg.license_ids.length,
+      probes: reg.probe_ids.length,
       local_users: reg.local_user_ids.length,
       local_groups: reg.local_group_ids.length,
     },
