@@ -1384,11 +1384,11 @@ export default function Settings() {
                   </p>
 
                   <div className="text-xs text-gray-500 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-                    {demoLoading ? (
-                      <span>Loading demo status...</span>
+                      {demoLoading ? (
+                        <span>Loading demo status...</span>
                     ) : demoStatus ? (
                       <span>
-                        Assets: <strong>{demoStatus.asset_count || 0}</strong> · Services: <strong>{demoStatus.service_count || 0}</strong> · Maintenances: <strong>{demoStatus.maintenance_count || 0}</strong>
+                        Assets: <strong>{demoStatus.asset_count || 0}</strong> · Services: <strong>{demoStatus.service_count || 0}</strong> · Maintenances: <strong>{demoStatus.maintenance_count || 0}</strong> · Incidents: <strong>{demoStatus.incident_count || 0}</strong> · Suppliers: <strong>{demoStatus.supplier_count || 0}</strong> · Local users: <strong>{demoStatus.local_user_count || 0}</strong> · Local groups: <strong>{demoStatus.local_group_count || 0}</strong> · Asset deps: <strong>{demoStatus.asset_dependency_count || 0}</strong> · Service deps: <strong>{demoStatus.service_dependency_count || 0}</strong>
                         {demoStatus.seeded_at ? ` · Seeded at: ${format(new Date(demoStatus.seeded_at), 'MM/dd/yyyy HH:mm')}` : ''}
                       </span>
                     ) : (
