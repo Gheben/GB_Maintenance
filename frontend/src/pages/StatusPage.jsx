@@ -716,6 +716,14 @@ export default function StatusPage() {
           </div>
         )}
 
+        <MaintenanceList
+          items={inProgress}
+          colorClass="bg-orange-100 text-orange-800"
+          title="Maintenance in Progress"
+          headerClass="text-orange-600"
+          icon={<Wrench size={16} />}
+        />
+
         {finishedBlackoutHistory.length > 0 && (
           <LatestListSection
             items={finishedBlackoutHistory}
@@ -738,14 +746,6 @@ export default function StatusPage() {
             )}
           />
         )}
-
-        <MaintenanceList
-          items={inProgress}
-          colorClass="bg-orange-100 text-orange-800"
-          title="Maintenance in Progress"
-          headerClass="text-orange-600"
-          icon={<Wrench size={16} />}
-        />
 
         <MaintenanceList
           items={upcoming}
