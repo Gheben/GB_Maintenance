@@ -70,6 +70,7 @@ async function getDemoRegistry() {
       incident_ids: Array.isArray(parsed.incident_ids) ? parsed.incident_ids : [],
       blackout_ids: Array.isArray(parsed.blackout_ids) ? parsed.blackout_ids : [],
       supplier_ids: Array.isArray(parsed.supplier_ids) ? parsed.supplier_ids : [],
+      license_ids: Array.isArray(parsed.license_ids) ? parsed.license_ids : [],
       local_user_ids: Array.isArray(parsed.local_user_ids) ? parsed.local_user_ids : [],
       local_group_ids: Array.isArray(parsed.local_group_ids) ? parsed.local_group_ids : [],
       asset_dependency_count: Number(parsed.asset_dependency_count || 0),
@@ -433,6 +434,7 @@ router.get('/demo/status', requireAuth, requireSuperAdmin, async (req, res) => {
       maintenance_count: 0,
       incident_count: 0,
       supplier_count: 0,
+      license_count: 0,
       local_user_count: 0,
       local_group_count: 0,
       asset_dependency_count: 0,
@@ -441,7 +443,7 @@ router.get('/demo/status', requireAuth, requireSuperAdmin, async (req, res) => {
       seeded_by: null,
     });
   }
-  const total = reg.asset_ids.length + reg.service_ids.length + reg.maintenance_ids.length + reg.incident_ids.length + reg.supplier_ids.length + reg.local_user_ids.length + reg.local_group_ids.length;
+  const total = reg.asset_ids.length + reg.service_ids.length + reg.maintenance_ids.length + reg.incident_ids.length + reg.supplier_ids.length + reg.license_ids.length + reg.local_user_ids.length + reg.local_group_ids.length;
   return res.json({
     exists: total > 0,
     asset_count: reg.asset_ids.length,
@@ -449,6 +451,7 @@ router.get('/demo/status', requireAuth, requireSuperAdmin, async (req, res) => {
     maintenance_count: reg.maintenance_ids.length,
     incident_count: reg.incident_ids.length,
     supplier_count: reg.supplier_ids.length,
+    license_count: reg.license_ids.length,
     local_user_count: reg.local_user_ids.length,
     local_group_count: reg.local_group_ids.length,
     asset_dependency_count: reg.asset_dependency_count,
@@ -461,7 +464,7 @@ router.get('/demo/status', requireAuth, requireSuperAdmin, async (req, res) => {
 router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => {
   const existing = await getDemoRegistry();
   if (existing) {
-    const totalExisting = existing.asset_ids.length + existing.service_ids.length + existing.maintenance_ids.length + existing.incident_ids.length + existing.blackout_ids.length + existing.supplier_ids.length + existing.local_user_ids.length + existing.local_group_ids.length;
+    const totalExisting = existing.asset_ids.length + existing.service_ids.length + existing.maintenance_ids.length + existing.incident_ids.length + existing.blackout_ids.length + existing.supplier_ids.length + existing.license_ids.length + existing.local_user_ids.length + existing.local_group_ids.length;
     if (totalExisting > 0) {
       return res.status(409).json({ error: 'Demo data already exists. Remove it first.' });
     }
@@ -478,9 +481,97 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
   ];
 
   const suppliersDef = [
-    { first: 'Demo', last: 'Cloud', company: 'Acme Cloud SRL' },
-    { first: 'Demo', last: 'Network', company: 'NorthNet SPA' },
-    { first: 'Demo', last: 'Security', company: 'SafePatch LTD' },
+    { key: 'cloud', first: 'Demo', last: 'Cloud', company: 'Acme Cloud SRL' },
+    { key: 'network', first: 'Demo', last: 'Network', company: 'NorthNet SPA' },
+    { key: 'security', first: 'Demo', last: 'Security', company: 'SafePatch LTD' },
+  ];
+
+  const licensesDef = [
+    {
+      key: 'portal-suite',
+      name: 'Demo Portal Suite',
+      description: 'Licenses covering the public portal stack.',
+      supplierKey: 'cloud',
+      ownerKey: 'ops1',
+      maintainerKey: 'ops2',
+      approverKey: 'ops3',
+      approvalStatus: 'approved',
+      approvalRequired: true,
+      expiryDate: atFromNow(24 * 120),
+      renewalDate: atFromNow(24 * 90),
+      estimatedCost: 18000,
+      notes: 'Assigned to portal assets and customer-facing services.',
+      assets: ['portal-web', 'portal-api', 'edge-lb'],
+      services: ['customer-portal', 'billing'],
+    },
+    {
+      key: 'identity-suite',
+      name: 'Demo Identity Suite',
+      description: 'Authentication and session management licenses.',
+      supplierKey: 'network',
+      ownerKey: 'ops2',
+      maintainerKey: 'ops3',
+      approverKey: 'ops1',
+      approvalStatus: 'pending',
+      approvalRequired: true,
+      expiryDate: atFromNow(24 * 60),
+      renewalDate: atFromNow(24 * 30),
+      estimatedCost: 9000,
+      notes: 'Used for identity service testing and portal access.',
+      assets: ['auth-service', 'redis-cache'],
+      services: ['identity'],
+    },
+    {
+      key: 'data-platform',
+      name: 'Demo Data Platform',
+      description: 'Licenses for data and reporting workloads.',
+      supplierKey: 'security',
+      ownerKey: 'ops3',
+      maintainerKey: 'ops4',
+      approverKey: 'ops2',
+      approvalStatus: 'approved',
+      approvalRequired: false,
+      expiryDate: atFromNow(24 * 180),
+      renewalDate: atFromNow(24 * 150),
+      estimatedCost: 22000,
+      notes: 'Assigned to database and analytics assets.',
+      assets: ['payments-db', 'reporting-db', 'etl-engine'],
+      services: ['analytics', 'billing'],
+    },
+    {
+      key: 'messaging-suite',
+      name: 'Demo Messaging Suite',
+      description: 'Email and notification licenses.',
+      supplierKey: 'cloud',
+      ownerKey: 'ops1',
+      maintainerKey: 'ops4',
+      approverKey: 'ops2',
+      approvalStatus: 'approved',
+      approvalRequired: true,
+      expiryDate: atFromNow(24 * 45),
+      renewalDate: atFromNow(24 * 20),
+      estimatedCost: 12000,
+      notes: 'Assigned to the messaging stack.',
+      assets: ['email-worker'],
+      services: ['mailing'],
+    },
+    {
+      key: 'vpn-security',
+      name: 'Demo VPN Security',
+      description: 'Security and connectivity licenses for remote access.',
+      supplierKey: 'security',
+      ownerKey: 'ops4',
+      maintainerKey: 'ops1',
+      approverKey: 'ops3',
+      approvalStatus: 'pending',
+      approvalRequired: true,
+      expiryDate: atFromNow(24 * 75),
+      renewalDate: atFromNow(24 * 40),
+      estimatedCost: 7000,
+      notes: 'Used for VPN infrastructure testing.',
+      assets: ['vpn-gateway'],
+      services: ['internal-vpn'],
+    },
   ];
 
   const assetsDef = [
@@ -719,6 +810,8 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
     const maintenanceByKey = new Map();
     const incidentsByKey = new Map();
     const supplierIds = [];
+    const supplierByKey = new Map();
+    const licenseIds = [];
     const blackoutIds = [];
 
     const g = await client.query(
@@ -748,7 +841,9 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
          RETURNING id`,
         [s.first, s.last, s.company, demoEmail]
       );
-      supplierIds.push(r.rows[0].id);
+      const sid = r.rows[0].id;
+      supplierIds.push(sid);
+      supplierByKey.set(s.key, { id: sid, company: s.company });
     }
 
     for (const a of assetsDef) {
@@ -814,6 +909,61 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       const did = servicesByKey.get(dep[1]);
       if (sid && did) {
         await client.query(`INSERT INTO service_dependencies (service_id, depends_on_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [sid, did]);
+      }
+    }
+
+    for (const l of licensesDef) {
+      const ownerUserId = usersByKey.get(l.ownerKey) || null;
+      const maintainerUserId = usersByKey.get(l.maintainerKey) || null;
+      const approverUserId = usersByKey.get(l.approverKey) || null;
+      const supplierEntry = supplierByKey.get(l.supplierKey) || null;
+      const supplierId = supplierEntry?.id || null;
+      const supplierName = supplierEntry?.company || null;
+      const approvalRequired = l.approvalRequired !== false;
+      const approvalStatus = l.approvalStatus || 'pending';
+      const approvedAt = approvalStatus === 'approved' ? atFromNow(-48) : null;
+      const approvedBy = approvalStatus === 'approved' ? approverUserId : null;
+      const r = await client.query(
+        `INSERT INTO licenses
+          (name, description, owner_user_id, supplier, supplier_id, maintainer_user_id, approver_user_id, expiry_date, renewal_date, reminder_days, approval_required, approval_status, estimated_cost, currency, notes, documents, is_active, created_by, approved_at, approved_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'[]'::jsonb,true,$16,$17,$18)
+         RETURNING id`,
+        [
+          l.name,
+          l.description,
+          ownerUserId,
+          supplierName,
+          supplierId,
+          maintainerUserId,
+          approverUserId,
+          l.expiryDate,
+          l.renewalDate,
+          30,
+          approvalRequired,
+          approvalStatus,
+          l.estimatedCost,
+          'EUR',
+          l.notes,
+          req.user.id,
+          approvedAt,
+          approvedBy,
+        ]
+      );
+      const lid = r.rows[0].id;
+      licenseIds.push(lid);
+
+      for (const ak of l.assets) {
+        const aid = assetsByKey.get(ak);
+        if (aid) {
+          await client.query(`INSERT INTO license_assets (license_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [lid, aid]);
+        }
+      }
+
+      for (const sk of l.services) {
+        const sid = servicesByKey.get(sk);
+        if (sid) {
+          await client.query(`INSERT INTO license_services (license_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [lid, sid]);
+        }
       }
     }
 
@@ -912,6 +1062,7 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       incident_ids: Array.from(incidentsByKey.values()),
       blackout_ids: blackoutIds,
       supplier_ids: supplierIds,
+      license_ids: licenseIds,
       local_user_ids: Array.from(usersByKey.values()),
       local_group_ids: [demoGroupId],
       asset_dependency_count: assetDependenciesDef.filter(d => assetsByKey.get(d[0]) && assetsByKey.get(d[1])).length,
@@ -940,6 +1091,7 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       incidents: created.incident_ids.length,
       blackouts: created.blackout_ids.length,
       suppliers: created.supplier_ids.length,
+      licenses: created.license_ids.length,
       local_users: created.local_user_ids.length,
       local_groups: created.local_group_ids.length,
       asset_dependencies: created.asset_dependency_count,
@@ -961,6 +1113,7 @@ router.post('/demo/clear', requireAuth, requireSuperAdmin, async (req, res) => {
         incidents: 0,
         blackouts: 0,
         suppliers: 0,
+          licenses: 0,
         local_users: 0,
         local_groups: 0,
       },
@@ -968,6 +1121,9 @@ router.post('/demo/clear', requireAuth, requireSuperAdmin, async (req, res) => {
   }
 
   await transaction(async (client) => {
+    if (reg.license_ids.length > 0) {
+      await client.query(`DELETE FROM licenses WHERE id = ANY($1::uuid[])`, [reg.license_ids]);
+    }
     if (reg.incident_ids.length > 0) {
       await client.query(`DELETE FROM incidents WHERE id = ANY($1::uuid[])`, [reg.incident_ids]);
     }
@@ -1006,6 +1162,7 @@ router.post('/demo/clear', requireAuth, requireSuperAdmin, async (req, res) => {
       incidents: reg.incident_ids.length,
       blackouts: (reg.blackout_ids || []).length,
       suppliers: reg.supplier_ids.length,
+      licenses: reg.license_ids.length,
       local_users: reg.local_user_ids.length,
       local_groups: reg.local_group_ids.length,
     },

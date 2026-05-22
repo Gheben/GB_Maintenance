@@ -1380,7 +1380,7 @@ export default function Settings() {
               {systemDemoOpen && (
                 <div className="space-y-4 pt-1 border-t border-gray-100 dark:border-gray-700">
                   <p className="text-sm text-gray-500">
-                    Create or remove a full demo dataset (assets, services, maintenances) for product walkthroughs.
+                    Create or remove a full demo dataset (assets, services, maintenances, licenses) for product walkthroughs.
                   </p>
 
                   <div className="text-xs text-gray-500 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
@@ -1388,7 +1388,7 @@ export default function Settings() {
                         <span>Loading demo status...</span>
                     ) : demoStatus ? (
                       <span>
-                        Assets: <strong>{demoStatus.asset_count || 0}</strong> · Services: <strong>{demoStatus.service_count || 0}</strong> · Maintenances: <strong>{demoStatus.maintenance_count || 0}</strong> · Incidents: <strong>{demoStatus.incident_count || 0}</strong> · Suppliers: <strong>{demoStatus.supplier_count || 0}</strong> · Local users: <strong>{demoStatus.local_user_count || 0}</strong> · Local groups: <strong>{demoStatus.local_group_count || 0}</strong> · Asset deps: <strong>{demoStatus.asset_dependency_count || 0}</strong> · Service deps: <strong>{demoStatus.service_dependency_count || 0}</strong>
+                        Assets: <strong>{demoStatus.asset_count || 0}</strong> · Services: <strong>{demoStatus.service_count || 0}</strong> · Maintenances: <strong>{demoStatus.maintenance_count || 0}</strong> · Incidents: <strong>{demoStatus.incident_count || 0}</strong> · Suppliers: <strong>{demoStatus.supplier_count || 0}</strong> · Licenses: <strong>{demoStatus.license_count || 0}</strong> · Local users: <strong>{demoStatus.local_user_count || 0}</strong> · Local groups: <strong>{demoStatus.local_group_count || 0}</strong> · Asset deps: <strong>{demoStatus.asset_dependency_count || 0}</strong> · Service deps: <strong>{demoStatus.service_dependency_count || 0}</strong>
                         {demoStatus.seeded_at ? ` · Seeded at: ${format(new Date(demoStatus.seeded_at), 'MM/dd/yyyy HH:mm')}` : ''}
                       </span>
                     ) : (
@@ -1423,7 +1423,7 @@ export default function Settings() {
             {showDemoClearConfirm && (
               <ConfirmDialog
                 title="Remove Demo Data"
-                message="Remove all demo data created by the demo seed feature? This will delete demo assets, services, maintenances, incidents, suppliers, local users and groups."
+                message="Remove all demo data created by the demo seed feature? This will delete demo assets, services, maintenances, incidents, suppliers, licenses, local users and groups."
                 danger
                 confirmLabel="Remove"
                 onConfirm={handleClearDemoData}
