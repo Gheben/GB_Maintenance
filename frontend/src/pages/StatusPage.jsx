@@ -5,7 +5,6 @@ import { format } from 'date-fns'
 import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Building2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { Modal } from '../components/Modal'
-import { differenceInCalendarDays } from 'date-fns'
 
 const OVERALL_ICONS = {
   operational: <CheckCircle className="text-green-500" size={28} />,
@@ -405,14 +404,8 @@ function maintenanceDate(m) {
   return new Date(m.actual_end || m.actual_start || m.scheduled_start || m.created_at || Date.now())
 }
 
-function maintenanceBucket(m, now = new Date()) {
-  const date = maintenanceDate(m)
-  const days = Math.abs(differenceInCalendarDays(now, date))
-  if (days === 0) return 'today'
-  if (days <= 7) return 'last_week'
-  if (days <= 30) return 'last_month'
-  if (days <= 365) return 'last_year'
-  return String(date.getFullYear())
+function maintenanceBucket(m) {
+  return String(maintenanceDate(m).getFullYear())
 }
 
 function maintenanceBadgeClass(status) {
@@ -440,50 +433,21 @@ function MaintenanceHistorySection({ items }) {
 
   const grouped = items.reduce((acc, item) => {
     const bucket = maintenanceBucket(item)
-    if (bucket === 'today' || bucket === 'last_week' || bucket === 'last_month' || bucket === 'last_year') {
-      acc[bucket].push(item)
-    } else {
-      if (!acc.years[bucket]) acc.years[bucket] = []
-      acc.years[bucket].push(item)
-    }
+    if (!acc.years[bucket]) acc.years[bucket] = []
+    acc.years[bucket].push(item)
     return acc
-  }, { today: [], last_week: [], last_month: [], last_year: [], years: {} })
+  }, { years: {} })
 
   const yearKeys = Object.keys(grouped.years).sort((a, b) => Number(b) - Number(a))
 
   if (!items || items.length === 0) return null
 
-  const groupOrder = [
-    ['today', 'Today'],
-    ['last_week', 'Last week'],
-    ['last_month', 'Last month'],
-    ['last_year', 'Last year'],
-  ]
-
   return (
     <div className="space-y-4">
-      {groupOrder.map(([key, label]) => grouped[key].length > 0 && (
-        <LatestListSection
-          key={key}
-          items={grouped[key]}
-          title={label}
-          icon={<Clock size={16} />}
-          headerClass="text-gray-700"
-          defaultOpen={false}
-          pageSize={3}
-          renderItem={(m) => {
-            const statusClass = maintenanceBadgeClass(m.status)
-            return (
-              <MaintenanceCard key={m.id} m={m} colorClass={statusClass} />
-            )
-          }}
-        />
-      ))}
-
       {yearKeys.length > 0 && (
         <div className="card overflow-hidden">
           <div className="px-4 sm:px-5 py-4 border-b border-gray-100 dark:border-gray-700 font-semibold flex items-center justify-between gap-3">
-            <span className="flex items-center gap-2"><Clock size={16} />Previous years</span>
+            <span className="flex items-center gap-2"><Clock size={16} />Previous completed maintenance</span>
             <span className="text-xs font-normal text-gray-400">{yearKeys.length} years</span>
           </div>
           <div className="px-4 sm:px-5 py-4 space-y-3">
