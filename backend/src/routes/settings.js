@@ -463,10 +463,10 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
   const demoEmail = 'guidoballarini.9@gmail.com';
 
   const localUsersDef = [
-    { key: 'ops1', username: `demo.ops1.${tag}`, display_name: 'Demo Ops User 1', role: 'operator' },
-    { key: 'ops2', username: `demo.ops2.${tag}`, display_name: 'Demo Ops User 2', role: 'operator' },
-    { key: 'viewer1', username: `demo.viewer1.${tag}`, display_name: 'Demo Viewer User', role: 'viewer' },
-    { key: 'subscriber1', username: `demo.subscriber1.${tag}`, display_name: 'Demo Subscriber User', role: 'subscriber' },
+    { key: 'ops1', username: 'demo.1', display_name: 'Login demo.1', role: 'operator', office: 'Milan HQ' },
+    { key: 'ops2', username: 'demo.2', display_name: 'Login demo.2', role: 'operator', office: 'Rome Branch' },
+    { key: 'viewer1', username: 'demo.3', display_name: 'Login demo.3', role: 'viewer', office: 'Turin Office' },
+    { key: 'subscriber1', username: 'demo.4', display_name: 'Login demo.4', role: 'subscriber', office: 'Remote NOC' },
   ];
 
   const suppliersDef = [
@@ -476,16 +476,16 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
   ];
 
   const assetsDef = [
-    { key: 'portal-web', name: 'Demo Portal Web', category: 'application', criticality: 'high', status: 'operational', desc: 'Frontend portal', owner: 'group' },
-    { key: 'portal-api', name: 'Demo Portal API', category: 'api', criticality: 'high', status: 'degraded', desc: 'Public API layer', owner: 'group' },
-    { key: 'auth-service', name: 'Demo Auth Service', category: 'application', criticality: 'critical', status: 'operational', desc: 'Authentication backend', owner: 'user' },
-    { key: 'payments-db', name: 'Demo Payments DB', category: 'database', criticality: 'critical', status: 'operational', desc: 'Payment database', owner: 'user' },
-    { key: 'reporting-db', name: 'Demo Reporting DB', category: 'database', criticality: 'medium', status: 'operational', desc: 'Reporting data mart', owner: 'group' },
-    { key: 'edge-lb', name: 'Demo Edge Load Balancer', category: 'infrastructure', criticality: 'high', status: 'operational', desc: 'Ingress traffic balancer', owner: 'group' },
-    { key: 'redis-cache', name: 'Demo Redis Cache', category: 'infrastructure', criticality: 'medium', status: 'degraded', desc: 'Session and cache layer', owner: 'group' },
-    { key: 'vpn-gateway', name: 'Demo VPN Gateway', category: 'network', criticality: 'medium', status: 'operational', desc: 'Remote office VPN', owner: 'user' },
-    { key: 'etl-engine', name: 'Demo ETL Engine', category: 'application', criticality: 'low', status: 'operational', desc: 'Nightly ETL process', owner: 'user' },
-    { key: 'email-worker', name: 'Demo Email Worker', category: 'application', criticality: 'low', status: 'major_outage', desc: 'Notification sender worker', owner: 'group' },
+    { key: 'portal-web', name: 'Demo Portal Web', category: 'application', criticality: 'high', status: 'operational', desc: 'Frontend portal', owner: 'group', user_targets: ['demo.1', 'demo.3'] },
+    { key: 'portal-api', name: 'Demo Portal API', category: 'api', criticality: 'high', status: 'degraded', desc: 'Public API layer', owner: 'group', user_targets: ['demo.1', 'demo.2'] },
+    { key: 'auth-service', name: 'Demo Auth Service', category: 'application', criticality: 'critical', status: 'operational', desc: 'Authentication backend', owner: 'user', user_targets: ['demo.2'] },
+    { key: 'payments-db', name: 'Demo Payments DB', category: 'database', criticality: 'critical', status: 'operational', desc: 'Payment database', owner: 'user', user_targets: ['demo.1', 'demo.4'] },
+    { key: 'reporting-db', name: 'Demo Reporting DB', category: 'database', criticality: 'medium', status: 'operational', desc: 'Reporting data mart', owner: 'group', user_targets: ['demo.3'] },
+    { key: 'edge-lb', name: 'Demo Edge Load Balancer', category: 'infrastructure', criticality: 'high', status: 'operational', desc: 'Ingress traffic balancer', owner: 'group', user_targets: ['demo.1', 'demo.2'] },
+    { key: 'redis-cache', name: 'Demo Redis Cache', category: 'infrastructure', criticality: 'medium', status: 'degraded', desc: 'Session and cache layer', owner: 'group', user_targets: ['demo.2', 'demo.3'] },
+    { key: 'vpn-gateway', name: 'Demo VPN Gateway', category: 'network', criticality: 'medium', status: 'operational', desc: 'Remote office VPN', owner: 'user', user_targets: ['demo.4'] },
+    { key: 'etl-engine', name: 'Demo ETL Engine', category: 'application', criticality: 'low', status: 'operational', desc: 'Nightly ETL process', owner: 'user', user_targets: ['demo.3', 'demo.4'] },
+    { key: 'email-worker', name: 'Demo Email Worker', category: 'application', criticality: 'low', status: 'major_outage', desc: 'Notification sender worker', owner: 'group', user_targets: ['demo.1', 'demo.4'] },
   ];
 
   const assetDependenciesDef = [
@@ -497,12 +497,12 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
   ];
 
   const servicesDef = [
-    { key: 'customer-portal', name: 'Demo Customer Portal', criticality: 'high', status: 'degraded', is_public: true, assets: ['portal-web', 'portal-api', 'edge-lb', 'redis-cache'], owner: 'group' },
-    { key: 'identity', name: 'Demo Identity Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['auth-service', 'redis-cache'], owner: 'user' },
-    { key: 'billing', name: 'Demo Billing Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['portal-api', 'payments-db'], owner: 'user' },
-    { key: 'analytics', name: 'Demo Analytics', criticality: 'medium', status: 'operational', is_public: false, assets: ['etl-engine', 'reporting-db'], owner: 'group' },
-    { key: 'internal-vpn', name: 'Demo Internal VPN', criticality: 'medium', status: 'operational', is_public: false, assets: ['vpn-gateway'], owner: 'group' },
-    { key: 'mailing', name: 'Demo Mailing', criticality: 'low', status: 'major_outage', is_public: true, assets: ['email-worker'], owner: 'group' },
+    { key: 'customer-portal', name: 'Demo Customer Portal', criticality: 'high', status: 'degraded', is_public: true, assets: ['portal-web', 'portal-api', 'edge-lb', 'redis-cache'], owner: 'group', user_targets: ['demo.1', 'demo.3'] },
+    { key: 'identity', name: 'Demo Identity Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['auth-service', 'redis-cache'], owner: 'user', user_targets: ['demo.2'] },
+    { key: 'billing', name: 'Demo Billing Service', criticality: 'critical', status: 'operational', is_public: true, assets: ['portal-api', 'payments-db'], owner: 'user', user_targets: ['demo.1', 'demo.4'] },
+    { key: 'analytics', name: 'Demo Analytics', criticality: 'medium', status: 'operational', is_public: false, assets: ['etl-engine', 'reporting-db'], owner: 'group', user_targets: ['demo.3'] },
+    { key: 'internal-vpn', name: 'Demo Internal VPN', criticality: 'medium', status: 'operational', is_public: false, assets: ['vpn-gateway'], owner: 'group', user_targets: ['demo.4'] },
+    { key: 'mailing', name: 'Demo Mailing', criticality: 'low', status: 'major_outage', is_public: true, assets: ['email-worker'], owner: 'group', user_targets: ['demo.1', 'demo.4'] },
   ];
 
   const serviceDependenciesDef = [
@@ -645,10 +645,10 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
 
     for (const u of localUsersDef) {
       const r = await client.query(
-        `INSERT INTO users (username, display_name, email, auth_type, role, permissions, is_active)
-         VALUES ($1,$2,$3,'local',$4,'{}'::jsonb,true)
+        `INSERT INTO users (username, display_name, email, office, auth_type, role, permissions, is_active)
+         VALUES ($1,$2,$3,$4,'local',$5,'{}'::jsonb,true)
          RETURNING id`,
-        [u.username, u.display_name, demoEmail, u.role]
+        [u.username, u.display_name, demoEmail, u.office, u.role]
       );
       const uid = r.rows[0].id;
       usersByKey.set(u.key, uid);
@@ -670,11 +670,15 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       const ownerType = a.owner === 'group' ? 'local_group' : 'user';
       const ownerGroupId = ownerType === 'local_group' ? demoGroupId : null;
       const ownerId = ownerType === 'user' ? ownerUser : null;
+      const userTargets = (a.user_targets || []).map((k) => {
+        const uid = usersByKey.get(k);
+        return uid ? { type: 'user', id: uid } : null;
+      }).filter(Boolean);
       const r = await client.query(
-        `INSERT INTO assets (name, slug, category, criticality, description, status, owner_id, owner_type, owner_group_id, is_active, metadata)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,$10::jsonb)
+        `INSERT INTO assets (name, slug, category, criticality, description, status, owner_id, owner_type, owner_group_id, user_targets, is_active, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,true,$11::jsonb)
          RETURNING id`,
-        [a.name, `demo-${a.key}-${tag}`, a.category, a.criticality, a.desc, a.status, ownerId, ownerType, ownerGroupId, JSON.stringify({ demo_seed: true, demo_tag: tag })]
+        [a.name, `demo-${a.key}-${tag}`, a.category, a.criticality, a.desc, a.status, ownerId, ownerType, ownerGroupId, JSON.stringify(userTargets), JSON.stringify({ demo_seed: true, demo_tag: tag })]
       );
       assetsByKey.set(a.key, r.rows[0].id);
     }
@@ -691,11 +695,15 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
       const ownerType = s.owner === 'group' ? 'local_group' : 'user';
       const ownerGroupId = ownerType === 'local_group' ? demoGroupId : null;
       const ownerId = ownerType === 'user' ? (usersByKey.get('ops2') || null) : null;
+      const userTargets = (s.user_targets || []).map((k) => {
+        const uid = usersByKey.get(k);
+        return uid ? { type: 'user', id: uid } : null;
+      }).filter(Boolean);
       const r = await client.query(
-        `INSERT INTO services (name, slug, description, criticality, status, sla_uptime_percent, is_public, owner_id, owner_type, owner_group_id, is_active)
-         VALUES ($1,$2,$3,$4,$5,99.90,$6,$7,$8,$9,true)
+        `INSERT INTO services (name, slug, description, criticality, status, sla_uptime_percent, is_public, owner_id, owner_type, owner_group_id, user_targets, is_active)
+         VALUES ($1,$2,$3,$4,$5,99.90,$6,$7,$8,$9,$10::jsonb,true)
          RETURNING id`,
-        [s.name, `demo-${s.key}-${tag}`, `Demo service for ${s.name}`, s.criticality, s.status, !!s.is_public, ownerId, ownerType, ownerGroupId]
+        [s.name, `demo-${s.key}-${tag}`, `Demo service for ${s.name}`, s.criticality, s.status, !!s.is_public, ownerId, ownerType, ownerGroupId, JSON.stringify(userTargets)]
       );
       const sid = r.rows[0].id;
       servicesByKey.set(s.key, sid);
