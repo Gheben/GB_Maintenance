@@ -422,6 +422,19 @@ function maintenanceBadgeClass(status) {
   return 'bg-gray-100 text-gray-700'
 }
 
+function isFinishedMaintenance(m) {
+  return m?.status === 'completed'
+}
+
+function isFinishedIncident(incident) {
+  return incident?.status === 'resolved'
+}
+
+function isFinishedBlackout(blackout, now = new Date()) {
+  if (!blackout?.end_date) return false
+  return new Date(blackout.end_date) < now
+}
+
 function MaintenanceHistorySection({ items }) {
   const [openYears, setOpenYears] = useState([])
 
@@ -604,6 +617,9 @@ export default function StatusPage() {
     return start <= now && end >= now
   })
   const upcomingBlackouts = blackouts.filter(b => new Date(b.start_date) > now)
+  const finishedMaintenanceHistory = maintenanceHistory.filter(isFinishedMaintenance)
+  const finishedIncidentHistory = incidentHistory.filter(isFinishedIncident)
+  const finishedBlackoutHistory = blackoutHistory.filter(b => isFinishedBlackout(b, now))
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-8 sm:py-12 px-4">
@@ -736,9 +752,9 @@ export default function StatusPage() {
           </div>
         )}
 
-        {blackoutHistory.length > 0 && (
+        {finishedBlackoutHistory.length > 0 && (
           <LatestListSection
-            items={blackoutHistory}
+            items={finishedBlackoutHistory}
             title="Blackout history"
             icon={<Ban size={16} />}
             headerClass="text-red-600"
@@ -775,11 +791,11 @@ export default function StatusPage() {
           icon={<Clock size={16} />}
         />
 
-        <MaintenanceHistorySection items={maintenanceHistory} />
+        <MaintenanceHistorySection items={finishedMaintenanceHistory} />
 
-        {incidentHistory.length > 0 && (
+        {finishedIncidentHistory.length > 0 && (
           <LatestListSection
-            items={incidentHistory}
+            items={finishedIncidentHistory}
             title="Incident history"
             icon={<Bell size={16} />}
             headerClass="text-red-600"
