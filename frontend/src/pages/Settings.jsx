@@ -58,6 +58,7 @@ export default function Settings() {
   const [demoStatus, setDemoStatus] = useState(null)
   const [demoLoading, setDemoLoading] = useState(false)
   const [demoWorking, setDemoWorking] = useState(false)
+  const [showDemoClearConfirm, setShowDemoClearConfirm] = useState(false)
   const [appBrandUploading, setAppBrandUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showSmtpPass, setShowSmtpPass] = useState(false)
@@ -280,8 +281,6 @@ export default function Settings() {
   }
 
   const handleClearDemoData = async () => {
-    const ok = window.confirm('Remove all demo data created by this feature?')
-    if (!ok) return
     setDemoWorking(true)
     try {
       const r = await settingsApi.clearDemoData()
@@ -291,6 +290,7 @@ export default function Settings() {
       toast.error(err.response?.data?.error || 'Unable to remove demo data')
     } finally {
       setDemoWorking(false)
+      setShowDemoClearConfirm(false)
     }
   }
 
@@ -1408,7 +1408,7 @@ export default function Settings() {
                     <button
                       type="button"
                       className="btn-danger"
-                      onClick={handleClearDemoData}
+                      onClick={() => setShowDemoClearConfirm(true)}
                       disabled={demoWorking || demoLoading || !demoStatus?.exists}
                     >
                       {demoWorking ? 'Working...' : 'Remove demo data'}
@@ -1419,6 +1419,17 @@ export default function Settings() {
             </div>
             )}
 
+
+            {showDemoClearConfirm && (
+              <ConfirmDialog
+                title="Remove Demo Data"
+                message="Remove all demo data created by the demo seed feature? This will delete demo assets, services, maintenances, incidents, suppliers, local users and groups."
+                danger
+                confirmLabel="Remove"
+                onConfirm={handleClearDemoData}
+                onCancel={() => setShowDemoClearConfirm(false)}
+              />
+            )}
             <div className="card p-5 sm:p-6 space-y-4">
               <button
                 type="button"
