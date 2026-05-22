@@ -50,7 +50,7 @@ function MaintenanceCard({ m, colorClass }) {
   const [subscribing, setSubscribing] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const { user } = useAuth()
-  const isLoggedIn = !!localStorage.getItem('token')
+  const isLoggedIn = !!user || !!localStorage.getItem('token')
   const users = m.involved_users || []
   // Subscribe is only offered for public maintenances with no user_targets
   const showSubscribeBtn = isLoggedIn && users.length === 0
@@ -122,7 +122,7 @@ function MaintenanceCard({ m, colorClass }) {
       </div>
       {m.description && <p className="text-xs text-gray-400 mt-1">{m.description}</p>}
       {m.notes && <p className="text-xs text-gray-400 mt-1 italic">{m.notes}</p>}
-      {m.reopen_reason && <p className="text-xs text-amber-700 mt-1"><strong>Reopen reason:</strong> {m.reopen_reason}</p>}
+      {isLoggedIn && m.reopen_reason && <p className="text-xs text-amber-700 mt-1"><strong>Reopen reason:</strong> {m.reopen_reason}</p>}
 
       <div className="mt-2 flex flex-wrap gap-3">
         {hasHistory && (
