@@ -278,6 +278,7 @@ export const licensesApi = {
   approvalInfo: (token) => api.get(`/licenses/approval/${encodeURIComponent(token)}`),
   approvalApprove: (token) => api.post(`/licenses/approval/${encodeURIComponent(token)}/approve`),
   approvalReject: (token, reason) => api.post(`/licenses/approval/${encodeURIComponent(token)}/reject`, { reason }),
+  approvalStatusInfo: (token) => api.get(`/licenses/status/${encodeURIComponent(token)}`),
   approvalRequests: (token) => api.get(`/licenses/approval/${encodeURIComponent(token)}/requests`),
   approvalInfoForRequest: (token, requestId) => api.get(`/licenses/approval/${encodeURIComponent(token)}/request/${requestId}`),
   approvalApproveRequest: (token, requestId) => api.post(`/licenses/approval/${encodeURIComponent(token)}/request/${requestId}/approve`),

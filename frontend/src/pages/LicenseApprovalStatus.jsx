@@ -1,0 +1,134 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams, Link } from 'react-router-dom'
+import { CircleAlert, CheckCircle2, Clock3, ShieldCheck } from 'lucide-react'
+import { licensesApi, settingsApi } from '../api'
+
+const DEFAULT_BRANDING = {
+  app_name: 'GB Maintenance',
+  approval_page_title: 'License Approval Status',
+  approval_page_subtitle: 'Track the request status and approver coverage.',
+  approval_page_logo_url: '',
+  approval_page_primary_color: '#2563eb',
+  approval_page_back_to_login_label: 'Back to login',
+  approval_page_loading_label: 'Loading request status...',
+  approval_page_missing_token_text: 'Missing status token',
+  approval_page_load_error_text: 'Cannot load request status',
+}
+
+export default function LicenseApprovalStatus() {
+  const [searchParams] = useSearchParams()
+  const token = useMemo(() => (searchParams.get('token') || '').trim(), [searchParams])
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [info, setInfo] = useState(null)
+  const [branding, setBranding] = useState(DEFAULT_BRANDING)
+
+  useEffect(() => {
+    settingsApi.publicBranding()
+      .then(r => setBranding(prev => ({ ...prev, ...(r.data || {}) })))
+      .catch(() => setBranding(DEFAULT_BRANDING))
+  }, [])
+
+  useEffect(() => {
+    const load = async () => {
+      if (!token) {
+        setError(branding.approval_page_missing_token_text || DEFAULT_BRANDING.approval_page_missing_token_text)
+        return
+      }
+      setLoading(true)
+      setError('')
+      try {
+        const r = await licensesApi.approvalStatusInfo(token)
+        setInfo(r.data || null)
+      } catch (err) {
+        setError(err.response?.data?.error || branding.approval_page_load_error_text || DEFAULT_BRANDING.approval_page_load_error_text)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    load().catch(() => {})
+  }, [token, branding.approval_page_load_error_text, branding.approval_page_missing_token_text])
+
+  const accent = branding.approval_page_primary_color || DEFAULT_BRANDING.approval_page_primary_color
+  const status = String(info?.approval_status || '').toLowerCase()
+  const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Pending'
+  const statusCls = status === 'approved'
+    ? 'text-green-700 bg-green-50 border-green-200'
+    : status === 'rejected'
+      ? 'text-red-700 bg-red-50 border-red-200'
+      : 'text-amber-700 bg-amber-50 border-amber-200'
+
+  return (
+    <div className="min-h-screen p-4 sm:p-8" style={{ background: `linear-gradient(180deg, #f8fafc 0%, ${accent}14 100%)` }}>
+      <div className="max-w-3xl mx-auto rounded-3xl border border-white/80 bg-white/90 shadow-xl p-6 sm:p-8 space-y-5">
+        <div>
+          <div className="text-xs uppercase tracking-[0.2em] text-gray-500 font-semibold">{branding.app_name || DEFAULT_BRANDING.app_name}</div>
+          <h1 className="mt-2 text-3xl font-bold text-gray-900">License Approval Status</h1>
+          <p className="mt-2 text-sm text-gray-600">{branding.approval_page_subtitle || DEFAULT_BRANDING.approval_page_subtitle}</p>
+        </div>
+
+        {loading && <p className="text-sm text-gray-500">{branding.approval_page_loading_label || DEFAULT_BRANDING.approval_page_loading_label}</p>}
+        {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3"><CircleAlert size={18} className="mt-0.5 shrink-0" />{error}</div>}
+
+        {info && (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">License</div>
+                <div className="mt-1 text-sm font-medium text-gray-900">{info.name || '—'}</div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Supplier</div>
+                <div className="mt-1 text-sm font-medium text-gray-900">{info.supplier_company || '—'}</div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Current Status</div>
+                <div className={`mt-1 inline-flex items-center gap-2 text-xs px-2 py-0.5 rounded-full border ${statusCls}`}>
+                  {status === 'approved' ? <CheckCircle2 size={14} /> : <Clock3 size={14} />}
+                  {statusLabel}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Requested At</div>
+                <div className="mt-1 text-sm font-medium text-gray-900">{info.approval_requested_at ? new Date(info.approval_requested_at).toLocaleString() : '—'}</div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Approved At</div>
+                <div className="mt-1 text-sm font-medium text-gray-900">{info.approved_at ? new Date(info.approved_at).toLocaleString() : '—'}</div>
+              </div>
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Rejected At</div>
+                <div className="mt-1 text-sm font-medium text-gray-900">{info.rejected_at ? new Date(info.rejected_at).toLocaleString() : '—'}</div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-4">
+              <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Approvers notified</div>
+              <ul className="mt-2 list-disc pl-5 text-sm text-gray-800 space-y-1">
+                {(Array.isArray(info.approver_emails) ? info.approver_emails : []).map(email => (
+                  <li key={email}>{email}</li>
+                ))}
+                {(!Array.isArray(info.approver_emails) || info.approver_emails.length === 0) && <li>Not available</li>}
+              </ul>
+            </div>
+
+            {info.rejection_reason && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-red-700 font-semibold">Rejection reason</div>
+                <p className="mt-2 text-sm text-red-900">{info.rejection_reason}</p>
+              </div>
+            )}
+          </>
+        )}
+
+        <div className="pt-2 text-sm">
+          <Link to="/login" className="inline-flex items-center gap-2 hover:underline" style={{ color: accent }}>
+            <ShieldCheck size={16} />{branding.approval_page_back_to_login_label || DEFAULT_BRANDING.approval_page_back_to_login_label}
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}

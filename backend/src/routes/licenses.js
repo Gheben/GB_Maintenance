@@ -11,6 +11,10 @@ function hashApprovalToken(token) {
   return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
 
+function hashStatusToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
 function collectContactItems(contact) {
   if (!contact || typeof contact !== 'object') return [];
   if (Array.isArray(contact)) return contact.filter(v => v && typeof v === 'object');
@@ -288,6 +292,33 @@ function collectLicenseRecipientEmails(license, includeApprover = false) {
   return [...recipients];
 }
 
+function collectApproverRecipientEmails(license) {
+  const recipients = new Set();
+  const add = (value) => {
+    const email = String(value || '').trim().toLowerCase();
+    if (email) recipients.add(email);
+  };
+  add(license.approver_user_email);
+  collectContactEmails(license.approver_contact).forEach(add);
+  return [...recipients];
+}
+
+function collectStakeholderRecipientEmails(license) {
+  const recipients = new Set();
+  const add = (value) => {
+    const email = String(value || '').trim().toLowerCase();
+    if (email) recipients.add(email);
+  };
+
+  add(license.owner_user_email);
+  add(license.maintainer_user_email);
+  add(license.supplier_email);
+  collectContactEmails(license.owner_contact).forEach(add);
+  collectContactEmails(license.maintainer_contact).forEach(add);
+
+  return [...recipients];
+}
+
 async function notifyLicenseEvent(eventType, licenseId, extraVars = {}, includeApprover = false) {
   const license = await getLicenseNotificationContext(licenseId);
   if (!license) return;
@@ -433,6 +464,50 @@ router.get('/approval/:token', [param('token').isString().isLength({ min: 20, ma
   });
 });
 
+router.get('/status/:token', [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const tokenHash = hashStatusToken(req.params.token);
+  const row = await getOne(
+    `SELECT l.id, l.name, l.description, l.approval_status, l.approval_requested_at, l.approved_at, l.rejected_at,
+            l.rejection_reason, l.expiry_date, l.renewal_date, l.approval_required, l.status_token_expires_at,
+            l.approver_contact, ua.email AS approver_user_email,
+            s.company AS supplier_company
+     FROM licenses l
+     LEFT JOIN users ua ON ua.id=l.approver_user_id
+     LEFT JOIN suppliers s ON s.id=l.supplier_id
+     WHERE l.status_token_hash=$1`,
+    [tokenHash]
+  );
+  if (!row) return res.status(404).json({ error: 'Status link not found' });
+  if (!row.approval_required) return res.status(400).json({ error: 'Approval is not required for this license' });
+  if (row.status_token_expires_at && new Date(row.status_token_expires_at).getTime() < Date.now()) {
+    return res.status(410).json({ error: 'Status link expired' });
+  }
+
+  const approverEmails = [...new Set([
+    String(row.approver_user_email || '').trim().toLowerCase(),
+    ...collectContactEmails(row.approver_contact).map(v => String(v || '').trim().toLowerCase()),
+  ].filter(Boolean))];
+
+  res.json({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    supplier_company: row.supplier_company,
+    approval_status: row.approval_status,
+    approval_requested_at: row.approval_requested_at,
+    approved_at: row.approved_at,
+    rejected_at: row.rejected_at,
+    rejection_reason: row.rejection_reason,
+    expiry_date: row.expiry_date,
+    renewal_date: row.renewal_date,
+    approver_emails: approverEmails,
+    status_link_expires_at: row.status_token_expires_at,
+  });
+});
+
 router.post('/approval/:token/approve', [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -459,7 +534,7 @@ router.post('/approval/:token/approve', [param('token').isString().isLength({ mi
   await notifyLicenseEvent('license_approved', row.id, {
     acted_by: 'Approval Link',
     approved_at: new Date().toISOString(),
-  }, true).catch(() => {});
+  }).catch(() => {});
 
   res.json({ message: 'License approved' });
 });
@@ -495,7 +570,7 @@ router.post('/approval/:token/reject', [
     rejected_at: new Date().toISOString(),
     reason: req.body.reason || '-',
     rejection_reason: req.body.reason || '-',
-  }, true).catch(() => {});
+  }).catch(() => {});
 
   res.json({ message: 'License rejected' });
 });
@@ -857,30 +932,51 @@ router.post('/:id/request-approval', requireAdmin, [
   const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = hashApprovalToken(token);
+  const statusToken = crypto.randomBytes(32).toString('hex');
+  const statusTokenHash = hashStatusToken(statusToken);
+  const statusTokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
   const updated = await query(
     `UPDATE licenses
      SET approval_status='pending', approval_token_hash=$1, approval_token_expires_at=$2,
+         status_token_hash=$3, status_token_expires_at=$4,
          approval_requested_at=NOW(), updated_at=NOW()
-     WHERE id=$3
+     WHERE id=$5
      RETURNING approval_requested_at`,
-    [tokenHash, expiresAt.toISOString(), lic.id]
+    [tokenHash, expiresAt.toISOString(), statusTokenHash, statusTokenExpiresAt.toISOString(), lic.id]
   );
   const approvalRequestedAt = updated.rows?.[0]?.approval_requested_at || null;
 
   const appBaseUrl = await getAppBaseUrl();
   const approvalUrl = `${appBaseUrl}/licenses/approval?token=${token}`;
+  const statusUrl = `${appBaseUrl}/licenses/approval-status?token=${statusToken}`;
+
+  const approverRecipients = context ? collectApproverRecipientEmails(context) : recipients;
+  const stakeholderRecipients = context ? collectStakeholderRecipientEmails(context) : [];
+  const normalizedApprovers = [...new Set(approverRecipients.map(v => String(v || '').trim().toLowerCase()).filter(Boolean))];
+  const normalizedStakeholders = [...new Set(
+    stakeholderRecipients
+      .map(v => String(v || '').trim().toLowerCase())
+      .filter(Boolean)
+      .filter(v => !normalizedApprovers.includes(v))
+  )];
 
   const vars = buildLicenseTemplateVars(context || { id: lic.id, name: lic.name }, {
     approval_url: approvalUrl,
+    status_url: statusUrl,
     expires_at: expiresAt.toISOString(),
-    approver_email: recipients[0],
+    approver_email: normalizedApprovers[0] || '',
   });
 
-  await sendEmailNotification('license_approval_requested', recipients, vars, 'license', lic.id);
+  if (normalizedApprovers.length > 0) {
+    await sendEmailNotification('license_approval_requested', normalizedApprovers, vars, 'license', lic.id);
+  }
+  if (normalizedStakeholders.length > 0) {
+    await sendEmailNotification('license_approval_requested_info', normalizedStakeholders, vars, 'license', lic.id);
+  }
 
   res.json({
-    message: `Approval request sent to ${recipients.join(', ')}`,
+    message: `Approval request sent to ${[...new Set([...normalizedApprovers, ...normalizedStakeholders])].join(', ')}`,
     expires_at: expiresAt.toISOString(),
     approval_requested_at: approvalRequestedAt,
   });

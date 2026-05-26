@@ -2039,6 +2039,43 @@ const MIGRATIONS = [
       }
     }
   },
+  {
+    version: 41,
+    name: 'license_role_templates_and_status_token',
+    up: async (client) => {
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS status_token_hash VARCHAR(128)`);
+      await client.query(`ALTER TABLE licenses ADD COLUMN IF NOT EXISTS status_token_expires_at TIMESTAMPTZ`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_licenses_status_token_hash ON licenses(status_token_hash)`);
+
+      await client.query(
+        `INSERT INTO notification_templates (name, event_type, subject_template, body_html_template, is_active)
+         VALUES ($1, $2, $3, $4, true)
+         ON CONFLICT (event_type)
+         DO UPDATE SET
+           name = EXCLUDED.name,
+           subject_template = EXCLUDED.subject_template,
+           body_html_template = EXCLUDED.body_html_template,
+           is_active = true,
+           updated_at = NOW()`,
+        [
+          'License Approval Status Update',
+          'license_approval_requested_info',
+          '[STATUS UPDATE] License approval started: {{license_name}}',
+          `<h2 style="margin:0 0 12px;color:#0f172a">License Approval In Progress</h2>
+<p style="margin:0 0 14px;color:#334155">This is a status update. The approval workflow has started for this license.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">License</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px;border:1px solid #e2e8f0">{{supplier_company}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Expiry Date</td><td style="padding:8px;border:1px solid #e2e8f0">{{expiry_date}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Current Status</td><td style="padding:8px;border:1px solid #e2e8f0">{{approval_status}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Documents</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_documents_html}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{status_url}}" style="background:#0f766e;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Status</a></p>
+<p style="margin:8px 0 0;color:#64748b;font-size:12px">If the button does not work, open this URL in your browser: {{status_url}}</p>`,
+        ]
+      );
+    }
+  },
 ];
 
 async function runMigrations(pool) {
