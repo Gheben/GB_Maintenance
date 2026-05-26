@@ -24,6 +24,12 @@ const SEVERITY_BADGE = {
   low: 'bg-green-100 text-green-800 border-green-200',
 }
 
+const LICENSE_APPROVAL_STATUS_BADGE = {
+  approved: 'bg-green-100 text-green-800 border-green-200',
+  rejected: 'bg-red-100 text-red-800 border-red-200',
+  pending: 'bg-amber-100 text-amber-800 border-amber-200',
+}
+
 function PrettyBadge({ value, classes }) {
   if (!value) return <span className="text-gray-500">-</span>
   return (
@@ -39,6 +45,11 @@ function formatLicenseStatusLabel(value) {
   if (normalized === 'rejected') return 'Rejected'
   if (normalized === 'pending') return 'Pending'
   return normalized ? normalized.replace(/_/g, ' ') : '-'
+}
+
+function getLicenseStatusBadgeClasses(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  return LICENSE_APPROVAL_STATUS_BADGE[normalized] || 'bg-gray-100 text-gray-700 border-gray-200'
 }
 
 function formatLicenseDateLabel(value) {
@@ -297,7 +308,13 @@ export default function Notifications() {
                     <div><span className="text-gray-500">License name:</span> <span className="font-medium">{detailData.name || '-'}</span></div>
                     <div><span className="text-gray-500">Supplier:</span> <span className="font-medium">{detailData.supplier_company || detailData.supplier || '-'}</span></div>
                     <div><span className="text-gray-500">Expiry date:</span> <span className="font-medium">{formatLicenseDateLabel(detailData.expiry_date)}</span></div>
-                    <div><span className="text-gray-500">Approval status:</span> <span className="font-medium">{formatLicenseStatusLabel(detailData.approval_status)}</span></div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">Approval status:</span>
+                      <PrettyBadge
+                        value={formatLicenseStatusLabel(detailData.approval_status)}
+                        classes={getLicenseStatusBadgeClasses(detailData.approval_status)}
+                      />
+                    </div>
                   </>
                 )}
               </div>
