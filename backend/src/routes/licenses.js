@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { body, param, query: qv, validationResult } = require('express-validator');
-const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
+const { requireAuth, requireAdmin, optionalAuth } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const crypto = require('crypto');
 const { sendEmailNotification } = require('../services/notificationService');
@@ -185,6 +185,28 @@ async function findApprovalScopeByTokenHash(tokenHash) {
     approverEmails: identity.approverEmails,
     approverActorLabel: identity.approverActorLabel,
   };
+}
+
+function isLoggedUserAuthorizedForScope(user, scope) {
+  if (!user) return true;
+
+  const userId = String(user.id || '').trim();
+  const approverUserId = String(scope?.approverUserId || '').trim();
+  if (userId && approverUserId && userId === approverUserId) return true;
+
+  const userEmail = String(user.email || '').trim().toLowerCase();
+  if (userEmail && Array.isArray(scope?.approverEmails)) {
+    return scope.approverEmails.some(v => String(v || '').trim().toLowerCase() === userEmail);
+  }
+
+  return false;
+}
+
+function ensureLoggedUserAuthorizedForScope(req, res, scope) {
+  if (!req.user) return true;
+  if (isLoggedUserAuthorizedForScope(req.user, scope)) return true;
+  res.status(403).json({ error: 'User is not authorized for this operation.' });
+  return false;
 }
 
 async function listPendingApprovalsByScope(scope) {
@@ -411,7 +433,7 @@ async function notifyLicenseEvent(eventType, licenseId, extraVars = {}, includeA
   );
 }
 
-router.get('/approval/:token/requests', [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
+router.get('/approval/:token/requests', optionalAuth, [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
@@ -419,6 +441,7 @@ router.get('/approval/:token/requests', [param('token').isString().isLength({ mi
   const scope = await findApprovalScopeByTokenHash(tokenHash);
   if (!scope) return res.status(404).json({ error: 'Approval link not found' });
   if (scope.error) return res.status(scope.status).json({ error: scope.error });
+  if (!ensureLoggedUserAuthorizedForScope(req, res, scope)) return;
 
   const requests = await listPendingApprovalsByScope(scope);
   res.json({
@@ -427,7 +450,7 @@ router.get('/approval/:token/requests', [param('token').isString().isLength({ mi
   });
 });
 
-router.get('/approval/:token/request/:id', [
+router.get('/approval/:token/request/:id', optionalAuth, [
   param('token').isString().isLength({ min: 20, max: 300 }),
   param('id').isUUID(),
 ], async (req, res) => {
@@ -438,6 +461,7 @@ router.get('/approval/:token/request/:id', [
   const scope = await findApprovalScopeByTokenHash(tokenHash);
   if (!scope) return res.status(404).json({ error: 'Approval link not found' });
   if (scope.error) return res.status(scope.status).json({ error: scope.error });
+  if (!ensureLoggedUserAuthorizedForScope(req, res, scope)) return;
 
   const row = await getApprovalInfoByScope(scope, req.params.id);
   if (!row) return res.status(404).json({ error: 'Approval request not found' });
@@ -445,7 +469,7 @@ router.get('/approval/:token/request/:id', [
   res.json(row);
 });
 
-router.post('/approval/:token/request/:id/approve', [
+router.post('/approval/:token/request/:id/approve', optionalAuth, [
   param('token').isString().isLength({ min: 20, max: 300 }),
   param('id').isUUID(),
 ], async (req, res) => {
@@ -456,6 +480,7 @@ router.post('/approval/:token/request/:id/approve', [
   const scope = await findApprovalScopeByTokenHash(tokenHash);
   if (!scope) return res.status(404).json({ error: 'Approval link not found' });
   if (scope.error) return res.status(scope.status).json({ error: scope.error });
+  if (!ensureLoggedUserAuthorizedForScope(req, res, scope)) return;
 
   const row = await getApprovalInfoByScope(scope, req.params.id);
   if (!row) return res.status(404).json({ error: 'Approval request not found' });
@@ -476,7 +501,7 @@ router.post('/approval/:token/request/:id/approve', [
   res.json({ message: 'License approved' });
 });
 
-router.post('/approval/:token/request/:id/reject', [
+router.post('/approval/:token/request/:id/reject', optionalAuth, [
   param('token').isString().isLength({ min: 20, max: 300 }),
   param('id').isUUID(),
   body('reason').optional().isString().isLength({ max: 2000 }),
@@ -488,6 +513,7 @@ router.post('/approval/:token/request/:id/reject', [
   const scope = await findApprovalScopeByTokenHash(tokenHash);
   if (!scope) return res.status(404).json({ error: 'Approval link not found' });
   if (scope.error) return res.status(scope.status).json({ error: scope.error });
+  if (!ensureLoggedUserAuthorizedForScope(req, res, scope)) return;
 
   const row = await getApprovalInfoByScope(scope, req.params.id);
   if (!row) return res.status(404).json({ error: 'Approval request not found' });
@@ -510,11 +536,16 @@ router.post('/approval/:token/request/:id/reject', [
   res.json({ message: 'License rejected' });
 });
 
-router.get('/approval/:token', [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
+router.get('/approval/:token', optionalAuth, [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const tokenHash = hashApprovalToken(req.params.token);
+  const scope = await findApprovalScopeByTokenHash(tokenHash);
+  if (!scope) return res.status(404).json({ error: 'Approval link not found' });
+  if (scope.error) return res.status(scope.status).json({ error: scope.error });
+  if (!ensureLoggedUserAuthorizedForScope(req, res, scope)) return;
+
   const row = await getOne(
     `SELECT l.id, l.name, l.description, l.approval_status, l.expiry_date, l.renewal_date, l.approval_required,
             l.documents,
@@ -587,11 +618,16 @@ router.get('/status/:token', [param('token').isString().isLength({ min: 20, max:
   });
 });
 
-router.post('/approval/:token/approve', [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
+router.post('/approval/:token/approve', optionalAuth, [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const tokenHash = hashApprovalToken(req.params.token);
+  const scope = await findApprovalScopeByTokenHash(tokenHash);
+  if (!scope) return res.status(404).json({ error: 'Approval link not found' });
+  if (scope.error) return res.status(scope.status).json({ error: scope.error });
+  if (!ensureLoggedUserAuthorizedForScope(req, res, scope)) return;
+
   const row = await getOne(
     `SELECT l.id, l.approval_status, l.approval_token_expires_at,
             l.approver_contact,
@@ -630,7 +666,7 @@ router.post('/approval/:token/approve', [param('token').isString().isLength({ mi
   res.json({ message: 'License approved' });
 });
 
-router.post('/approval/:token/reject', [
+router.post('/approval/:token/reject', optionalAuth, [
   param('token').isString().isLength({ min: 20, max: 300 }),
   body('reason').optional().isString().isLength({ max: 2000 }),
 ], async (req, res) => {
@@ -638,6 +674,11 @@ router.post('/approval/:token/reject', [
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const tokenHash = hashApprovalToken(req.params.token);
+  const scope = await findApprovalScopeByTokenHash(tokenHash);
+  if (!scope) return res.status(404).json({ error: 'Approval link not found' });
+  if (scope.error) return res.status(scope.status).json({ error: scope.error });
+  if (!ensureLoggedUserAuthorizedForScope(req, res, scope)) return;
+
   const row = await getOne(
     `SELECT l.id, l.approval_status, l.approval_token_expires_at,
             l.approver_contact,

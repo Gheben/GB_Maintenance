@@ -34,6 +34,36 @@ async function requireAuth(req, res, next) {
   }
 }
 
+// ─── Optional JWT Auth (public routes with identity-aware behavior) ─────────
+async function optionalAuth(req, res, next) {
+  try {
+    const header = req.headers['authorization'] || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!token) return next();
+
+    let payload;
+    try {
+      payload = verifyToken(token);
+    } catch {
+      return next();
+    }
+
+    if (payload.jti) {
+      const revoked = await isSessionRevoked(payload.jti);
+      if (revoked) return next();
+    }
+
+    const user = await getUserById(payload.sub);
+    if (!user || !user.is_active) return next();
+
+    req.user = { ...user, jti: payload.jti };
+    return next();
+  } catch (err) {
+    logger.error(`[AuthMiddleware][optionalAuth] ${err.message}`);
+    return next();
+  }
+}
+
 // ─── API Key Auth ─────────────────────────────────────────────────────────────
 const bcrypt = require('bcryptjs');
 
@@ -97,7 +127,7 @@ async function requireAuthOrApiKey(req, res, next) {
 }
 
 module.exports = {
-  requireAuth, requireApiKey, requireAuthOrApiKey,
+  requireAuth, optionalAuth, requireApiKey, requireAuthOrApiKey,
   requireRole, requireAdmin, requireSuperAdmin, requireChangeManager, requireOperator,
   requirePermission
 };
