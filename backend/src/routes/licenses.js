@@ -686,7 +686,7 @@ router.put('/:id', requireAdmin, [
 
   const allowed = [
     'name', 'description', 'owner_user_id', 'supplier_id', 'supplier', 'maintainer_user_id', 'approver_user_id',
-    'activation_date', 'duration_months', 'custom_expiry_date', 'expiry_date', 'reminder_days', 'approval_required', 'approval_status',
+    'activation_date', 'duration_months', 'custom_expiry_date', 'reminder_days', 'approval_required', 'approval_status',
     'estimated_cost', 'currency', 'notes'
   ];
 
@@ -697,7 +697,7 @@ router.put('/:id', requireAdmin, [
   if (req.body.maintainer_contact !== undefined) setField('maintainer_contact', req.body.maintainer_contact ? JSON.stringify(req.body.maintainer_contact) : null);
   if (req.body.approver_contact !== undefined) setField('approver_contact', req.body.approver_contact ? JSON.stringify(req.body.approver_contact) : null);
   if (req.body.documents !== undefined) setField('documents', JSON.stringify(normalizeDocuments(req.body.documents)));
-  if (req.body.activation_date !== undefined || req.body.duration_months !== undefined || req.body.custom_expiry_date !== undefined) {
+  if (req.body.activation_date !== undefined || req.body.duration_months !== undefined || req.body.custom_expiry_date !== undefined || req.body.expiry_date !== undefined) {
     const nextExpiry = computeLicenseExpiry({
       activation_date: req.body.activation_date !== undefined ? req.body.activation_date : (await getOne('SELECT activation_date FROM licenses WHERE id=$1', [req.params.id]))?.activation_date,
       duration_months: req.body.duration_months !== undefined ? req.body.duration_months : (await getOne('SELECT duration_months FROM licenses WHERE id=$1', [req.params.id]))?.duration_months,
