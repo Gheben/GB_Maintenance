@@ -186,7 +186,39 @@ router.put('/:id', requireAdmin, [
 
   if (fields.length > 0) {
     fields.push('updated_at=NOW()');
-    await query(`UPDATE suppliers SET ${fields.join(', ')} WHERE id=$${idx}`, [...vals, req.params.id]);
+    try {
+      await query(`UPDATE suppliers SET ${fields.join(', ')} WHERE id=$${idx}`, [...vals, req.params.id]);
+    } catch (err) {
+      // Fallback for environments still on older supplier schema (without contract columns).
+      if (err?.code === '42703') {
+        const legacyKeys = new Set([
+          'first_name', 'last_name', 'company', 'nationality', 'phone', 'mobile', 'email', 'vat_number', 'notes', 'is_active'
+        ]);
+        const legacyFields = [];
+        const legacyVals = [];
+        let legacyIdx = 1;
+        const setLegacyField = (k, v) => { legacyFields.push(`${k}=$${legacyIdx++}`); legacyVals.push(v); };
+
+        for (const k of keys) {
+          if (!legacyKeys.has(k)) continue;
+          if (req.body[k] !== undefined) setLegacyField(k, req.body[k] === '' ? null : req.body[k]);
+        }
+
+        if (legacyFields.length === 0) {
+          return res.status(400).json({ error: 'Supplier contract fields are not supported on this schema. Update basic supplier fields instead.' });
+        }
+
+        legacyFields.push('updated_at=NOW()');
+        await query(`UPDATE suppliers SET ${legacyFields.join(', ')} WHERE id=$${legacyIdx}`, [...legacyVals, req.params.id]);
+        return res.json({ message: 'Supplier updated', warning: 'Supplier saved on legacy schema' });
+      }
+
+      if (err?.code === '22P02' || err?.code === '23502' || err?.code === '23514') {
+        return res.status(400).json({ error: `Invalid supplier data: ${err.message}` });
+      }
+
+      throw err;
+    }
   }
 
   res.json({ message: 'Supplier updated' });
