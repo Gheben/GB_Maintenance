@@ -688,7 +688,15 @@ async function _resolveRoleFromGroups(memberOf, serviceClient, cfg, userDn) {
   return highestRole;
 }
 
-module.exports = { getLdapSettings, saveLdapSettings, authenticateUser, testLdapConnection, searchGroups };
+module.exports = {
+  getLdapSettings,
+  saveLdapSettings,
+  authenticateUser,
+  testLdapConnection,
+  searchUsers,
+  searchGroups,
+  countUsersInGroups,
+};
 
 async function searchUsers(q) {
   const cfg = await getLdapSettings();
