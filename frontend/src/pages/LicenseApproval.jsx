@@ -170,7 +170,7 @@ export default function LicenseApproval() {
     try {
       const r = await licensesApi.approvalApproveRequest(token, selectedRequestId)
       setResult(r.data?.message || 'License approved')
-      await load()
+      setInfo(prev => prev ? { ...prev, approval_status: 'approved' } : prev)
     } catch (err) {
       setError(err.response?.data?.error || 'Approval failed')
     } finally {
@@ -185,7 +185,7 @@ export default function LicenseApproval() {
     try {
       const r = await licensesApi.approvalRejectRequest(token, selectedRequestId, reason)
       setResult(r.data?.message || 'License rejected')
-      await load()
+      setInfo(prev => prev ? { ...prev, approval_status: 'rejected' } : prev)
     } catch (err) {
       setError(err.response?.data?.error || 'Reject failed')
     } finally {
@@ -308,8 +308,8 @@ export default function LicenseApproval() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-white font-medium shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60" style={{ backgroundColor: accent }} disabled={busy} onClick={approve}><CheckCircle2 size={18} />{branding.approval_page_approve_button_label || DEFAULT_BRANDING.approval_page_approve_button_label}</button>
-                  <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-700 font-medium border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60" disabled={busy} onClick={reject}><XCircle size={18} />{branding.approval_page_reject_button_label || DEFAULT_BRANDING.approval_page_reject_button_label}</button>
+                  <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-white font-medium shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60" style={{ backgroundColor: accent }} disabled={busy || String(info.approval_status || '').toLowerCase() !== 'pending'} onClick={approve}><CheckCircle2 size={18} />{branding.approval_page_approve_button_label || DEFAULT_BRANDING.approval_page_approve_button_label}</button>
+                  <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-700 font-medium border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60" disabled={busy || String(info.approval_status || '').toLowerCase() !== 'pending'} onClick={reject}><XCircle size={18} />{branding.approval_page_reject_button_label || DEFAULT_BRANDING.approval_page_reject_button_label}</button>
                   <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-600 font-medium border border-gray-200 bg-gray-50 hover:bg-gray-100 disabled:opacity-60" disabled={busy} onClick={load}><RefreshCw size={18} />{branding.approval_page_refresh_button_label || DEFAULT_BRANDING.approval_page_refresh_button_label}</button>
                 </div>
               </div>
