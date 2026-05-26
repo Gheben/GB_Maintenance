@@ -1,31 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import {
-  BadgeCheck,
   CheckCircle2,
   CircleAlert,
-  CircleDot,
   Clock3,
-  Image as ImageIcon,
-  LayoutList,
-  Palette,
   ShieldCheck,
-  Sparkles,
-  Star,
 } from 'lucide-react'
 import { licensesApi, settingsApi } from '../api'
-
-const SIDE_ICON_COMPONENTS = {
-  'check-circle': CheckCircle2,
-  'badge-check': BadgeCheck,
-  'shield-check': ShieldCheck,
-  'layout-list': LayoutList,
-  image: ImageIcon,
-  palette: Palette,
-  sparkles: Sparkles,
-  star: Star,
-  'circle-dot': CircleDot,
-}
 
 const DEFAULT_BRANDING = {
   app_name: 'GB Maintenance',
@@ -33,26 +14,6 @@ const DEFAULT_BRANDING = {
   approval_page_subtitle: 'Track the request status and approver coverage.',
   approval_page_logo_url: '',
   approval_page_primary_color: '#2563eb',
-  approval_page_side_kicker: 'Approval Flow',
-  approval_page_side_title: 'Simple, but brandable',
-  approval_page_side_description: "This page can now be branded from Licenses > Template with company name, custom title, subtitle, logo, and primary color, so the approval request feels like part of the customer's own portal.",
-  approval_page_side_rows_count: 4,
-  approval_page_side_point_1: 'Company/app name shown in the public header',
-  approval_page_side_point_2: 'Custom title and subtitle for approval requests',
-  approval_page_side_point_3: 'Company logo uploaded from Licenses > Template',
-  approval_page_side_point_4: 'Primary accent color used for CTA and highlights',
-  approval_page_side_point_5: '',
-  approval_page_side_point_6: '',
-  approval_page_side_point_7: '',
-  approval_page_side_point_8: '',
-  approval_page_side_icon_1: 'shield-check',
-  approval_page_side_icon_2: 'layout-list',
-  approval_page_side_icon_3: 'image',
-  approval_page_side_icon_4: 'palette',
-  approval_page_side_icon_5: 'sparkles',
-  approval_page_side_icon_6: 'star',
-  approval_page_side_icon_7: 'check-circle',
-  approval_page_side_icon_8: 'circle-dot',
   approval_page_footer_text: 'Powered by {app_name}',
   approval_page_back_to_login_label: 'Back to login',
   approval_page_loading_label: 'Loading request status...',
@@ -127,15 +88,6 @@ export default function LicenseApprovalStatus() {
     : status === 'rejected'
       ? 'text-red-700 bg-red-50 border-red-200'
       : 'text-amber-700 bg-amber-50 border-amber-200'
-  const rowsRaw = Number(branding.approval_page_side_rows_count || DEFAULT_BRANDING.approval_page_side_rows_count || 4)
-  const rowsCount = Number.isFinite(rowsRaw) ? Math.min(8, Math.max(1, Math.trunc(rowsRaw))) : 4
-  const sideItems = Array.from({ length: rowsCount }, (_, i) => {
-    const idx = i + 1
-    const text = branding[`approval_page_side_point_${idx}`] || DEFAULT_BRANDING[`approval_page_side_point_${idx}`] || ''
-    const iconName = String(branding[`approval_page_side_icon_${idx}`] || DEFAULT_BRANDING[`approval_page_side_icon_${idx}`] || 'check-circle')
-    const Icon = SIDE_ICON_COMPONENTS[iconName] || CheckCircle2
-    return { idx, text, Icon }
-  }).filter(item => String(item.text || '').trim().length > 0)
   const footerTextTemplate = branding.approval_page_footer_text || DEFAULT_BRANDING.approval_page_footer_text
   const footerText = String(footerTextTemplate).replaceAll('{app_name}', appName)
   const initials = appName
@@ -152,7 +104,7 @@ export default function LicenseApprovalStatus() {
         background: `radial-gradient(circle at top left, ${accent}22, transparent 35%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)`,
       }}
     >
-      <div className="max-w-5xl mx-auto grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="max-w-5xl mx-auto">
         <section className="rounded-[28px] border border-white/70 bg-white/85 backdrop-blur shadow-xl overflow-hidden">
           <div className="p-6 sm:p-8 border-b border-gray-100" style={{ background: `linear-gradient(135deg, ${accent}18, transparent 70%)` }}>
             <div className="flex items-start gap-4">
@@ -233,25 +185,6 @@ export default function LicenseApprovalStatus() {
             </div>
           </div>
         </section>
-
-        <aside className="rounded-[28px] border border-white/70 bg-white/80 backdrop-blur shadow-xl p-6 sm:p-8 space-y-5">
-          <div>
-            <div className="text-xs uppercase tracking-[0.22em] text-gray-500 font-semibold">{branding.approval_page_side_kicker || DEFAULT_BRANDING.approval_page_side_kicker}</div>
-            <h2 className="mt-2 text-2xl font-bold text-gray-900">{branding.approval_page_side_title || DEFAULT_BRANDING.approval_page_side_title}</h2>
-            <p className="mt-3 text-sm text-gray-600">{branding.approval_page_side_description || DEFAULT_BRANDING.approval_page_side_description}</p>
-          </div>
-
-          <div className="space-y-3">
-            {sideItems.map(item => (
-              <div key={item.idx} className="flex items-start gap-3 rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
-                <div className="w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0 mt-0.5" style={{ backgroundColor: accent }}>
-                  <item.Icon size={14} />
-                </div>
-                <p className="text-sm text-gray-700">{item.text}</p>
-              </div>
-            ))}
-          </div>
-        </aside>
       </div>
       <div className="max-w-5xl mx-auto pt-4 text-center text-[10px] text-gray-400">
         {footerText}
