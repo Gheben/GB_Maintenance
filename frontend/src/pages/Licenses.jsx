@@ -1795,9 +1795,9 @@ export default function Licenses() {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                     {suppliers.map(s => (
-                      <tr key={s.id}>
+                      <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onDoubleClick={() => openEditSupplier(s)} title="Double click for details">
                         {canBulkDelete && (
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <input
                               type="checkbox"
                               checked={selectedSupplierIds.includes(s.id)}
