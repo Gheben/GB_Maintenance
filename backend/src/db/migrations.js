@@ -2092,6 +2092,19 @@ const MIGRATIONS = [
       );
     }
   },
+  {
+    version: 43,
+    name: 'license_rejected_template_hardening',
+    up: async (client) => {
+      await client.query(
+        `UPDATE notification_templates
+         SET subject_template = replace(replace(replace(COALESCE(subject_template, ''), '[APPROVED]', '[REJECTED]'), 'Approved', 'Rejected'), 'approved', 'rejected'),
+             body_html_template = replace(replace(replace(COALESCE(body_html_template, ''), 'APPROVED', 'REJECTED'), 'Approved', 'Rejected'), 'approved', 'rejected'),
+             updated_at = NOW()
+         WHERE event_type = 'license_rejected'`
+      );
+    }
+  },
 ];
 
 async function runMigrations(pool) {
