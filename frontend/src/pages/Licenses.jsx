@@ -181,10 +181,63 @@ function getEffectiveApprovalStatus(status, approvedAt, rejectedAt) {
   return 'pending'
 }
 
+function parsePublicApiDate(value) {
+  if (!value) return null
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value
+
+  const text = String(value).trim()
+  if (!text) return null
+
+  const parsedNative = new Date(text)
+  if (!Number.isNaN(parsedNative.getTime())) return parsedNative
+
+  const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:,\s*(\d{2}):(\d{2}))?$/)
+  if (!m) return null
+
+  const day = Number(m[1])
+  const month = Number(m[2])
+  const year = Number(m[3])
+  const hour = m[4] ? Number(m[4]) : 0
+  const minute = m[5] ? Number(m[5]) : 0
+  const d = new Date(year, month - 1, day, hour, minute)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function toInputDateValue(value) {
+  if (!value) return ''
+
+  const text = String(value).trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10)
+
+  const d = parsePublicApiDate(value)
+  if (!d) return ''
+
+  const y = String(d.getFullYear())
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function formatDateOnlyLabel(value) {
+  if (!value) return ''
+
+  const text = String(value).trim()
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) return text
+
+  const d = parsePublicApiDate(value)
+  if (!d) return text
+
+  return d.toLocaleDateString('it-IT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
 function formatDateTimeLabel(value) {
   if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
+  const date = parsePublicApiDate(value)
+  if (!date || Number.isNaN(date.getTime())) return ''
   return date.toLocaleString('it-IT', {
     day: '2-digit',
     month: '2-digit',
@@ -1183,10 +1236,10 @@ export default function Licenses() {
         owner_contacts: extractContactList(d.owner_contact),
         maintainer_contacts: extractContactList(d.maintainer_contact),
         approver_contacts: extractContactList(d.approver_contact),
-        activation_date: d.activation_date ? String(d.activation_date).slice(0, 10) : '',
+        activation_date: toInputDateValue(d.activation_date),
         duration_months: String(d.duration_months || 12),
         expiry_mode: d.custom_expiry_date || (!d.activation_date && d.expiry_date) ? 'custom' : 'duration',
-        expiry_date: d.custom_expiry_date ? String(d.custom_expiry_date).slice(0, 10) : (d.expiry_date ? String(d.expiry_date).slice(0, 10) : ''),
+        expiry_date: d.custom_expiry_date ? toInputDateValue(d.custom_expiry_date) : toInputDateValue(d.expiry_date),
         reminder_days: d.reminder_days || 30,
         approval_required: d.approval_required !== false,
         approval_status: getEffectiveApprovalStatus(d.approval_status, d.approved_at, d.rejected_at),
@@ -1729,7 +1782,7 @@ export default function Licenses() {
                         <td className="px-4 py-3 text-gray-500">{l.supplier_company || l.supplier || '—'}</td>
                         <td className="px-4 py-3 text-gray-500">{l.owner_name || contactSummary(l.owner_contact)}</td>
                         <td className="px-4 py-3 text-gray-500">{l.approver_name || contactSummary(l.approver_contact)}</td>
-                        <td className="px-4 py-3 text-gray-500">{l.expiry_date ? String(l.expiry_date).slice(0, 10) : '—'}</td>
+                        <td className="px-4 py-3 text-gray-500">{l.expiry_date ? formatDateOnlyLabel(l.expiry_date) : '—'}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${approvalStatusMeta(l.approval_status, l.approval_required !== false).cls}`}>
                             {approvalStatusMeta(l.approval_status, l.approval_required !== false).label}

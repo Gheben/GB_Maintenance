@@ -931,7 +931,21 @@ router.get('/', [
     [...vals, limit, offset]
   );
 
-  res.json({ data: rows, total, page, limit });
+  res.json({
+    data: rows.map((row) => ({
+      ...row,
+      activation_date: formatDateForPublicApi(row.activation_date),
+      custom_expiry_date: formatDateForPublicApi(row.custom_expiry_date),
+      expiry_date: formatDateForPublicApi(row.expiry_date),
+      renewal_date: formatDateForPublicApi(row.renewal_date),
+      approval_requested_at: formatDateForPublicApi(row.approval_requested_at, { includeTime: true }),
+      approved_at: formatDateForPublicApi(row.approved_at, { includeTime: true }),
+      rejected_at: formatDateForPublicApi(row.rejected_at, { includeTime: true }),
+    })),
+    total,
+    page,
+    limit,
+  });
 });
 
 router.get('/:id', [param('id').isUUID()], async (req, res) => {
@@ -968,7 +982,20 @@ router.get('/:id', [param('id').isUUID()], async (req, res) => {
     [req.params.id]
   );
 
-  res.json({ ...row, assets, services });
+  res.json({
+    ...row,
+    activation_date: formatDateForPublicApi(row.activation_date),
+    custom_expiry_date: formatDateForPublicApi(row.custom_expiry_date),
+    expiry_date: formatDateForPublicApi(row.expiry_date),
+    renewal_date: formatDateForPublicApi(row.renewal_date),
+    approval_requested_at: formatDateForPublicApi(row.approval_requested_at, { includeTime: true }),
+    approved_at: formatDateForPublicApi(row.approved_at, { includeTime: true }),
+    rejected_at: formatDateForPublicApi(row.rejected_at, { includeTime: true }),
+    approval_token_expires_at: formatDateForPublicApi(row.approval_token_expires_at, { includeTime: true }),
+    status_token_expires_at: formatDateForPublicApi(row.status_token_expires_at, { includeTime: true }),
+    assets,
+    services,
+  });
 });
 
 router.post('/', requireAdmin, [
@@ -1273,8 +1300,8 @@ router.post('/:id/request-approval', requireAdmin, [
 
   res.json({
     message: `Approval request sent to ${[...new Set([...normalizedApprovers, ...normalizedStakeholders])].join(', ')}`,
-    expires_at: expiresAt.toISOString(),
-    approval_requested_at: approvalRequestedAt,
+    expires_at: formatDateForPublicApi(expiresAt, { includeTime: true }),
+    approval_requested_at: formatDateForPublicApi(approvalRequestedAt, { includeTime: true }),
   });
 });
 
