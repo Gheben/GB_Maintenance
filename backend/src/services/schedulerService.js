@@ -14,6 +14,17 @@ const REMINDERS = [
 
 let initialized = false;
 
+function formatDateForEmail(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return new Intl.DateTimeFormat('it-IT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d);
+}
+
 function start() {
   if (initialized) return;
   initialized = true;
@@ -144,8 +155,8 @@ async function _checkReminders() {
         license_id: license.id,
         license_name: license.name,
         supplier_company: license.supplier_company || '-',
-        activation_date: license.activation_date ? String(license.activation_date).slice(0, 10) : '-',
-        expiry_date: String(license.expiry_date).slice(0, 10),
+        activation_date: license.activation_date ? formatDateForEmail(license.activation_date) : '-',
+        expiry_date: formatDateForEmail(license.expiry_date),
         days_left: license.reminder_days || 30,
         reminder_days: license.reminder_days || 30,
       }, 'license', license.id);

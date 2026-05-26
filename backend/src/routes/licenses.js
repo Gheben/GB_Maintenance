@@ -380,7 +380,32 @@ function computeLicenseExpiry({ activation_date, duration_months, custom_expiry_
   return addMonths(new Date(activation_date), months).toISOString().slice(0, 10)
 }
 
+function formatDateForEmail(value, { includeTime = false } = {}) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return new Intl.DateTimeFormat('it-IT', includeTime
+    ? {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }
+    : {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }
+  ).format(d);
+}
+
 function buildLicenseTemplateVars(license, extraVars = {}) {
+  const resolvedApprovalStatus =
+    extraVars.approval_status !== undefined && extraVars.approval_status !== null
+      ? extraVars.approval_status
+      : (license.approval_status || '-');
+
   const normalizedReason =
     extraVars.reason !== undefined && extraVars.reason !== null
       ? extraVars.reason
@@ -389,20 +414,23 @@ function buildLicenseTemplateVars(license, extraVars = {}) {
           : (license.rejection_reason || '-'));
 
   return {
+    ...extraVars,
     license_id: license.id,
     license_name: license.name,
     license_description: license.description || '-',
     supplier_company: license.supplier_company || '-',
     requester_name: extraVars.requester_name || license.created_by_email || '-',
-    approval_status: license.approval_status || '-',
-    activation_date: license.activation_date ? String(license.activation_date).slice(0, 10) : '-',
+    approval_status: resolvedApprovalStatus,
+    activation_date: formatDateForEmail(license.activation_date),
     duration_months: license.duration_months || '-',
-    expiry_date: license.expiry_date ? String(license.expiry_date).slice(0, 10) : '-',
-    renewal_date: license.renewal_date ? String(license.renewal_date).slice(0, 10) : '-',
+    expiry_date: formatDateForEmail(license.expiry_date),
+    renewal_date: formatDateForEmail(license.renewal_date),
     license_documents_html: buildLicenseDocumentsHtml(license.documents, String(extraVars.app_url || '').trim()),
     reason: normalizedReason,
     rejection_reason: normalizedReason,
-    ...extraVars,
+    expires_at: extraVars.expires_at ? formatDateForEmail(extraVars.expires_at, { includeTime: true }) : '-',
+    approved_at: extraVars.approved_at ? formatDateForEmail(extraVars.approved_at, { includeTime: true }) : '-',
+    rejected_at: extraVars.rejected_at ? formatDateForEmail(extraVars.rejected_at, { includeTime: true }) : '-',
   };
 }
 
@@ -1216,7 +1244,8 @@ router.post('/:id/request-approval', requireAdmin, [
     app_url: appBaseUrl,
     approval_url: approvalUrl,
     status_url: statusUrl,
-    expires_at: expiresAt.toISOString(),
+    approval_status: 'pending',
+    expires_at: formatDateForEmail(expiresAt, { includeTime: true }),
     approver_email: normalizedApprovers[0] || '',
     requester_name: requesterName,
   });
