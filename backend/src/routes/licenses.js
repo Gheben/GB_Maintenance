@@ -278,6 +278,7 @@ function collectLicenseRecipientEmails(license, includeApprover = false) {
 
   add(license.owner_user_email);
   add(license.maintainer_user_email);
+  add(license.supplier_email);
   collectContactEmails(license.owner_contact).forEach(add);
   collectContactEmails(license.maintainer_contact).forEach(add);
   if (includeApprover) {
