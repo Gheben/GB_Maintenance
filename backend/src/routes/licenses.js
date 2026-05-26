@@ -114,6 +114,18 @@ function buildLicenseDocumentsHtml(documents, appBaseUrl = '') {
   return `<ul style="margin:0;padding-left:18px">${items.join('')}</ul>`;
 }
 
+function formatActorLabel(name, email, office) {
+  const safeName = String(name || '').trim();
+  const safeEmail = String(email || '').trim();
+  const safeOffice = String(office || '').trim();
+
+  const base = safeName && safeEmail
+    ? `${safeName} <${safeEmail}>`
+    : (safeName || safeEmail || 'Approver');
+
+  return safeOffice ? `${base} (${safeOffice})` : base;
+}
+
 function extractApproverIdentity(row) {
   if (!row || typeof row !== 'object') return { approverUserId: null, approverEmails: [] };
   const approverEmails = collectContactEmails(row.approver_contact);
@@ -130,22 +142,16 @@ function extractApproverIdentity(row) {
     ''
   ).trim();
   const contactEmail = String(contactItems.find(item => String(item?.email || '').trim())?.email || '').trim();
-  const contactLabel = contactName || contactEmail;
-  const primaryEmail = String(row.approver_user_email || contactEmail || '').trim();
-  const company = String(
-    contactItems.find(item => String(item?.company || item?.company_name || item?.organization || item?.org || '').trim())?.company ||
-    contactItems.find(item => String(item?.company || item?.company_name || item?.organization || item?.org || '').trim())?.company_name ||
-    contactItems.find(item => String(item?.company || item?.company_name || item?.organization || item?.org || '').trim())?.organization ||
-    contactItems.find(item => String(item?.company || item?.company_name || item?.organization || item?.org || '').trim())?.org ||
+  const contactOffice = String(
+    contactItems.find(item => String(item?.office || item?.department || '').trim())?.office ||
+    contactItems.find(item => String(item?.office || item?.department || '').trim())?.department ||
     ''
   ).trim();
+  const primaryEmail = String(row.approver_user_email || contactEmail || '').trim();
+  const office = String(row.approver_user_office || contactOffice || '').trim();
 
-  const details = [];
-  if (primaryEmail) details.push(primaryEmail);
-  if (company) details.push(company);
-
-  const actorBase = userLabel || contactLabel || primaryEmail || 'Approver';
-  const approverActorLabel = details.length > 0 ? `${actorBase} (${details.join(', ')})` : actorBase;
+  const actorName = userLabel || contactName || '';
+  const approverActorLabel = formatActorLabel(actorName, primaryEmail, office);
 
   return {
     approverUserId: row.approver_user_id || null,
@@ -159,11 +165,10 @@ async function findApprovalScopeByTokenHash(tokenHash) {
     `SELECT l.id, l.approver_user_id, l.approver_contact, l.approval_status, l.approval_required, l.approval_token_expires_at,
             ua.display_name AS approver_user_display_name,
             ua.username AS approver_user_username,
-                 ua.email AS approver_user_email,
-                 s.company AS supplier_company
+            ua.email AS approver_user_email,
+            ua.office AS approver_user_office
      FROM licenses l
      LEFT JOIN users ua ON ua.id=l.approver_user_id
-               LEFT JOIN suppliers s ON s.id=l.supplier_id
      WHERE l.approval_token_hash=$1`,
     [tokenHash]
   );
@@ -701,11 +706,9 @@ router.post('/approval/:token/approve', optionalAuth, [param('token').isString()
             ua.display_name AS approver_user_display_name,
             ua.username AS approver_user_username,
             ua.email AS approver_user_email,
-                 s.company AS supplier_company,
-                 s.email AS supplier_email
+            ua.office AS approver_user_office
      FROM licenses l
      LEFT JOIN users ua ON ua.id=l.approver_user_id
-     LEFT JOIN suppliers s ON s.id=l.supplier_id
      WHERE l.approval_token_hash=$1`,
     [tokenHash]
   );
@@ -752,11 +755,9 @@ router.post('/approval/:token/reject', optionalAuth, [
             ua.display_name AS approver_user_display_name,
             ua.username AS approver_user_username,
             ua.email AS approver_user_email,
-            s.company AS supplier_company,
-            s.email AS supplier_email
+            ua.office AS approver_user_office
      FROM licenses l
      LEFT JOIN users ua ON ua.id=l.approver_user_id
-     LEFT JOIN suppliers s ON s.id=l.supplier_id
      WHERE l.approval_token_hash=$1`,
     [tokenHash]
   );
@@ -1086,7 +1087,11 @@ router.post('/:id/approve', requireAdmin, [param('id').isUUID()], async (req, re
   );
 
   await notifyLicenseEvent('license_approved', req.params.id, {
-    acted_by: req.user?.display_name || req.user?.username || 'Admin',
+    acted_by: formatActorLabel(
+      req.user?.display_name || req.user?.username || '',
+      req.user?.email || '',
+      req.user?.office || ''
+    ),
     approved_at: new Date().toISOString(),
   }, true).catch(() => {});
 
@@ -1108,7 +1113,11 @@ router.post('/:id/reject', requireAdmin, [
   );
 
   await notifyLicenseEvent('license_rejected', req.params.id, {
-    acted_by: req.user?.display_name || req.user?.username || 'Admin',
+    acted_by: formatActorLabel(
+      req.user?.display_name || req.user?.username || '',
+      req.user?.email || '',
+      req.user?.office || ''
+    ),
     rejected_at: new Date().toISOString(),
     reason: req.body.reason || '-',
     rejection_reason: req.body.reason || '-',
