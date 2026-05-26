@@ -3,6 +3,72 @@ const { sendMail, renderTemplate } = require('../utils/mailer');
 const logger = require('../utils/logger');
 const axios = require('axios');
 
+function htmlToPlainText(html) {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<\/?(p|div|h1|h2|h3|h4|h5|h6|tr|li|ul|ol|table|thead|tbody|tfoot|section|article|header|footer|br)\b[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+function buildEmailHtmlDocument({ appName, appUrl, subject, bodyHtml }) {
+  const safeAppName = String(appName || 'GB Maintenance');
+  const safeAppUrl = String(appUrl || '').trim();
+  const safeSubject = String(subject || 'Notification');
+  const safeBody = String(bodyHtml || '<p>No content.</p>');
+
+  return `<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>${safeSubject}</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f1f5f9;word-spacing:normal;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+    <center style="width:100%;background-color:#f1f5f9;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f1f5f9;border-collapse:collapse;">
+        <tr>
+          <td align="center" style="padding:24px 12px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="640" style="width:640px;max-width:640px;border-collapse:collapse;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+              <tr>
+                <td style="padding:18px 24px;background-color:#0f172a;color:#ffffff;font-family:Segoe UI,Arial,sans-serif;font-size:18px;line-height:24px;font-weight:700;">
+                  ${safeAppName}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:20px 24px 8px 24px;font-family:Segoe UI,Arial,sans-serif;font-size:20px;line-height:28px;font-weight:700;color:#0f172a;">
+                  ${safeSubject}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 24px 24px 24px;font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:22px;color:#334155;">
+                  ${safeBody}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 24px;background-color:#f8fafc;border-top:1px solid #e2e8f0;font-family:Segoe UI,Arial,sans-serif;font-size:12px;line-height:18px;color:#64748b;">
+                  This is an automated notification from ${safeAppName}.${safeAppUrl ? ` Open: <a href="${safeAppUrl}" style="color:#1d4ed8;text-decoration:underline;">${safeAppUrl}</a>` : ''}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </center>
+  </body>
+</html>`;
+}
+
 // ─── In-App Notification ──────────────────────────────────────────────────────
 async function sendInApp(userId, type, title, message, refType, refId) {
   try {
@@ -50,13 +116,21 @@ async function sendEmailNotification(eventType, toEmails, vars, refType, refId) 
   const row = await getOne("SELECT value FROM settings WHERE key='general_config'").catch(() => null);
   const general = row?.value ? JSON.parse(row.value || '{}') : {};
   const appUrl = String(general?.app_url || process.env.APP_URL || 'http://localhost:4681').replace(/\/$/, '');
+  const appName = String(general?.app_name || 'GB Maintenance');
   const allVars = { ...vars, app_url: appUrl };
   const subject = renderTemplate(tpl.subject_template, allVars);
-  const html    = renderTemplate(tpl.body_html_template, allVars);
+  const htmlFragment = renderTemplate(tpl.body_html_template, allVars);
+  const html = buildEmailHtmlDocument({
+    appName,
+    appUrl,
+    subject,
+    bodyHtml: htmlFragment,
+  });
+  const text = [subject, '', htmlToPlainText(htmlFragment), '', appUrl].filter(Boolean).join('\n');
 
   for (const email of toEmails) {
     try {
-      await sendMail({ to: email, subject, html });
+      await sendMail({ to: email, subject, html, text });
       await logNotification(eventType, 'email', email, refType, refId, subject, 'sent');
     } catch (err) {
       await logNotification(eventType, 'email', email, refType, refId, subject, 'failed', err.message);

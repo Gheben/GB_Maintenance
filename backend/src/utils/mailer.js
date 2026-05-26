@@ -5,6 +5,22 @@ const { decrypt, isEncrypted } = require('./encryption');
 
 let _transporter = null;
 
+function htmlToPlainText(html) {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<\/?(p|div|h1|h2|h3|h4|h5|h6|tr|li|ul|ol|table|thead|tbody|tfoot|section|article|header|footer|br)\b[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 async function getSmtpConfig() {
   try {
     const row = await getOne("SELECT value FROM settings WHERE key = 'smtp_config'");
@@ -40,9 +56,13 @@ async function sendMail({ to, subject, html, text }) {
 
   const cfg = await getSmtpConfig();
   const from = cfg.from || `GB Maintenance <${cfg.user}>`;
+  const finalHtml = typeof html === 'string' && html.trim() ? html : undefined;
+  const finalText = typeof text === 'string' && text.trim()
+    ? text
+    : (finalHtml ? htmlToPlainText(finalHtml) : undefined);
 
   try {
-    const info = await transporter.sendMail({ from, to, subject, html, text });
+    const info = await transporter.sendMail({ from, to, subject, html: finalHtml, text: finalText });
     logger.info(`[Mailer] Email sent to ${to}: ${info.messageId}`);
     return {
       messageId: info.messageId,
