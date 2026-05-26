@@ -242,6 +242,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
                   alt={user.display_name || user.username}
                   className="w-7 h-7 rounded-full object-cover border border-gray-700 flex-shrink-0"
                   loading="lazy"
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
                 />
               ) : null}
               <div className="min-w-0">

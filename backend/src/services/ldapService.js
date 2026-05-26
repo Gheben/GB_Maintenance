@@ -110,6 +110,64 @@ function normalizeOffice(raw) {
   return value || null;
 }
 
+function detectImageMime(buffer) {
+  if (!buffer || buffer.length < 4) return null;
+
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) return 'image/png';
+  // GIF: GIF87a / GIF89a
+  if (
+    buffer.length >= 6 &&
+    buffer[0] === 0x47 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x38 &&
+    (buffer[4] === 0x37 || buffer[4] === 0x39) &&
+    buffer[5] === 0x61
+  ) return 'image/gif';
+  // WebP: RIFF....WEBP
+  if (
+    buffer.length >= 12 &&
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  ) return 'image/webp';
+
+  return null;
+}
+
+function toBufferMaybe(value) {
+  if (!value) return null;
+  if (Buffer.isBuffer(value)) return value;
+  if (Array.isArray(value) && value.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+    return Buffer.from(value);
+  }
+  if (value?.type === 'Buffer' && Array.isArray(value?.data)) {
+    return Buffer.from(value.data);
+  }
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value);
+  }
+  return null;
+}
+
 function normalizeThumbnailPhotoDataUrl(raw) {
   if (!raw) return null;
 
@@ -120,29 +178,21 @@ function normalizeThumbnailPhotoDataUrl(raw) {
     return first;
   }
 
-  let buffer = null;
-  if (Buffer.isBuffer(first)) {
-    buffer = first;
-  } else if (Array.isArray(first) && first.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
-    buffer = Buffer.from(first);
-  } else if (typeof first === 'string') {
+  let buffer = toBufferMaybe(first);
+  if (typeof first === 'string') {
     const value = first.trim();
     if (!value) return null;
 
-    try {
-      const base64Decoded = Buffer.from(value, 'base64');
-      if (base64Decoded.length > 0) {
-        buffer = base64Decoded;
-      }
-    } catch {
-      // Ignore base64 decode errors and try binary fallback.
+    // Try base64 first, but accept it only if bytes look like a real image.
+    const base64Decoded = Buffer.from(value, 'base64');
+    if (base64Decoded.length > 0 && detectImageMime(base64Decoded)) {
+      buffer = base64Decoded;
     }
 
-    if (!buffer || buffer.length === 0) {
-      try {
-        buffer = Buffer.from(value, 'binary');
-      } catch {
-        buffer = null;
+    if (!buffer || buffer.length === 0 || !detectImageMime(buffer)) {
+      const binaryDecoded = Buffer.from(value, 'latin1');
+      if (binaryDecoded.length > 0 && detectImageMime(binaryDecoded)) {
+        buffer = binaryDecoded;
       }
     }
   }
@@ -151,7 +201,37 @@ function normalizeThumbnailPhotoDataUrl(raw) {
   // Keep payload bounded to avoid oversized JWT/session responses.
   if (buffer.length > 200 * 1024) return null;
 
-  return `data:image/jpeg;base64,${buffer.toString('base64')}`;
+  const mime = detectImageMime(buffer);
+  if (!mime) return null;
+
+  return `data:${mime};base64,${buffer.toString('base64')}`;
+}
+
+function extractRawAttributeFromSearchEntry(entry, attrName) {
+  const attr = String(attrName || '').trim().toLowerCase();
+  if (!attr) return null;
+
+  const candidates = [entry?.raw?.attributes, entry?.pojo?.attributes];
+  for (const attrs of candidates) {
+    if (!Array.isArray(attrs)) continue;
+    for (const a of attrs) {
+      const type = String(a?.type || a?.name || '').trim().toLowerCase();
+      if (type !== attr) continue;
+
+      const values = [
+        ...(Array.isArray(a?.buffers) ? a.buffers : []),
+        ...(Array.isArray(a?.vals) ? a.vals : []),
+        ...(Array.isArray(a?.values) ? a.values : []),
+      ];
+
+      for (const v of values) {
+        const buf = toBufferMaybe(v);
+        if (buf && buf.length > 0) return buf;
+      }
+    }
+  }
+
+  return null;
 }
 
 function _escapeLdap(value) {
@@ -362,6 +442,10 @@ function _search(client, base, opts) {
             }
             return Object.keys(out).length ? out : null;
           })();
+        if (obj && typeof obj === 'object') {
+          const rawThumb = extractRawAttributeFromSearchEntry(e, 'thumbnailPhoto');
+          if (rawThumb) obj.thumbnailPhoto = rawThumb;
+        }
         if (obj && typeof obj === 'object') entries.push(obj);
       });
       res.on('error', reject);
