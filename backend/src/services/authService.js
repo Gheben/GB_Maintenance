@@ -146,10 +146,20 @@ async function loginLocal(username, password) {
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 async function getAllUsers() {
   const users = await getMany(
-    `SELECT id, username, display_name, email, office, role, auth_type, permissions,
+    `SELECT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type, u.permissions,
+            grp.group_name, grp.group_role,
             totp_enabled, totp_verified, is_active, last_login_at,
             failed_login_count, locked_until, avatar_color, created_at, updated_at
-     FROM users ORDER BY username`
+     FROM users u
+     LEFT JOIN LATERAL (
+       SELECT lg.name AS group_name, lg.role AS group_role
+       FROM user_group_members ugm
+       JOIN local_groups lg ON lg.id = ugm.group_id
+       WHERE ugm.user_id = u.id
+       ORDER BY lg.name ASC
+       LIMIT 1
+     ) grp ON TRUE
+     ORDER BY u.username`
   );
   return users.map(u => ({ ...u, permissions: normalizePermissions(u.role, u.permissions) }));
 }
@@ -179,11 +189,21 @@ async function getUsersPage({ page = 1, limit = 50, q = '' } = {}) {
   const total = totalRow?.c || 0;
 
   const rows = await getMany(
-    `SELECT id, username, display_name, email, office, role, auth_type, permissions,
+    `SELECT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type, u.permissions,
+            grp.group_name, grp.group_role,
             totp_enabled, totp_verified, is_active, last_login_at,
             failed_login_count, locked_until, avatar_color, created_at, updated_at
-     FROM users ${whereSql}
-     ORDER BY username
+     FROM users u
+     LEFT JOIN LATERAL (
+       SELECT lg.name AS group_name, lg.role AS group_role
+       FROM user_group_members ugm
+       JOIN local_groups lg ON lg.id = ugm.group_id
+       WHERE ugm.user_id = u.id
+       ORDER BY lg.name ASC
+       LIMIT 1
+     ) grp ON TRUE
+     ${whereSql.replace(/\busername\b/g, 'u.username').replace(/\bdisplay_name\b/g, 'u.display_name').replace(/\bemail\b/g, 'u.email')}
+     ORDER BY u.username
      LIMIT $${idx} OFFSET $${idx + 1}`,
     [...params, limitNum, offset]
   );
@@ -220,7 +240,7 @@ async function createUser(username, password, role, opts = {}) {
 
   const result = await query(
     `INSERT INTO users (username, display_name, email, office, password_hash, role, auth_type, permissions, avatar_color)
-     VALUES ($1, $2, $3, $4, $5, 'local', $6, $7, $8) RETURNING id`,
+     VALUES ($1, $2, $3, $4, $5, $6, 'local', $7, $8) RETURNING id`,
     [username, opts.display_name || username, opts.email || null, opts.office || null, hash, role, JSON.stringify(perms), color]
   );
   return result.rows[0].id;

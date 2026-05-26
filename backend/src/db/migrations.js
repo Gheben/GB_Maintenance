@@ -2128,6 +2128,21 @@ const MIGRATIONS = [
       );
     }
   },
+  {
+    version: 45,
+    name: 'fix_local_user_role_auth_type_swap',
+    up: async (client) => {
+      await client.query(
+        `UPDATE users
+         SET role = auth_type,
+             auth_type = 'local',
+             updated_at = NOW()
+         WHERE role = 'local'
+           AND auth_type IS NOT NULL
+           AND auth_type <> 'local'`
+      );
+    }
+  },
 ];
 
 async function runMigrations(pool) {

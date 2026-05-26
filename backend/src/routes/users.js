@@ -84,15 +84,29 @@ router.post('/', requireAdmin, [
   }
 
   try {
+    let effectivePermissions = req.body.permissions;
+    let effectiveRole = req.body.role;
+    if (req.body.group_id) {
+      const group = await getOne(
+        `SELECT id, role, permissions FROM local_groups WHERE id = $1`,
+        [req.body.group_id]
+      );
+      if (!group) {
+        return res.status(400).json({ error: 'Local group not found' });
+      }
+      effectiveRole = group.role || effectiveRole;
+      effectivePermissions = group.permissions && typeof group.permissions === 'object' ? group.permissions : {};
+    }
+
     const id = await authService.createUser(
       req.body.username,
       req.body.password,
-      req.body.role,
+      effectiveRole,
       {
         display_name: req.body.display_name,
         email: req.body.email,
         office: req.body.office,
-        permissions: req.body.permissions
+        permissions: effectivePermissions
       }
     );
     if (req.body.group_id) {

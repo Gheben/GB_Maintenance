@@ -20,6 +20,7 @@ const ALL_PERMS = [
   { key: 'apikeys', label: 'API Keys' },
   { key: 'audit', label: 'Audit Log' },
 ]
+const SUPERADMIN_ONLY_PERMISSION_KEYS = new Set(['audit'])
 const PASSWORD_RULES = [
   { key: 'len', label: 'At least 8 characters', test: (v) => String(v || '').length >= 8 },
   { key: 'upper', label: 'At least 1 uppercase letter (A-Z)', test: (v) => /[A-Z]/.test(String(v || '')) },
@@ -139,10 +140,14 @@ function PasswordRequirements({ password, optional = false }) {
   )
 }
 
-function PermissionsEditor({ value, onChange, disabled, lockedKeys = new Set() }) {
+function PermissionsEditor({ value, onChange, disabled, lockedKeys = new Set(), hideSuperAdminOnly = false }) {
+  const visiblePermissions = hideSuperAdminOnly
+    ? ALL_PERMS.filter(permission => !SUPERADMIN_ONLY_PERMISSION_KEYS.has(permission.key))
+    : ALL_PERMS
+
   return (
     <div className="grid grid-cols-2 gap-2 mt-2">
-      {ALL_PERMS.map(permission => (
+      {visiblePermissions.map(permission => (
         <label key={permission.key} className={`flex items-center gap-2 text-sm cursor-pointer select-none ${(disabled || lockedKeys.has(permission.key)) ? 'opacity-40 pointer-events-none' : ''}`}>
           <input
             type="checkbox"
@@ -195,9 +200,21 @@ function LocalGroupPicker({ groups, value, onChange, required, roleOptions, role
   return (
     <div>
       <label className="block text-sm font-medium mb-1">Local group {required ? '*' : ''}</label>
-      <button type="button" className="input w-full text-left" onClick={() => setOpen(true)}>
-        {selected?.name || 'Select group'}
-      </button>
+      <div className="flex items-center gap-2">
+        <button type="button" className="input w-full text-left" onClick={() => setOpen(true)}>
+          {selected?.name || 'Select group'}
+        </button>
+        {!required && !!value && (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => onChange('')}
+            title="Clear selected group"
+          >
+            Clear
+          </button>
+        )}
+      </div>
       {required && <input type="hidden" required value={value || ''} onChange={() => {}} />}
 
       {open && (
@@ -258,6 +275,8 @@ export function QuickCreateUserModal({ open, onClose, onCreated, localGroups = [
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [form, setForm] = useState({ username: '', display_name: '', email: '', office: '', password: '', confirm_password: '', role: 'operator', permissions: {}, group_id: '' })
+  const selectedGroup = (pickerGroups || []).find(group => group.id === form.group_id && isLocalGroup(group)) || null
+  const isGroupPermissionsInherited = !!form.group_id
 
   useEffect(() => {
     if (!open) return
@@ -292,7 +311,6 @@ export function QuickCreateUserModal({ open, onClose, onCreated, localGroups = [
     if (!form.username.trim()) { toast.error('Username is required'); return }
     if (!form.display_name.trim()) { toast.error('Display name is required'); return }
     if (!form.email.trim()) { toast.error('Email is required'); return }
-    if (!form.group_id) { toast.error('Group is required'); return }
     if (!form.confirm_password) { toast.error('Please confirm the password'); return }
     if (form.password !== form.confirm_password) { toast.error('Passwords do not match'); return }
     if (!passwordPolicyOk(form.password)) {
@@ -302,9 +320,16 @@ export function QuickCreateUserModal({ open, onClose, onCreated, localGroups = [
 
     setSaving(true)
     try {
-      const payload = { ...form, permissions: mergeWithRoleBaseline(form.role, form.permissions, roleProfiles) }
+      const groupPermissions = selectedGroup?.permissions && typeof selectedGroup.permissions === 'object'
+        ? selectedGroup.permissions
+        : null
+      const payload = {
+        ...form,
+        role: selectedGroup?.role || form.role,
+        permissions: groupPermissions || mergeWithRoleBaseline(form.role, form.permissions, roleProfiles),
+      }
       delete payload.confirm_password
-      if (form.role === 'admin') payload.permissions = {}
+      if (form.role === 'admin' && !groupPermissions) payload.permissions = {}
       const res = await usersApi.create(payload)
       toast.success('User created')
       onCreated && onCreated({
@@ -369,18 +394,35 @@ export function QuickCreateUserModal({ open, onClose, onCreated, localGroups = [
             </button>
           </div>
         </div>
-        <LocalGroupPicker groups={pickerGroups} value={form.group_id} onChange={groupId => setForm(f => ({ ...f, group_id: groupId }))} required roleOptions={roleOptions} roleProfiles={roleProfiles} />
-        <div>
-          <label className="block text-sm font-medium mb-1">Role *</label>
-          <select className="input" required value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value, permissions: rebaseRolePermissions(f.role, e.target.value, f.permissions, roleProfiles) }))}>
-            {roleOptions.map(role => <option key={role} value={role}>{role}</option>)}
-          </select>
-        </div>
+        <LocalGroupPicker groups={pickerGroups} value={form.group_id} onChange={groupId => setForm(f => ({ ...f, group_id: groupId }))} required={false} roleOptions={roleOptions} roleProfiles={roleProfiles} />
+        {!isGroupPermissionsInherited && (
+          <div>
+            <label className="block text-sm font-medium mb-1">Role *</label>
+            <select className="input" required value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value, permissions: rebaseRolePermissions(f.role, e.target.value, f.permissions, roleProfiles) }))}>
+              {roleOptions.map(role => <option key={role} value={role}>{role}</option>)}
+            </select>
+          </div>
+        )}
+        {isGroupPermissionsInherited && (
+          <div>
+            <label className="block text-sm font-medium mb-1">Role</label>
+            <div className="input bg-gray-50 text-gray-600">Inherited from group: {selectedGroup?.role || 'viewer'}</div>
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium mb-1">
             Permissions {form.role === 'admin' && <span className="text-gray-400 font-normal ml-1">(full access for admin)</span>}
           </label>
-          <PermissionsEditor value={form.permissions} onChange={permissions => setForm(f => ({ ...f, permissions }))} disabled={form.role === 'admin'} lockedKeys={roleBaselineLockedKeys(form.role, roleProfiles)} />
+          {isGroupPermissionsInherited && (
+            <p className="text-xs text-gray-500 mb-2">Permissions are inherited from the selected local group.</p>
+          )}
+          <PermissionsEditor
+            value={isGroupPermissionsInherited ? (selectedGroup.permissions || {}) : form.permissions}
+            onChange={permissions => setForm(f => ({ ...f, permissions }))}
+            disabled={form.role === 'admin' || isGroupPermissionsInherited}
+            lockedKeys={roleBaselineLockedKeys(form.role, roleProfiles)}
+            hideSuperAdminOnly
+          />
         </div>
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
@@ -432,7 +474,7 @@ export function QuickCreateLocalGroupModal({ open, onClose, onCreated, initialRo
       }
       const res = await groupsApi.create(payload)
       toast.success('Group created')
-      onCreated && onCreated({ id: res.data?.id, name: payload.name, ldap_mapping_count: 0, type: 'local_group' })
+      onCreated && onCreated({ id: res.data?.id, name: payload.name, role: payload.role, permissions: payload.permissions, ldap_mapping_count: 0, type: 'local_group' })
       onClose()
     } catch (err) {
       const errs = err.response?.data?.errors
@@ -455,7 +497,7 @@ export function QuickCreateLocalGroupModal({ open, onClose, onCreated, initialRo
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Permissions</label>
-          <PermissionsEditor value={form.permissions} onChange={permissions => setForm(f => ({ ...f, permissions }))} disabled={false} lockedKeys={roleBaselineLockedKeys(form.role, roleProfiles)} />
+          <PermissionsEditor value={form.permissions} onChange={permissions => setForm(f => ({ ...f, permissions }))} disabled={false} lockedKeys={roleBaselineLockedKeys(form.role, roleProfiles)} hideSuperAdminOnly />
         </div>
         <div className="flex justify-end gap-3">
           <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>

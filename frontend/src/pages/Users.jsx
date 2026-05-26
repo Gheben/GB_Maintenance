@@ -31,6 +31,7 @@ const ALL_PERMS = [
   { key: 'apikeys',       label: 'API Keys' },
   { key: 'audit',         label: 'Audit Log' },
 ]
+const SUPERADMIN_ONLY_PERMISSION_KEYS = new Set(['audit'])
 
 const PASSWORD_RULES = [
   { key: 'len', label: 'At least 8 characters', test: (v) => String(v || '').length >= 8 },
@@ -131,7 +132,16 @@ function authAccentClass(authType) {
   return authType === 'ldap' ? 'bg-sky-500' : 'bg-emerald-500'
 }
 
-function RoleBadge({ role }) {
+function RoleBadge({ role, groupRole, groupName }) {
+  if (groupRole) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold bg-cyan-100 text-cyan-700">
+        <UsersIcon size={12} />
+        {groupRole}{groupName ? ` (${groupName})` : ''}
+      </span>
+    )
+  }
+
   const colors = {
     superadmin: 'bg-purple-100 text-purple-700',
     admin: 'bg-blue-100 text-blue-700',
@@ -192,10 +202,14 @@ function roleBaselineLockedKeys(role, roleProfiles) {
   return new Set(Object.keys(baseline).filter(k => !!baseline[k]))
 }
 
-function PermissionsEditor({ value, onChange, disabled, lockedKeys = new Set() }) {
+function PermissionsEditor({ value, onChange, disabled, lockedKeys = new Set(), hideSuperAdminOnly = false }) {
+  const visiblePermissions = hideSuperAdminOnly
+    ? ALL_PERMS.filter(permission => !SUPERADMIN_ONLY_PERMISSION_KEYS.has(permission.key))
+    : ALL_PERMS
+
   return (
     <div className="grid grid-cols-2 gap-2 mt-2">
-      {ALL_PERMS.map(p => (
+      {visiblePermissions.map(p => (
         <label key={p.key} className={`flex items-center gap-2 text-sm cursor-pointer select-none ${(disabled || lockedKeys.has(p.key)) ? 'opacity-40 pointer-events-none' : ''}`}>
           <input
             type="checkbox"
@@ -728,7 +742,7 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
                 <td className="px-4 py-3 text-gray-500 text-xs">{u.email}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{u.office || '—'}</td>
                 <td className="px-4 py-3"><AuthBadge authType={u.auth_type} /></td>
-                <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
+                <td className="px-4 py-3"><RoleBadge role={u.role} groupRole={u.group_role} groupName={u.group_name} /></td>
                 <td className="px-4 py-3 text-xs">
                   {u.is_active
                     ? <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-medium">Active</span>
@@ -1291,7 +1305,7 @@ function GroupsTab({ roleOptions, roleProfiles, canBulkDelete }) {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Permissions</label>
-              <PermissionsEditor value={ldapCreateForm.permissions} onChange={p => setLdapCreateForm(f => ({ ...f, permissions: p }))} disabled={false} lockedKeys={roleBaselineLockedKeys(ldapCreateForm.role, roleProfiles)} />
+              <PermissionsEditor value={ldapCreateForm.permissions} onChange={p => setLdapCreateForm(f => ({ ...f, permissions: p }))} disabled={false} lockedKeys={roleBaselineLockedKeys(ldapCreateForm.role, roleProfiles)} hideSuperAdminOnly />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">LDAP Group Mapping *</label>
