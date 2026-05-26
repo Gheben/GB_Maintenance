@@ -326,8 +326,6 @@ With local dev stack running (`frontend` on `5173`, `backend` on `4680`):
 ```bash
 cd frontend
 MANUAL_BASE_URL=http://localhost:5173 \
-MANUAL_USERNAME=sysadmin \
-MANUAL_PASSWORD=ChangeMe! \
 npm run manual:generate
 ```
 
@@ -336,8 +334,6 @@ On Windows PowerShell:
 ```powershell
 cd frontend
 $env:MANUAL_BASE_URL = "http://localhost:5173"
-$env:MANUAL_USERNAME = "sysadmin"
-$env:MANUAL_PASSWORD = "ChangeMe!"
 npm run manual:generate
 ```
 
@@ -347,6 +343,7 @@ npm run manual:generate
 - To run only screenshot capture: `npm run manual:capture`
 - To rebuild markdown from existing manifest/screenshots: `npm run manual:build`
 - If needed, set `MANUAL_HEADLESS=false` to see browser actions live.
+- Credentials are never hardcoded in the script. If `MANUAL_USERNAME` / `MANUAL_PASSWORD` are not set, the generator asks for them at runtime and does not save them to git.
 
 ---
 

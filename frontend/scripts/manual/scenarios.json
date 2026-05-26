@@ -18,80 +18,122 @@
   "maskSelectors": [
     "[data-sensitive]",
     "input[type='password']",
+    "input[type='email']",
+    "input[name*='email']",
+    "input[name*='token']",
+    "input[name*='secret']",
+    "[data-token]",
+    "[data-secret]",
     ".user-email",
     ".token",
-    ".api-key"
+    ".api-key",
+    ".jwt",
+    ".session-id",
+    ".phone",
+    ".mobile"
   ],
   "scenarios": [
     {
       "id": "dashboard",
       "title": "Dashboard Overview",
-      "description": "Main KPIs and system summary.",
+      "description": "Executive dashboard with the most relevant KPIs and operations snapshot.",
       "path": "/",
-      "waitFor": "main"
+      "waitFor": "main",
+      "focusSelector": "main"
     },
     {
       "id": "assets",
       "title": "Assets Management",
-      "description": "Asset inventory list with search and filters.",
+      "description": "Complete asset inventory with operational context and quick filtering.",
       "path": "/assets",
-      "waitFor": "table"
+      "waitFor": "table",
+      "focusSelector": "table"
     },
     {
       "id": "services",
       "title": "Services Management",
-      "description": "Service catalog and operational status.",
+      "description": "Service catalog with ownership and live operational state.",
       "path": "/services",
-      "waitFor": "table"
+      "waitFor": "table",
+      "focusSelector": "table"
     },
     {
       "id": "maintenance",
       "title": "Maintenance Planning",
-      "description": "Planned windows and operations lifecycle.",
+      "description": "Planned windows and lifecycle tracking from scheduling to completion.",
       "path": "/maintenance",
-      "waitFor": "table"
+      "waitFor": "table",
+      "focusSelector": "table"
     },
     {
       "id": "incidents",
       "title": "Incident Tracking",
-      "description": "Incident list, severity and updates.",
+      "description": "Incident response panel with severity classification and timeline updates.",
       "path": "/incidents",
-      "waitFor": "table"
+      "waitFor": "table",
+      "focusSelector": "table"
     },
     {
       "id": "calendar",
       "title": "Operations Calendar",
-      "description": "Calendar view of maintenance and events.",
+      "description": "Visual calendar for maintenance plans and operational events.",
       "path": "/calendar",
-      "waitFor": "main"
+      "waitFor": "main",
+      "focusSelector": "main"
     },
     {
       "id": "notifications",
       "title": "Notifications Center",
-      "description": "In-app notifications and delivery log.",
+      "description": "Unified communication center with in-app alerts and delivery traceability.",
       "path": "/notifications",
-      "waitFor": "main"
+      "waitFor": "main",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "button:has-text('Notification log')",
+          "optional": true
+        },
+        {
+          "type": "wait",
+          "ms": 350
+        }
+      ],
+      "focusSelector": ".card"
     },
     {
       "id": "reports",
       "title": "Reporting",
-      "description": "Charts and export-ready operational reports.",
+      "description": "Visual analytics and export-ready reports for stakeholders.",
       "path": "/reports",
-      "waitFor": "main"
+      "waitFor": "main",
+      "focusSelector": "main"
     },
     {
       "id": "licenses",
       "title": "Licenses Workflow",
-      "description": "License registry, approvals and supplier links.",
+      "description": "License lifecycle management, approvals and supplier collaboration.",
       "path": "/licenses",
-      "waitFor": "main"
+      "waitFor": "main",
+      "actions": [
+        {
+          "type": "click",
+          "selector": "button:has-text('Template')",
+          "optional": true
+        },
+        {
+          "type": "wait",
+          "ms": 400
+        }
+      ],
+      "focusSelector": ".card"
     },
     {
       "id": "settings",
       "title": "Settings",
-      "description": "Platform configuration and integrations.",
+      "description": "Configuration hub for branding, integrations and governance settings.",
       "path": "/settings",
-      "waitFor": "main"
+      "waitFor": "main",
+      "focusSelector": "main"
     }
   ]
 }

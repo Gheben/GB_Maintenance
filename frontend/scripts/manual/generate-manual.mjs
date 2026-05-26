@@ -1,13 +1,15 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+import readline from 'node:readline/promises';
 import { chromium } from 'playwright';
 
 const args = new Set(process.argv.slice(2));
 const shouldCapture = args.has('--capture') || args.has('--all') || (!args.has('--build') && !args.has('--capture'));
 const shouldBuild = args.has('--build') || args.has('--all') || (!args.has('--build') && !args.has('--capture'));
 
-const scriptDir = path.dirname(new URL(import.meta.url).pathname);
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const frontendRoot = path.resolve(scriptDir, '..', '..');
 const repoRoot = path.resolve(frontendRoot, '..');
 
@@ -18,9 +20,22 @@ const manifestFile = path.join(docsRoot, 'manifest.json');
 const markdownFile = path.join(docsRoot, 'README.md');
 
 const baseUrl = process.env.MANUAL_BASE_URL || 'http://localhost:5173';
-const username = process.env.MANUAL_USERNAME || 'sysadmin';
-const password = process.env.MANUAL_PASSWORD || 'sysadmin';
 const browserHeadless = process.env.MANUAL_HEADLESS !== 'false';
+let runtimeUsername = process.env.MANUAL_USERNAME || '';
+let runtimePassword = process.env.MANUAL_PASSWORD || '';
+
+const DEFAULT_SENSITIVE_TEXT_PATTERNS = [
+  // emails
+  '[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}',
+  // jwt-ish/token-ish strings
+  '(?:eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9._-]{8,}\\.[A-Za-z0-9._-]{8,})',
+  // UUIDs
+  '\\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\b',
+  // long numeric ids/secrets
+  '\\b\\d{8,}\\b',
+  // phone-ish values
+  '(?:\\+?\\d[\\d .()-]{7,}\\d)'
+];
 
 function nowIso() {
   return new Date().toISOString();
@@ -53,6 +68,51 @@ async function readScenariosConfig() {
   return config;
 }
 
+async function askQuestion(promptText, { secret = false } = {}) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: true,
+  });
+
+  if (secret) {
+    // Hide password input while still allowing interactive entry.
+    rl.stdoutMuted = true;
+    const originalWrite = rl._writeToOutput.bind(rl);
+    rl._writeToOutput = (stringToWrite) => {
+      if (rl.stdoutMuted) {
+        if (stringToWrite.includes('\n')) {
+          originalWrite('\n');
+          return;
+        }
+        originalWrite('*');
+        return;
+      }
+      originalWrite(stringToWrite);
+    };
+  }
+
+  try {
+    const answer = await rl.question(promptText);
+    return String(answer || '').trim();
+  } finally {
+    rl.close();
+  }
+}
+
+async function ensureCredentials() {
+  if (!runtimeUsername) {
+    runtimeUsername = await askQuestion('[manual] Username: ');
+  }
+  if (!runtimePassword) {
+    runtimePassword = await askQuestion('[manual] Password: ', { secret: true });
+  }
+
+  if (!runtimeUsername || !runtimePassword) {
+    throw new Error('Missing credentials. Provide MANUAL_USERNAME/MANUAL_PASSWORD or enter them at prompt.');
+  }
+}
+
 async function tryClick(page, selector, timeout = 1500) {
   try {
     const locator = page.locator(selector).first();
@@ -69,11 +129,23 @@ async function tryClick(page, selector, timeout = 1500) {
 async function login(page) {
   await page.goto(`${baseUrl}/login`, { waitUntil: 'networkidle' });
 
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.locator("button[type='submit']").click();
+  // If an existing session is active, app may redirect away from /login immediately.
+  if (!page.url().includes('/login')) {
+    await page.waitForLoadState('networkidle');
+    return;
+  }
 
-  await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 15000 });
+  const userInput = page.locator("input[autocomplete='username'], input[name='username'], input[type='text']").first();
+  const passInput = page.locator("input[autocomplete='current-password'], input[name='password'], input[type='password']").first();
+
+  await userInput.waitFor({ state: 'visible', timeout: 15000 });
+  await passInput.waitFor({ state: 'visible', timeout: 15000 });
+
+  await userInput.fill(runtimeUsername);
+  await passInput.fill(runtimePassword);
+  await page.locator("button[type='submit']").first().click();
+
+  await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 20000 });
   await page.waitForLoadState('networkidle');
 }
 
@@ -93,6 +165,65 @@ async function applyMasks(page, selectors) {
       // Ignore selectors that do not exist.
     }
   }
+
+  // Redact sensitive text patterns even when selectors are unknown.
+  await page.evaluate((patternSources) => {
+    const regexes = patternSources
+      .map((src) => {
+        try {
+          return new RegExp(src, 'ig');
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    if (!regexes.length) return;
+
+    const sensitiveElements = new Set();
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const text = String(node.nodeValue || '').trim();
+      if (!text) continue;
+      if (regexes.some((rx) => rx.test(text))) {
+        if (node.parentElement) sensitiveElements.add(node.parentElement);
+      }
+    }
+
+    document.querySelectorAll('input, textarea').forEach((el) => {
+      const v = String(el.value || '').trim();
+      if (!v) return;
+      if (regexes.some((rx) => rx.test(v))) {
+        sensitiveElements.add(el);
+      }
+    });
+
+    sensitiveElements.forEach((el) => {
+      el.style.filter = 'blur(10px)';
+      el.style.borderRadius = '6px';
+      el.style.pointerEvents = 'none';
+    });
+  }, DEFAULT_SENSITIVE_TEXT_PATTERNS);
+}
+
+async function applyMarketingPolish(page, scenario) {
+  await page.addStyleTag({
+    content: `
+      .react-hot-toast, [data-sonner-toaster], [data-radix-toast-viewport], .toast, [role="alert"] {
+        display: none !important;
+      }
+      [data-manual-hide="true"] { display: none !important; }
+      body { text-rendering: optimizeLegibility; }
+    `,
+  });
+
+  if (scenario.focusSelector) {
+    await page.locator(scenario.focusSelector).first().evaluate((el) => {
+      el.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.25), 0 12px 32px rgba(15,23,42,0.18)';
+      el.style.borderRadius = el.style.borderRadius || '12px';
+    });
+  }
 }
 
 async function runActions(page, actions = []) {
@@ -100,28 +231,33 @@ async function runActions(page, actions = []) {
     const type = String(action?.type || '').toLowerCase();
     if (!type) continue;
 
-    if (type === 'wait') {
-      if (action.selector) {
-        await page.locator(action.selector).first().waitFor({ state: 'visible', timeout: action.timeout || 10000 });
-      } else {
-        await page.waitForTimeout(action.ms || 500);
+    try {
+      if (type === 'wait') {
+        if (action.selector) {
+          await page.locator(action.selector).first().waitFor({ state: 'visible', timeout: action.timeout || 10000 });
+        } else {
+          await page.waitForTimeout(action.ms || 500);
+        }
+        continue;
       }
-      continue;
-    }
 
-    if (type === 'click' && action.selector) {
-      await page.locator(action.selector).first().click({ timeout: action.timeout || 8000 });
-      continue;
-    }
+      if (type === 'click' && action.selector) {
+        await page.locator(action.selector).first().click({ timeout: action.timeout || 8000 });
+        continue;
+      }
 
-    if (type === 'fill' && action.selector) {
-      await page.locator(action.selector).first().fill(String(action.value || ''), { timeout: action.timeout || 8000 });
-      continue;
-    }
+      if (type === 'fill' && action.selector) {
+        await page.locator(action.selector).first().fill(String(action.value || ''), { timeout: action.timeout || 8000 });
+        continue;
+      }
 
-    if (type === 'select' && action.selector) {
-      await page.locator(action.selector).first().selectOption(String(action.value || ''), { timeout: action.timeout || 8000 });
-      continue;
+      if (type === 'select' && action.selector) {
+        await page.locator(action.selector).first().selectOption(String(action.value || ''), { timeout: action.timeout || 8000 });
+        continue;
+      }
+    } catch (err) {
+      if (action.optional) continue;
+      throw new Error(`Action failed (${type} ${action.selector || ''}): ${err.message}`);
     }
   }
 }
@@ -157,6 +293,8 @@ async function captureManual(config) {
         }
 
         await runActions(page, scenario.actions || []);
+        await applyMarketingPolish(page, scenario);
+        await page.waitForTimeout(350);
 
         const dismissedCookie = await tryClick(page, "button:has-text('Accept')");
         if (dismissedCookie) {
@@ -249,6 +387,7 @@ function buildMarkdown(manifest) {
 async function main() {
   await ensureDirs();
   const config = await readScenariosConfig();
+  await ensureCredentials();
 
   if (shouldCapture) {
     console.log('[manual] Capturing screenshots...');
