@@ -1010,8 +1010,7 @@ router.post('/:id/request-approval', requireAdmin, [
      FROM licenses l
      LEFT JOIN users u ON u.id=l.approver_user_id
      WHERE l.id=$1`,
-            s.company AS supplier_company,
-            s.email AS supplier_email
+    [req.params.id]
   );
   if (!lic) return res.status(404).json({ error: 'License not found' });
   if (!lic.approval_required) return res.status(400).json({ error: 'Approval not required for this license' });
