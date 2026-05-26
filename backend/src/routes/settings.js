@@ -474,7 +474,7 @@ router.post('/demo/create', requireAuth, requireSuperAdmin, async (req, res) => 
   }
 
   const tag = Date.now();
-  const demoEmail = 'guidoballarini.9@gmail.com';
+  const demoEmail = 'guidoballarini@email.test';
 
   const localUsersDef = [
     { key: 'ops1', username: 'demo.1', display_name: 'Login demo.1', role: 'operator', office: 'Milan HQ' },
