@@ -1170,7 +1170,6 @@ router.post('/:id/request-approval', requireAdmin, [
   const approvalRequestedAt = updated.rows?.[0]?.approval_requested_at || null;
 
   const appBaseUrl = await getAppBaseUrl();
-  const generalCfg = await getGeneralConfig();
   const approvalUrl = `${appBaseUrl}/licenses/approval?token=${token}`;
   const statusUrl = `${appBaseUrl}/licenses/approval-status?token=${statusToken}`;
 
@@ -1185,10 +1184,18 @@ router.post('/:id/request-approval', requireAdmin, [
   )];
 
   const requesterBase = String(req.user?.display_name || req.user?.username || req.user?.email || 'Requester').trim();
-  const requesterCompany = String(
-    req.user?.company || req.user?.organization || req.user?.org || generalCfg?.app_name || ''
-  ).trim();
-  const requesterName = requesterCompany ? `${requesterBase} (${requesterCompany})` : requesterBase;
+  const requesterAuthType = String(req.user?.auth_type || '').trim().toLowerCase();
+  const includeOrgDetails = requesterAuthType === 'ldap' || requesterAuthType === 'local';
+  const requesterCompany = includeOrgDetails
+    ? String(req.user?.company || req.user?.organization || req.user?.org || '').trim()
+    : '';
+  const requesterOffice = includeOrgDetails
+    ? String(req.user?.office || '').trim()
+    : '';
+  const requesterDetails = [requesterCompany, requesterOffice].filter(Boolean);
+  const requesterName = requesterDetails.length > 0
+    ? `${requesterBase} (${requesterDetails.join(', ')})`
+    : requesterBase;
 
   const vars = buildLicenseTemplateVars(context || { id: lic.id, name: lic.name }, {
     app_url: appBaseUrl,
