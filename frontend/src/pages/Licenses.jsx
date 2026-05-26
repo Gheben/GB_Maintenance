@@ -27,6 +27,7 @@ import {
   FileText,
   Phone,
   Mail,
+  Paperclip,
   Clock,
 } from 'lucide-react'
 import { QuickCreateUserModal } from '../components/QuickCreateModals'
@@ -71,6 +72,8 @@ const emptyLicenseForm = {
   approval_required: true,
   approval_status: 'pending',
   approval_requested_at: null,
+  approved_at: null,
+  rejected_at: null,
   estimated_cost: '',
   currency: 'EUR',
   notes: '',
@@ -182,6 +185,38 @@ function formatDateTimeLabel(value) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function hasLicenseDocuments(value) {
+  if (Array.isArray(value)) return value.some(d => d && typeof d === 'object' && (d.name || d.url))
+  if (!value) return false
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) && parsed.some(d => d && typeof d === 'object' && (d.name || d.url))
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+function getApprovalInfoLabel(form, fallback) {
+  const status = String(form?.approval_status || fallback?.approval_status || '').toLowerCase()
+  const approvedAt = form?.approved_at || fallback?.approved_at
+  const rejectedAt = form?.rejected_at || fallback?.rejected_at
+  const requestedAt = form?.approval_requested_at || fallback?.approval_requested_at
+
+  if (status === 'approved' || approvedAt) {
+    return `Approved: ${formatDateTimeLabel(approvedAt) || '-'}`
+  }
+  if (status === 'rejected' || rejectedAt) {
+    return `Rejected: ${formatDateTimeLabel(rejectedAt) || '-'}`
+  }
+  if (requestedAt) {
+    return `Last send: ${formatDateTimeLabel(requestedAt) || '-'}`
+  }
+  return ''
 }
 
 const FALLBACK_REGION_CODES = [
@@ -1109,6 +1144,14 @@ export default function Licenses() {
       const r = await licensesApi.get(row.id)
       const d = r.data || {}
       setEditingLicense(d)
+      setLicenses(prev => prev.map(item => item.id === d.id ? {
+        ...item,
+        approval_status: d.approval_status,
+        approval_requested_at: d.approval_requested_at,
+        approved_at: d.approved_at,
+        rejected_at: d.rejected_at,
+        documents: d.documents,
+      } : item))
       setLicenseForm({
         ...emptyLicenseForm,
         name: d.name || '',
@@ -1125,6 +1168,8 @@ export default function Licenses() {
         approval_required: d.approval_required !== false,
         approval_status: d.approval_status || 'pending',
         approval_requested_at: d.approval_requested_at || null,
+        approved_at: d.approved_at || null,
+        rejected_at: d.rejected_at || null,
         estimated_cost: d.estimated_cost ?? '',
         currency: d.currency || 'EUR',
         notes: d.notes || '',
@@ -1624,7 +1669,12 @@ export default function Licenses() {
                             />
                           </td>
                         )}
-                        <td className="px-4 py-3 font-medium">{l.name}</td>
+                        <td className="px-4 py-3 font-medium">
+                          <span className="inline-flex items-center gap-2">
+                            <span>{l.name}</span>
+                            {hasLicenseDocuments(l.documents) && <Paperclip size={13} className="text-gray-400 flex-shrink-0" title="Attachments available" />}
+                          </span>
+                        </td>
                         <td className="px-4 py-3 text-gray-500">{l.supplier_company || l.supplier || '—'}</td>
                         <td className="px-4 py-3 text-gray-500">{l.owner_name || contactSummary(l.owner_contact)}</td>
                         <td className="px-4 py-3 text-gray-500">{l.approver_name || contactSummary(l.approver_contact)}</td>
@@ -1802,9 +1852,9 @@ export default function Licenses() {
                   </>
                 )}
                 <button type="button" className="action-icon-btn action-icon-btn-danger" onClick={() => openLicenseActionConfirm('delete', editingLicense)} title="Delete"><Trash2 size={14} /></button>
-                {licenseForm.approval_required && !!(licenseForm.approval_requested_at || editingLicense?.approval_requested_at) && (
+                {licenseForm.approval_required && !!getApprovalInfoLabel(licenseForm, editingLicense) && (
                   <span className="text-xs text-gray-500 ml-1">
-                    Last send: {formatDateTimeLabel(licenseForm.approval_requested_at || editingLicense?.approval_requested_at)}
+                    {getApprovalInfoLabel(licenseForm, editingLicense)}
                   </span>
                 )}
               </div>
