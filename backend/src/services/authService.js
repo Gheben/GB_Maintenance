@@ -147,6 +147,7 @@ async function loginLocal(username, password) {
 async function getAllUsers() {
   const users = await getMany(
     `SELECT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type, u.permissions,
+            u.avatar_photo_data_url,
             grp.group_name, grp.group_role,
             totp_enabled, totp_verified, is_active, last_login_at,
             failed_login_count, locked_until, avatar_color, created_at, updated_at
@@ -190,6 +191,7 @@ async function getUsersPage({ page = 1, limit = 50, q = '' } = {}) {
 
   const rows = await getMany(
     `SELECT u.id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type, u.permissions,
+            u.avatar_photo_data_url,
             grp.group_name, grp.group_role,
             totp_enabled, totp_verified, is_active, last_login_at,
             failed_login_count, locked_until, avatar_color, created_at, updated_at
@@ -219,6 +221,7 @@ async function getUsersPage({ page = 1, limit = 50, q = '' } = {}) {
 async function getUserById(id) {
   const user = await getOne(
     `SELECT id, username, display_name, email, office, role, auth_type, permissions,
+            avatar_photo_data_url,
             totp_enabled, totp_verified, is_active, last_login_at, avatar_color,
             password_changed_at, created_at, updated_at
      FROM users WHERE id=$1`,

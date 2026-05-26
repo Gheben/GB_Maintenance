@@ -110,6 +110,50 @@ function normalizeOffice(raw) {
   return value || null;
 }
 
+function normalizeThumbnailPhotoDataUrl(raw) {
+  if (!raw) return null;
+
+  const first = Array.isArray(raw) ? raw[0] : raw;
+  if (!first) return null;
+
+  if (typeof first === 'string' && first.startsWith('data:image/')) {
+    return first;
+  }
+
+  let buffer = null;
+  if (Buffer.isBuffer(first)) {
+    buffer = first;
+  } else if (Array.isArray(first) && first.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+    buffer = Buffer.from(first);
+  } else if (typeof first === 'string') {
+    const value = first.trim();
+    if (!value) return null;
+
+    try {
+      const base64Decoded = Buffer.from(value, 'base64');
+      if (base64Decoded.length > 0) {
+        buffer = base64Decoded;
+      }
+    } catch {
+      // Ignore base64 decode errors and try binary fallback.
+    }
+
+    if (!buffer || buffer.length === 0) {
+      try {
+        buffer = Buffer.from(value, 'binary');
+      } catch {
+        buffer = null;
+      }
+    }
+  }
+
+  if (!buffer || buffer.length === 0) return null;
+  // Keep payload bounded to avoid oversized JWT/session responses.
+  if (buffer.length > 200 * 1024) return null;
+
+  return `data:image/jpeg;base64,${buffer.toString('base64')}`;
+}
+
 function _escapeLdap(value) {
   const s = String(value || '');
   if (ldap && typeof ldap.escape === 'function') return ldap.escape(s);
@@ -365,7 +409,7 @@ async function authenticateUser(username, password) {
     const entries = await _search(serviceClient, searchBase, {
       filter,
       scope: 'sub',
-      attributes: ['dn', 'cn', 'displayName', 'mail', 'memberOf', 'telephoneNumber', 'sAMAccountName', 'userPrincipalName', 'office', 'physicalDeliveryOfficeName']
+      attributes: ['dn', 'cn', 'displayName', 'mail', 'memberOf', 'telephoneNumber', 'sAMAccountName', 'userPrincipalName', 'office', 'physicalDeliveryOfficeName', 'thumbnailPhoto']
     });
 
     if (!entries || entries.length === 0) return null;
@@ -400,6 +444,7 @@ async function authenticateUser(username, password) {
     const email = entry.mail || null;
     const displayName = entry.displayName || entry.cn || username;
     const office = normalizeOffice(entry.office || entry.physicalDeliveryOfficeName);
+    const avatarPhotoDataUrl = normalizeThumbnailPhotoDataUrl(entry.thumbnailPhoto);
     const memberOf = Array.isArray(entry.memberOf) ? entry.memberOf : (entry.memberOf ? [entry.memberOf] : []);
 
     await _upsertCachedLdapUsers([{
@@ -429,18 +474,18 @@ async function authenticateUser(username, password) {
     const existing = await getOne("SELECT id FROM users WHERE username=$1 AND auth_type='ldap'", [searchUsername]);
     if (existing) {
       await query(
-        `UPDATE users SET display_name=$1, email=$2, office=$3, role=$4, permissions=$5, last_login_at=NOW(), updated_at=NOW(), is_active=true
-         WHERE id=$6`,
-        [displayName, email, office, role, permissions, existing.id]
+        `UPDATE users SET display_name=$1, email=$2, office=$3, role=$4, permissions=$5, avatar_photo_data_url=$6, last_login_at=NOW(), updated_at=NOW(), is_active=true
+         WHERE id=$7`,
+        [displayName, email, office, role, permissions, avatarPhotoDataUrl, existing.id]
       );
       return await getOne('SELECT * FROM users WHERE id=$1', [existing.id]);
     } else {
       const colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6'];
       const color = colors[Math.floor(Math.random() * colors.length)];
       const result = await query(
-        `INSERT INTO users (username, display_name, email, office, role, auth_type, permissions, avatar_color, last_login_at)
-         VALUES ($1, $2, $3, $4, $5, 'ldap', $6, $7, NOW()) RETURNING id`,
-        [searchUsername, displayName, email, office, role, permissions, color]
+        `INSERT INTO users (username, display_name, email, office, role, auth_type, permissions, avatar_color, avatar_photo_data_url, last_login_at)
+         VALUES ($1, $2, $3, $4, $5, 'ldap', $6, $7, $8, NOW()) RETURNING id`,
+        [searchUsername, displayName, email, office, role, permissions, color, avatarPhotoDataUrl]
       );
       return await getOne('SELECT * FROM users WHERE id=$1', [result.rows[0].id]);
     }

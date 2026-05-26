@@ -734,6 +734,14 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
                 <td className="px-4 py-3 font-mono text-xs">
                   <div className="flex items-center gap-1.5">
                     <span className={`inline-block w-2 h-2 rounded-full ${authAccentClass(u.auth_type)}`} />
+                    {u.avatar_photo_data_url ? (
+                      <img
+                        src={u.avatar_photo_data_url}
+                        alt={u.display_name || u.username}
+                        className="w-5 h-5 rounded-full object-cover border border-gray-200"
+                        loading="lazy"
+                      />
+                    ) : null}
                     {u.role === 'superadmin' ? <Shield size={13} className="text-purple-500" /> : <User size={13} className="text-gray-400" />}
                     {u.username}
                   </div>

@@ -2143,6 +2143,13 @@ const MIGRATIONS = [
       );
     }
   },
+  {
+    version: 46,
+    name: 'users_avatar_photo_data_url',
+    up: async (client) => {
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_photo_data_url TEXT`);
+    }
+  },
 ];
 
 async function runMigrations(pool) {
