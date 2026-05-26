@@ -1672,6 +1672,239 @@ const MIGRATIONS = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_service_probe_results_probe_recent ON service_probe_results(probe_id, probed_at DESC)`);
     }
   },
+  {
+    version: 38,
+    name: 'notification_templates_english_cta_refresh',
+    up: async (client) => {
+      const templates = [
+        {
+          event_type: 'maintenance_scheduled',
+          name: 'Maintenance Scheduled',
+          subject_template: '[{{impact_level}}] Maintenance Scheduled: {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#0f172a">Maintenance Scheduled</h2>
+<p style="margin:0 0 14px;color:#334155">A maintenance window has been scheduled and may affect one or more services.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Title</td><td style="padding:8px;border:1px solid #e2e8f0">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Type</td><td style="padding:8px;border:1px solid #e2e8f0">{{type}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Impact</td><td style="padding:8px;border:1px solid #e2e8f0">{{impact_level}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Start</td><td style="padding:8px;border:1px solid #e2e8f0">{{scheduled_start}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">End</td><td style="padding:8px;border:1px solid #e2e8f0">{{scheduled_end}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Description</td><td style="padding:8px;border:1px solid #e2e8f0">{{description}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#1d4ed8;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Maintenance</a></p>`,
+        },
+        {
+          event_type: 'maintenance_reminder',
+          name: 'Maintenance Reminder',
+          subject_template: '[REMINDER {{time_before}}] Maintenance: {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#0f172a">Maintenance Reminder</h2>
+<p style="margin:0 0 14px;color:#334155"><strong>This maintenance starts in {{time_before}}.</strong></p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Title</td><td style="padding:8px;border:1px solid #e2e8f0">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Start</td><td style="padding:8px;border:1px solid #e2e8f0">{{scheduled_start}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">End</td><td style="padding:8px;border:1px solid #e2e8f0">{{scheduled_end}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#1d4ed8;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Review Maintenance</a></p>`,
+        },
+        {
+          event_type: 'maintenance_started',
+          name: 'Maintenance Started',
+          subject_template: '[IN PROGRESS] Maintenance: {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#b45309">Maintenance In Progress</h2>
+<p style="margin:0 0 14px;color:#334155">The maintenance has started. Temporary service degradation may occur.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Title</td><td style="padding:8px;border:1px solid #e2e8f0">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Actual Start</td><td style="padding:8px;border:1px solid #e2e8f0">{{actual_start}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Planned End</td><td style="padding:8px;border:1px solid #e2e8f0">{{scheduled_end}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#b45309;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Track Progress</a></p>`,
+        },
+        {
+          event_type: 'maintenance_completed',
+          name: 'Maintenance Completed',
+          subject_template: '[COMPLETED] Maintenance: {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#166534">Maintenance Completed</h2>
+<p style="margin:0 0 14px;color:#334155">The maintenance has been completed and services should be restored.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Title</td><td style="padding:8px;border:1px solid #e2e8f0">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Actual End</td><td style="padding:8px;border:1px solid #e2e8f0">{{actual_end}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Notes</td><td style="padding:8px;border:1px solid #e2e8f0">{{notes}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#15803d;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">View Final Details</a></p>`,
+        },
+        {
+          event_type: 'maintenance_reopened',
+          name: 'Maintenance Reopened',
+          subject_template: '[REOPENED] Maintenance: {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#92400e">Maintenance Reopened</h2>
+<p style="margin:0 0 14px;color:#334155">A previously completed maintenance was reopened for additional corrective work.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Title</td><td style="padding:8px;border:1px solid #e2e8f0">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Impact</td><td style="padding:8px;border:1px solid #e2e8f0">{{impact_level}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Reopened At</td><td style="padding:8px;border:1px solid #e2e8f0">{{reopened_at}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Reason</td><td style="padding:8px;border:1px solid #e2e8f0">{{reopen_reason}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#b45309;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Review Reopened Maintenance</a></p>`,
+        },
+        {
+          event_type: 'maintenance_cancelled',
+          name: 'Maintenance Cancelled',
+          subject_template: '[CANCELLED] Maintenance: {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#b91c1c">Maintenance Cancelled</h2>
+<p style="margin:0 0 12px;color:#334155">The maintenance activity has been cancelled.</p>
+<p style="margin:0 0 14px;color:#0f172a"><strong>Reason:</strong> {{reason}}</p>
+<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#dc2626;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Maintenance</a></p>`,
+        },
+        {
+          event_type: 'maintenance_rejected',
+          name: 'Maintenance Rejected',
+          subject_template: '[REJECTED] Maintenance: {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#b91c1c">Maintenance Rejected</h2>
+<p style="margin:0 0 12px;color:#334155">The maintenance approval request has been rejected.</p>
+<p style="margin:0 0 14px;color:#0f172a"><strong>Reason:</strong> {{reason}}</p>
+<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#dc2626;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Details</a></p>`,
+        },
+        {
+          event_type: 'incident_created',
+          name: 'Incident Opened',
+          subject_template: '[INCIDENT {{severity}}] {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#b91c1c">New Incident</h2>
+<p style="margin:0 0 14px;color:#334155">An incident has been opened and may impact service availability.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Title</td><td style="padding:8px;border:1px solid #e2e8f0">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Severity</td><td style="padding:8px;border:1px solid #e2e8f0">{{severity}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px;border:1px solid #e2e8f0">{{status}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Description</td><td style="padding:8px;border:1px solid #e2e8f0">{{description}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/incidents/{{id}}" style="background:#dc2626;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Incident</a></p>`,
+        },
+        {
+          event_type: 'incident_resolved',
+          name: 'Incident Resolved',
+          subject_template: '[RESOLVED] Incident: {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#166534">Incident Resolved</h2>
+<p style="margin:0 0 14px;color:#334155">The incident has been resolved.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Title</td><td style="padding:8px;border:1px solid #e2e8f0">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Resolved At</td><td style="padding:8px;border:1px solid #e2e8f0">{{resolved_at}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/incidents/{{id}}" style="background:#15803d;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">View Incident</a></p>`,
+        },
+        {
+          event_type: 'maintenance_owner_approval_requested',
+          name: 'Maintenance Owner Approval Requested',
+          subject_template: '[ACTION REQUIRED] Maintenance approval: {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#0f172a">Approval Required</h2>
+<p style="margin:0 0 14px;color:#334155">A maintenance request requires your review and decision.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Maintenance</td><td style="padding:8px;border:1px solid #e2e8f0">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Scope</td><td style="padding:8px;border:1px solid #e2e8f0">{{owner_source_type}} - {{owner_source_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Start</td><td style="padding:8px;border:1px solid #e2e8f0">{{scheduled_start}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">End</td><td style="padding:8px;border:1px solid #e2e8f0">{{scheduled_end}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#1d4ed8;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>`,
+        },
+        {
+          event_type: 'maintenance_owner_reschedule_proposed',
+          name: 'Owner Proposed Reschedule',
+          subject_template: '[RESCHEDULE PROPOSAL] {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#0f766e">Owner Proposed a New Schedule</h2>
+<p style="margin:0 0 14px;color:#334155">The owner requested a new schedule for this maintenance window.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Maintenance</td><td style="padding:8px;border:1px solid #e2e8f0">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Proposed Start</td><td style="padding:8px;border:1px solid #e2e8f0">{{proposed_start}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Proposed End</td><td style="padding:8px;border:1px solid #e2e8f0">{{proposed_end}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Note</td><td style="padding:8px;border:1px solid #e2e8f0">{{response_note}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#0f766e;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>`,
+        },
+        {
+          event_type: 'maintenance_owner_reschedule_countered',
+          name: 'Creator Counter Proposal',
+          subject_template: '[COUNTER PROPOSAL] {{title}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#7c2d12">Creator Sent a Counter Proposal</h2>
+<p style="margin:0 0 14px;color:#334155">A counter proposal is available and requires your review.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Maintenance</td><td style="padding:8px;border:1px solid #e2e8f0">{{title}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Counter Start</td><td style="padding:8px;border:1px solid #e2e8f0">{{creator_proposed_start}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Counter End</td><td style="padding:8px;border:1px solid #e2e8f0">{{creator_proposed_end}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Note</td><td style="padding:8px;border:1px solid #e2e8f0">{{creator_response_note}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#b45309;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>`,
+        },
+        {
+          event_type: 'license_approval_requested',
+          name: 'License Approval Requested',
+          subject_template: '[APPROVAL REQUIRED] License: {{license_name}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#0f172a">License Approval Required</h2>
+<p style="margin:0 0 14px;color:#334155">A license request is waiting for your approval.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">License</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Requester</td><td style="padding:8px;border:1px solid #e2e8f0">{{requester_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px;border:1px solid #e2e8f0">{{supplier_company}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{approval_url}}" style="background:#1d4ed8;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>
+<p style="margin:8px 0 0;color:#64748b;font-size:12px">If the button does not work, open this URL in your browser: {{approval_url}}</p>`,
+        },
+        {
+          event_type: 'license_approved',
+          name: 'License Approved',
+          subject_template: '[APPROVED] License: {{license_name}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#166534">License Approved</h2>
+<p style="margin:0 0 14px;color:#334155">The license request has been approved.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">License</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px;border:1px solid #e2e8f0">{{approval_status}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Approved By</td><td style="padding:8px;border:1px solid #e2e8f0">{{acted_by}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Approved At</td><td style="padding:8px;border:1px solid #e2e8f0">{{approved_at}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/licenses" style="background:#15803d;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approvals</a></p>`,
+        },
+        {
+          event_type: 'license_rejected',
+          name: 'License Rejected',
+          subject_template: '[REJECTED] License: {{license_name}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#b91c1c">License Rejected</h2>
+<p style="margin:0 0 14px;color:#334155">The license request has been rejected.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">License</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px;border:1px solid #e2e8f0">{{approval_status}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Rejected By</td><td style="padding:8px;border:1px solid #e2e8f0">{{acted_by}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Rejected At</td><td style="padding:8px;border:1px solid #e2e8f0">{{rejected_at}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Reason</td><td style="padding:8px;border:1px solid #e2e8f0">{{reason}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/licenses" style="background:#dc2626;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approvals</a></p>`,
+        },
+        {
+          event_type: 'license_expiry_reminder',
+          name: 'License Expiry Reminder',
+          subject_template: '[EXPIRY REMINDER] {{license_name}} expires in {{days_left}} days',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#92400e">License Expiry Reminder</h2>
+<p style="margin:0 0 14px;color:#334155">This license is approaching its expiration date.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">License</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Days Left</td><td style="padding:8px;border:1px solid #e2e8f0">{{days_left}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Expiry Date</td><td style="padding:8px;border:1px solid #e2e8f0">{{expiry_date}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/licenses" style="background:#b45309;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Licenses</a></p>`,
+        },
+      ];
+
+      for (const t of templates) {
+        await client.query(
+          `INSERT INTO notification_templates (name, event_type, subject_template, body_html_template, is_active)
+           VALUES ($1, $2, $3, $4, true)
+           ON CONFLICT (event_type)
+           DO UPDATE SET
+             name = EXCLUDED.name,
+             subject_template = EXCLUDED.subject_template,
+             body_html_template = EXCLUDED.body_html_template,
+             is_active = true`,
+          [t.name, t.event_type, t.subject_template, t.body_html_template]
+        );
+      }
+    }
+  },
 ];
 
 async function runMigrations(pool) {
