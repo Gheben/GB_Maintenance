@@ -515,6 +515,25 @@ async function resolveExistingActiveUserIds(userIds = []) {
   return [...new Set(rows.map(r => String(r?.id || '').trim()).filter(Boolean))];
 }
 
+async function resolveExistingActiveUserIdsByEmails(emails = []) {
+  const normalized = [...new Set(
+    (Array.isArray(emails) ? emails : [])
+      .map(v => String(v || '').trim().toLowerCase())
+      .filter(Boolean)
+  )];
+  if (normalized.length === 0) return [];
+
+  const rows = await getMany(
+    `SELECT id
+     FROM users
+     WHERE is_active = true
+       AND LOWER(email) = ANY($1::text[])`,
+    [normalized]
+  ).catch(() => []);
+
+  return [...new Set(rows.map(r => String(r?.id || '').trim()).filter(Boolean))];
+}
+
 function collectApproverRecipientEmails(license) {
   const recipients = new Set();
   const add = (value) => {
@@ -598,9 +617,9 @@ async function notifyLicenseEvent(eventType, licenseId, extraVars = {}, includeA
   const license = await getLicenseNotificationContext(licenseId);
   if (!license) return;
   const toEmails = collectLicenseRecipientEmails(license, includeApprover);
-  const toUserIds = await resolveExistingActiveUserIds(
-    collectLicenseRecipientUserIds(license, includeApprover)
-  );
+  const directUserIds = collectLicenseRecipientUserIds(license, includeApprover);
+  const matchedByEmailUserIds = await resolveExistingActiveUserIdsByEmails(toEmails);
+  const toUserIds = await resolveExistingActiveUserIds([...directUserIds, ...matchedByEmailUserIds]);
   if (toEmails.length === 0 && toUserIds.length === 0) return;
 
   const appBaseUrl = await getAppBaseUrl();
@@ -1374,15 +1393,21 @@ router.post('/:id/request-approval', requireAdmin, [
       .filter(Boolean)
       .filter(v => !normalizedApprovers.includes(v))
   )];
+  const approverMatchedUserIds = await resolveExistingActiveUserIdsByEmails(normalizedApprovers);
+  const stakeholderMatchedUserIds = await resolveExistingActiveUserIdsByEmails(normalizedStakeholders);
   const normalizedApproverUserIds = await resolveExistingActiveUserIds(
-    [...new Set(approverUserIds.map(v => String(v || '').trim()).filter(Boolean))]
+    [...new Set([
+      ...approverUserIds.map(v => String(v || '').trim()).filter(Boolean),
+      ...approverMatchedUserIds,
+    ])]
   );
   const normalizedStakeholderUserIds = await resolveExistingActiveUserIds(
     [...new Set(
-    stakeholderUserIds
-      .map(v => String(v || '').trim())
-      .filter(Boolean)
-      .filter(v => !normalizedApproverUserIds.includes(v))
+      [
+        ...stakeholderUserIds.map(v => String(v || '').trim()).filter(Boolean),
+        ...stakeholderMatchedUserIds,
+      ]
+        .filter(v => !normalizedApproverUserIds.includes(v))
     )]
   );
 

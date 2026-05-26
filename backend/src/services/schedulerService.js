@@ -44,6 +44,25 @@ async function resolveExistingActiveUserIds(userIds = []) {
   return [...new Set(rows.map(r => String(r?.id || '').trim()).filter(Boolean))];
 }
 
+async function resolveExistingActiveUserIdsByEmails(emails = []) {
+  const normalized = [...new Set(
+    (Array.isArray(emails) ? emails : [])
+      .map(v => String(v || '').trim().toLowerCase())
+      .filter(Boolean)
+  )];
+  if (normalized.length === 0) return [];
+
+  const rows = await getMany(
+    `SELECT id
+     FROM users
+     WHERE is_active = true
+       AND LOWER(email) = ANY($1::text[])`,
+    [normalized]
+  ).catch(() => []);
+
+  return [...new Set(rows.map(r => String(r?.id || '').trim()).filter(Boolean))];
+}
+
 function start() {
   if (initialized) return;
   initialized = true;
@@ -140,7 +159,7 @@ async function _checkReminders() {
     const expiringLicenses = await getMany(
           `SELECT l.id, l.name, l.expiry_date, l.reminder_days, l.owner_contact,
             l.owner_user_id, l.maintainer_user_id, l.approver_user_id, l.created_by AS created_by_user_id,
-            uo.email AS owner_user_email, s.company AS supplier_company
+              uo.email AS owner_user_email, s.company AS supplier_company, s.email AS supplier_email
        FROM licenses l
        LEFT JOIN users uo ON uo.id=l.owner_user_id
        LEFT JOIN suppliers s ON s.id=l.supplier_id
@@ -171,6 +190,11 @@ async function _checkReminders() {
 
       if (recipients.size === 0) continue;
 
+      const inAppMatchedByEmailUserIds = await resolveExistingActiveUserIdsByEmails([
+        ...recipients,
+        license.supplier_email,
+      ]);
+
       await sendEmailNotification('license_expiry_reminder', [...recipients], {
         license_id: license.id,
         license_name: license.name,
@@ -186,6 +210,7 @@ async function _checkReminders() {
         license.maintainer_user_id,
         license.approver_user_id,
         license.created_by_user_id,
+        ...inAppMatchedByEmailUserIds,
       ]);
 
       if (inAppUserIds.length > 0) {
