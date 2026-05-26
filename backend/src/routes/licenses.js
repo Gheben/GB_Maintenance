@@ -130,7 +130,7 @@ function extractApproverIdentity(row) {
   ).trim();
   const contactEmail = String(contactItems.find(item => String(item?.email || '').trim())?.email || '').trim();
   const contactLabel = contactName || contactEmail;
-  const primaryEmail = String(row.approver_user_email || approverEmails[0] || '').trim();
+  const primaryEmail = String(row.supplier_email || row.approver_user_email || approverEmails[0] || '').trim();
   const company = String(row.supplier_company || '').trim();
 
   const details = [];
@@ -586,7 +586,8 @@ router.post('/approval/:token/approve', [param('token').isString().isLength({ mi
             ua.display_name AS approver_user_display_name,
             ua.username AS approver_user_username,
             ua.email AS approver_user_email,
-            s.company AS supplier_company
+                 s.company AS supplier_company,
+                 s.email AS supplier_email
      FROM licenses l
      LEFT JOIN users ua ON ua.id=l.approver_user_id
      LEFT JOIN suppliers s ON s.id=l.supplier_id
@@ -631,7 +632,8 @@ router.post('/approval/:token/reject', [
             ua.display_name AS approver_user_display_name,
             ua.username AS approver_user_username,
             ua.email AS approver_user_email,
-            s.company AS supplier_company
+            s.company AS supplier_company,
+            s.email AS supplier_email
      FROM licenses l
      LEFT JOIN users ua ON ua.id=l.approver_user_id
      LEFT JOIN suppliers s ON s.id=l.supplier_id
@@ -1008,7 +1010,8 @@ router.post('/:id/request-approval', requireAdmin, [
      FROM licenses l
      LEFT JOIN users u ON u.id=l.approver_user_id
      WHERE l.id=$1`,
-    [req.params.id]
+            s.company AS supplier_company,
+            s.email AS supplier_email
   );
   if (!lic) return res.status(404).json({ error: 'License not found' });
   if (!lic.approval_required) return res.status(400).json({ error: 'Approval not required for this license' });
