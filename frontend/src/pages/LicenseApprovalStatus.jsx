@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   CircleAlert,
   Clock3,
+  RefreshCw,
   ShieldCheck,
 } from 'lucide-react'
 import { licensesApi, settingsApi } from '../api'
@@ -37,6 +38,7 @@ export default function LicenseApprovalStatus() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState(null)
+  const [reloadTick, setReloadTick] = useState(0)
   const [branding, setBranding] = useState(() => ({ ...DEFAULT_BRANDING, ...(getCachedBranding() || {}) }))
 
   useEffect(() => {
@@ -72,7 +74,7 @@ export default function LicenseApprovalStatus() {
     }
 
     load().catch(() => {})
-  }, [token, branding.approval_page_load_error_text, branding.approval_page_missing_token_text])
+  }, [token, reloadTick, branding.approval_page_load_error_text, branding.approval_page_missing_token_text])
 
   const accent = branding.approval_page_primary_color || DEFAULT_BRANDING.approval_page_primary_color
   const appName = branding.app_name || DEFAULT_BRANDING.app_name
@@ -149,6 +151,18 @@ export default function LicenseApprovalStatus() {
           </div>
 
           <div className="p-6 sm:p-8 space-y-5">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-600 font-medium border border-gray-200 bg-gray-50 hover:bg-gray-100 disabled:opacity-60"
+                disabled={loading}
+                onClick={() => setReloadTick(v => v + 1)}
+              >
+                <RefreshCw size={16} />
+                Refresh
+              </button>
+            </div>
+
             {loading && <p className="text-sm text-gray-500">{branding.approval_page_loading_label || DEFAULT_BRANDING.approval_page_loading_label}</p>}
             {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3"><CircleAlert size={18} className="mt-0.5 shrink-0" />{error}</div>}
 
