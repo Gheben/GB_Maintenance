@@ -79,7 +79,30 @@ export default function LicenseApprovalStatus() {
   const logoUrl = String(branding.approval_page_logo_url || '').trim()
   const title = 'License Approval Status'
   const subtitle = 'Track the request status and approver coverage.'
-  const status = String(info?.approval_status || '').toLowerCase()
+  const approvedDate = info?.approved_at ? new Date(info.approved_at) : null
+  const rejectedDate = info?.rejected_at ? new Date(info.rejected_at) : null
+  const hasApprovedDate = approvedDate && !Number.isNaN(approvedDate.getTime())
+  const hasRejectedDate = rejectedDate && !Number.isNaN(rejectedDate.getTime())
+
+  let latestDecisionStatus = ''
+  let latestDecisionDate = null
+  if (hasApprovedDate && hasRejectedDate) {
+    if (approvedDate.getTime() >= rejectedDate.getTime()) {
+      latestDecisionStatus = 'approved'
+      latestDecisionDate = approvedDate
+    } else {
+      latestDecisionStatus = 'rejected'
+      latestDecisionDate = rejectedDate
+    }
+  } else if (hasApprovedDate) {
+    latestDecisionStatus = 'approved'
+    latestDecisionDate = approvedDate
+  } else if (hasRejectedDate) {
+    latestDecisionStatus = 'rejected'
+    latestDecisionDate = rejectedDate
+  }
+
+  const status = latestDecisionStatus || String(info?.approval_status || '').toLowerCase()
   const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Pending'
   const statusCls = status === 'approved'
     ? 'text-green-700 bg-green-50 border-green-200'
@@ -148,12 +171,10 @@ export default function LicenseApprovalStatus() {
                     <div className="mt-1 text-sm font-medium text-gray-900">{info.approval_requested_at ? new Date(info.approval_requested_at).toLocaleString() : '—'}</div>
                   </div>
                   <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
-                    <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Approved At</div>
-                    <div className="mt-1 text-sm font-medium text-gray-900">{info.approved_at ? new Date(info.approved_at).toLocaleString() : '—'}</div>
-                  </div>
-                  <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
-                    <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Rejected At</div>
-                    <div className="mt-1 text-sm font-medium text-gray-900">{info.rejected_at ? new Date(info.rejected_at).toLocaleString() : '—'}</div>
+                    <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Last Decision</div>
+                    <div className="mt-1 text-sm font-medium text-gray-900">
+                      {latestDecisionStatus ? `${latestDecisionStatus === 'approved' ? 'Approved' : 'Rejected'} - ${latestDecisionDate ? latestDecisionDate.toLocaleString() : '—'}` : 'Pending'}
+                    </div>
                   </div>
                 </div>
 
