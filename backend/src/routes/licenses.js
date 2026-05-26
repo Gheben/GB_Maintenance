@@ -130,7 +130,7 @@ function extractApproverIdentity(row) {
   ).trim();
   const contactEmail = String(contactItems.find(item => String(item?.email || '').trim())?.email || '').trim();
   const contactLabel = contactName || contactEmail;
-  const primaryEmail = String(row.supplier_email || row.approver_user_email || approverEmails[0] || '').trim();
+  const primaryEmail = String(row.supplier_email || '').trim();
   const company = String(row.supplier_company || '').trim();
 
   const details = [];
