@@ -162,7 +162,7 @@ export default function Services() {
         type: Number(g.ldap_mapping_count || 0) > 0 ? 'ldap_group' : 'local_group',
       })))
     }).catch(() => {})
-    settingsApi.getLdap().then(r => setLdapEnabled(!!(r.data?.enabled))).catch(() => {})
+    settingsApi.getLdapEnabled().then(r => setLdapEnabled(!!(r.data?.enabled))).catch(() => {})
     licensesApi.list({ limit: 500 }).then(r => {
       const rows = Array.isArray(r.data) ? r.data : (r.data.data || [])
       setAllLicenses(rows)

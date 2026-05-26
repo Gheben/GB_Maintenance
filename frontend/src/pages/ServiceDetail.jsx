@@ -178,7 +178,7 @@ export default function ServiceDetail() {
       setOwnerUsers(list.filter(u => u.is_active !== false))
     }).catch(() => {})
     groupsApi.list().then(r => setLocalGroups(Array.isArray(r.data) ? r.data : [])).catch(() => {})
-    settingsApi.getLdap().then(r => setLdapEnabled(r.data?.enabled || false)).catch(() => {})
+    settingsApi.getLdapEnabled().then(r => setLdapEnabled(r.data?.enabled || false)).catch(() => {})
   }
 
   const saveLicenses = async () => {

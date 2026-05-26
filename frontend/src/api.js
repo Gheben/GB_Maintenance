@@ -196,6 +196,7 @@ export const settingsApi = {
   getLdap: () => api.get('/settings/ldap'),
   saveLdap: (data) => api.put('/settings/ldap', data),
   testLdap: (data) => api.post('/settings/ldap/test', data),
+  getLdapEnabled: () => api.get('/settings/ldap/enabled'),
   searchLdapGroups: (q) => api.get('/settings/ldap/groups', { params: { q } }),
   searchLdapUsers: (q) => api.get('/settings/ldap/users', { params: { q } }),
   getSaml: () => api.get('/settings/saml'),

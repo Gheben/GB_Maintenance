@@ -11,6 +11,19 @@ const auditService = require('../services/auditService');
 
 const router = Router();
 
+const LDAP_DIRECTORY_SEARCH_PERMISSIONS = ['maintenance', 'assets', 'services'];
+
+function requireLdapDirectorySearchAccess(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: 'Non autenticato' });
+  if (req.user.role === 'superadmin' || req.user.role === 'admin') return next();
+
+  const perms = req.user.permissions || {};
+  const allowed = LDAP_DIRECTORY_SEARCH_PERMISSIONS.some((perm) => perms[perm] === true);
+  if (allowed) return next();
+
+  return res.status(403).json({ error: 'Permessi insufficienti per la ricerca LDAP' });
+}
+
 function getDefaultGeneralSettings() {
   return {
     app_name: 'GB Maintenance',
@@ -237,6 +250,11 @@ router.get('/ldap', requireAuth, requireSuperAdmin, async (req, res) => {
   res.json(safe);
 });
 
+router.get('/ldap/enabled', requireAuth, requireLdapDirectorySearchAccess, async (req, res) => {
+  const cfg = await ldapService.getLdapSettings();
+  res.json({ enabled: !!(cfg && cfg.enabled) });
+});
+
 router.put('/ldap', requireAuth, requireSuperAdmin, async (req, res) => {
   await ldapService.saveLdapSettings(req.body);
   await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'ldap_config', null, req.ip);
@@ -253,7 +271,7 @@ router.post('/ldap/test', requireAuth, requireSuperAdmin, async (req, res) => {
 });
 
 // ─── GET /api/settings/ldap/groups ───────────────────────────────────────────
-router.get('/ldap/groups', requireAuth, requireSuperAdmin, async (req, res) => {
+router.get('/ldap/groups', requireAuth, requireLdapDirectorySearchAccess, async (req, res) => {
   try {
     const groups = await ldapService.searchGroups(req.query.q || '');
     res.json(groups);
@@ -261,7 +279,7 @@ router.get('/ldap/groups', requireAuth, requireSuperAdmin, async (req, res) => {
 });
 
 // ─── GET /api/settings/ldap/users ────────────────────────────────────────────
-router.get('/ldap/users', requireAuth, requireSuperAdmin, async (req, res) => {
+router.get('/ldap/users', requireAuth, requireLdapDirectorySearchAccess, async (req, res) => {
   try {
     const users = await ldapService.searchUsers(req.query.q || '');
     res.json(users);
