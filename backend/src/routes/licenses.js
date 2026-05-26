@@ -181,6 +181,13 @@ function computeLicenseExpiry({ activation_date, duration_months, custom_expiry_
 }
 
 function buildLicenseTemplateVars(license, extraVars = {}) {
+  const normalizedReason =
+    extraVars.reason !== undefined && extraVars.reason !== null
+      ? extraVars.reason
+      : (extraVars.rejection_reason !== undefined && extraVars.rejection_reason !== null
+          ? extraVars.rejection_reason
+          : (license.rejection_reason || '-'));
+
   return {
     license_id: license.id,
     license_name: license.name,
@@ -191,13 +198,16 @@ function buildLicenseTemplateVars(license, extraVars = {}) {
     duration_months: license.duration_months || '-',
     expiry_date: license.expiry_date ? String(license.expiry_date).slice(0, 10) : '-',
     renewal_date: license.renewal_date ? String(license.renewal_date).slice(0, 10) : '-',
+    reason: normalizedReason,
+    rejection_reason: normalizedReason,
     ...extraVars,
   };
 }
 
 async function getLicenseNotificationContext(licenseId) {
   return getOne(
-    `SELECT l.id, l.name, l.description, l.approval_status, l.activation_date, l.duration_months, l.expiry_date, l.renewal_date,
+        `SELECT l.id, l.name, l.description, l.approval_status, l.activation_date, l.duration_months, l.expiry_date, l.renewal_date,
+          l.rejection_reason,
             l.owner_contact, l.maintainer_contact, l.approver_contact,
             s.company AS supplier_company,
             uo.email AS owner_user_email,
@@ -341,6 +351,7 @@ router.post('/approval/:token/request/:id/reject', [
   await notifyLicenseEvent('license_rejected', req.params.id, {
     acted_by: 'Approval Link',
     rejected_at: new Date().toISOString(),
+    reason: req.body.reason || '-',
     rejection_reason: req.body.reason || '-',
   }, true).catch(() => {});
 
@@ -438,6 +449,7 @@ router.post('/approval/:token/reject', [
   await notifyLicenseEvent('license_rejected', row.id, {
     acted_by: 'Approval Link',
     rejected_at: new Date().toISOString(),
+    reason: req.body.reason || '-',
     rejection_reason: req.body.reason || '-',
   }, true).catch(() => {});
 
@@ -759,6 +771,7 @@ router.post('/:id/reject', requireAdmin, [
   await notifyLicenseEvent('license_rejected', req.params.id, {
     acted_by: req.user?.display_name || req.user?.username || 'Admin',
     rejected_at: new Date().toISOString(),
+    reason: req.body.reason || '-',
     rejection_reason: req.body.reason || '-',
   }, true).catch(() => {});
 
