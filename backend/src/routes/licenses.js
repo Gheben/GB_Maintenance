@@ -1061,12 +1061,17 @@ router.post('/:id/request-approval', requireAdmin, [
       .filter(v => !normalizedApprovers.includes(v))
   )];
 
+  const requesterBase = String(req.user?.display_name || req.user?.username || req.user?.email || 'Requester').trim();
+  const requesterCompany = String(context?.supplier_company || '').trim();
+  const requesterName = requesterCompany ? `${requesterBase} (${requesterCompany})` : requesterBase;
+
   const vars = buildLicenseTemplateVars(context || { id: lic.id, name: lic.name }, {
     app_url: appBaseUrl,
     approval_url: approvalUrl,
     status_url: statusUrl,
     expires_at: expiresAt.toISOString(),
     approver_email: normalizedApprovers[0] || '',
+    requester_name: requesterName,
   });
 
   if (normalizedApprovers.length > 0) {
