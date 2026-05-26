@@ -496,6 +496,25 @@ function collectLicenseRecipientUserIds(license, includeApprover = false) {
   return [...recipients];
 }
 
+async function resolveExistingActiveUserIds(userIds = []) {
+  const normalized = [...new Set(
+    (Array.isArray(userIds) ? userIds : [])
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+  )];
+  if (normalized.length === 0) return [];
+
+  const rows = await getMany(
+    `SELECT id
+     FROM users
+     WHERE is_active = true
+       AND id = ANY($1::uuid[])`,
+    [normalized]
+  ).catch(() => []);
+
+  return [...new Set(rows.map(r => String(r?.id || '').trim()).filter(Boolean))];
+}
+
 function collectApproverRecipientEmails(license) {
   const recipients = new Set();
   const add = (value) => {
@@ -579,7 +598,9 @@ async function notifyLicenseEvent(eventType, licenseId, extraVars = {}, includeA
   const license = await getLicenseNotificationContext(licenseId);
   if (!license) return;
   const toEmails = collectLicenseRecipientEmails(license, includeApprover);
-  const toUserIds = collectLicenseRecipientUserIds(license, includeApprover);
+  const toUserIds = await resolveExistingActiveUserIds(
+    collectLicenseRecipientUserIds(license, includeApprover)
+  );
   if (toEmails.length === 0 && toUserIds.length === 0) return;
 
   const appBaseUrl = await getAppBaseUrl();
@@ -1353,13 +1374,17 @@ router.post('/:id/request-approval', requireAdmin, [
       .filter(Boolean)
       .filter(v => !normalizedApprovers.includes(v))
   )];
-  const normalizedApproverUserIds = [...new Set(approverUserIds.map(v => String(v || '').trim()).filter(Boolean))];
-  const normalizedStakeholderUserIds = [...new Set(
+  const normalizedApproverUserIds = await resolveExistingActiveUserIds(
+    [...new Set(approverUserIds.map(v => String(v || '').trim()).filter(Boolean))]
+  );
+  const normalizedStakeholderUserIds = await resolveExistingActiveUserIds(
+    [...new Set(
     stakeholderUserIds
       .map(v => String(v || '').trim())
       .filter(Boolean)
       .filter(v => !normalizedApproverUserIds.includes(v))
-  )];
+    )]
+  );
 
   const requesterBase = String(req.user?.display_name || req.user?.username || req.user?.email || 'Requester').trim();
   const requesterAuthType = String(req.user?.auth_type || '').trim().toLowerCase();

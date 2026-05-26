@@ -25,6 +25,25 @@ function formatDateForEmail(value) {
   }).format(d);
 }
 
+async function resolveExistingActiveUserIds(userIds = []) {
+  const normalized = [...new Set(
+    (Array.isArray(userIds) ? userIds : [])
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+  )];
+  if (normalized.length === 0) return [];
+
+  const rows = await getMany(
+    `SELECT id
+     FROM users
+     WHERE is_active = true
+       AND id = ANY($1::uuid[])`,
+    [normalized]
+  ).catch(() => []);
+
+  return [...new Set(rows.map(r => String(r?.id || '').trim()).filter(Boolean))];
+}
+
 function start() {
   if (initialized) return;
   initialized = true;
@@ -162,12 +181,12 @@ async function _checkReminders() {
         reminder_days: license.reminder_days || 30,
       }, 'license', license.id);
 
-      const inAppUserIds = [...new Set([
+      const inAppUserIds = await resolveExistingActiveUserIds([
         license.owner_user_id,
         license.maintainer_user_id,
         license.approver_user_id,
         license.created_by_user_id,
-      ].map(v => String(v || '').trim()).filter(Boolean))];
+      ]);
 
       if (inAppUserIds.length > 0) {
         const expiryLabel = formatDateForEmail(license.expiry_date);
