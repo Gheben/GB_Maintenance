@@ -111,6 +111,10 @@ export default function LicenseApprovalStatus() {
       : 'text-amber-700 bg-amber-50 border-amber-200'
   const footerTextTemplate = branding.approval_page_footer_text || DEFAULT_BRANDING.approval_page_footer_text
   const footerText = String(footerTextTemplate).replaceAll('{app_name}', appName)
+  const approverEntries = Array.isArray(info?.approvers_notified)
+    ? info.approvers_notified
+    : []
+  const fallbackApproverEmails = Array.isArray(info?.approver_emails) ? info.approver_emails : []
   const initials = appName
     .split(/\s+/)
     .filter(Boolean)
@@ -181,10 +185,15 @@ export default function LicenseApprovalStatus() {
                 <div className="rounded-2xl border border-gray-200 bg-white p-4">
                   <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Approvers notified</div>
                   <ul className="mt-2 list-disc pl-5 text-sm text-gray-800 space-y-1">
-                    {(Array.isArray(info.approver_emails) ? info.approver_emails : []).map(email => (
+                    {approverEntries.map((entry, idx) => (
+                      <li key={`${entry?.email || entry?.name || 'approver'}-${idx}`}>
+                        {entry?.label || `${entry?.name || ''}${entry?.email ? ` <${entry.email}>` : ''}`.trim() || 'Not available'}
+                      </li>
+                    ))}
+                    {approverEntries.length === 0 && fallbackApproverEmails.map(email => (
                       <li key={email}>{email}</li>
                     ))}
-                    {(!Array.isArray(info.approver_emails) || info.approver_emails.length === 0) && <li>Not available</li>}
+                    {approverEntries.length === 0 && fallbackApproverEmails.length === 0 && <li>Not available</li>}
                   </ul>
                 </div>
 

@@ -209,6 +209,64 @@ function ensureLoggedUserAuthorizedForScope(req, res, scope) {
   return false;
 }
 
+function buildApproverDisplayLabel(entry) {
+  const name = String(entry?.name || '').trim();
+  const email = String(entry?.email || '').trim();
+  const company = String(entry?.company || '').trim();
+  const office = String(entry?.office || '').trim();
+
+  const base = name && email
+    ? `${name} <${email}>`
+    : (email || name || 'Unknown approver');
+
+  const extra = [company, office].filter(Boolean);
+  return extra.length > 0 ? `${base} (${extra.join(', ')})` : base;
+}
+
+function buildApproversNotified(row, appCompany = '') {
+  const records = [];
+
+  const userName = String(row?.approver_user_display_name || row?.approver_user_username || '').trim();
+  const userEmail = String(row?.approver_user_email || '').trim().toLowerCase();
+  const userOffice = String(row?.approver_user_office || '').trim();
+  if (userName || userEmail) {
+    records.push({
+      source: String(row?.approver_user_auth_type || 'user').trim() || 'user',
+      name: userName,
+      email: userEmail,
+      company: String(appCompany || '').trim(),
+      office: userOffice,
+    });
+  }
+
+  for (const item of collectContactItems(row?.approver_contact)) {
+    const name = String(item?.name || item?.display_name || '').trim();
+    const email = String(item?.email || '').trim().toLowerCase();
+    const company = String(item?.company || item?.company_name || item?.organization || item?.org || '').trim();
+    const office = String(item?.office || item?.department || '').trim();
+    if (!(name || email)) continue;
+    records.push({
+      source: 'contact',
+      name,
+      email,
+      company,
+      office,
+    });
+  }
+
+  const dedup = new Map();
+  for (const rec of records) {
+    const key = rec.email || `${rec.source}:${rec.name}`;
+    if (!key) continue;
+    if (!dedup.has(key)) dedup.set(key, rec);
+  }
+
+  return [...dedup.values()].map(rec => ({
+    ...rec,
+    label: buildApproverDisplayLabel(rec),
+  }));
+}
+
 async function listPendingApprovalsByScope(scope) {
   const where = [
     `l.approval_required=TRUE`,
@@ -582,7 +640,12 @@ router.get('/status/:token', [param('token').isString().isLength({ min: 20, max:
   const row = await getOne(
     `SELECT l.id, l.name, l.description, l.approval_status, l.approval_requested_at, l.approved_at, l.rejected_at,
             l.rejection_reason, l.expiry_date, l.renewal_date, l.approval_required, l.status_token_expires_at,
-            l.approver_contact, ua.email AS approver_user_email,
+            l.approver_contact,
+            ua.display_name AS approver_user_display_name,
+            ua.username AS approver_user_username,
+            ua.email AS approver_user_email,
+            ua.office AS approver_user_office,
+            ua.auth_type AS approver_user_auth_type,
             s.company AS supplier_company
      FROM licenses l
      LEFT JOIN users ua ON ua.id=l.approver_user_id
@@ -596,10 +659,13 @@ router.get('/status/:token', [param('token').isString().isLength({ min: 20, max:
     return res.status(410).json({ error: 'Status link expired' });
   }
 
-  const approverEmails = [...new Set([
-    String(row.approver_user_email || '').trim().toLowerCase(),
-    ...collectContactEmails(row.approver_contact).map(v => String(v || '').trim().toLowerCase()),
-  ].filter(Boolean))];
+  const generalCfg = await getGeneralConfig();
+  const approversNotified = buildApproversNotified(row, String(generalCfg?.app_name || '').trim());
+  const approverEmails = [...new Set(
+    approversNotified
+      .map(v => String(v?.email || '').trim().toLowerCase())
+      .filter(Boolean)
+  )];
 
   res.json({
     id: row.id,
@@ -613,6 +679,7 @@ router.get('/status/:token', [param('token').isString().isLength({ min: 20, max:
     rejection_reason: row.rejection_reason,
     expiry_date: row.expiry_date,
     renewal_date: row.renewal_date,
+    approvers_notified: approversNotified,
     approver_emails: approverEmails,
     status_link_expires_at: row.status_token_expires_at,
   });
