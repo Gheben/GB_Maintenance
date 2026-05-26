@@ -1045,6 +1045,8 @@ router.post('/:id/request-approval', requireAdmin, [
     `UPDATE licenses
      SET approval_status='pending', approval_token_hash=$1, approval_token_expires_at=$2,
          status_token_hash=$3, status_token_expires_at=$4,
+         approved_at=NULL, approved_by=NULL,
+         rejected_at=NULL, rejected_by=NULL, rejection_reason=NULL,
          approval_requested_at=NOW(), updated_at=NOW()
      WHERE id=$5
      RETURNING approval_requested_at`,
