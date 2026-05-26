@@ -1044,9 +1044,16 @@ export default function Licenses() {
         const siteLogo = data.app_brand_image_url || ''
         setTemplateConfig({ ...templateDefaults, ...data, approval_page_logo_url: siteLogo })
       })
-      .catch(() => {
-        setTemplateConfig(templateDefaults)
-        toast.error('Cannot load template settings')
+      .catch(async () => {
+        try {
+          const r = await settingsApi.publicBranding()
+          const data = r.data || {}
+          const siteLogo = data.app_brand_image_url || ''
+          setTemplateConfig({ ...templateDefaults, ...data, approval_page_logo_url: siteLogo })
+        } catch {
+          setTemplateConfig(templateDefaults)
+          toast.error('Cannot load template settings')
+        }
       })
       .finally(() => setTemplateLoading(false))
   }, [tab])

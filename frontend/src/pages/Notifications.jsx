@@ -33,6 +33,23 @@ function PrettyBadge({ value, classes }) {
   )
 }
 
+function formatLicenseStatusLabel(value) {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'approved') return 'Approved'
+  if (normalized === 'rejected') return 'Rejected'
+  if (normalized === 'pending') return 'Pending'
+  return normalized ? normalized.replace(/_/g, ' ') : '-'
+}
+
+function formatLicenseDateLabel(value) {
+  if (!value) return '-'
+  const text = String(value).trim()
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) return text
+  const parsed = new Date(text)
+  if (Number.isNaN(parsed.getTime())) return text || '-'
+  return format(parsed, 'dd/MM/yyyy')
+}
+
 export default function Notifications() {
   const { unreadCount, markRead, markAllRead, fetchNotifications, clearAll } = useNotifications()
   const [inapp, setInapp] = useState([])
@@ -275,6 +292,14 @@ export default function Notifications() {
                 )}
                 {'scheduled_start' in detailData && <div><span className="text-gray-500">Start:</span> <span className="font-medium">{detailData.scheduled_start ? format(new Date(detailData.scheduled_start), 'MMM dd yyyy HH:mm') : '-'}</span></div>}
                 {'scheduled_end' in detailData && <div><span className="text-gray-500">End:</span> <span className="font-medium">{detailData.scheduled_end ? format(new Date(detailData.scheduled_end), 'MMM dd yyyy HH:mm') : '-'}</span></div>}
+                {detailType === 'license' && (
+                  <>
+                    <div><span className="text-gray-500">License name:</span> <span className="font-medium">{detailData.name || '-'}</span></div>
+                    <div><span className="text-gray-500">Supplier:</span> <span className="font-medium">{detailData.supplier_company || detailData.supplier || '-'}</span></div>
+                    <div><span className="text-gray-500">Expiry date:</span> <span className="font-medium">{formatLicenseDateLabel(detailData.expiry_date)}</span></div>
+                    <div><span className="text-gray-500">Approval status:</span> <span className="font-medium">{formatLicenseStatusLabel(detailData.approval_status)}</span></div>
+                  </>
+                )}
               </div>
 
               {'description' in detailData && (
