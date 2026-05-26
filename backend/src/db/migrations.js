@@ -2105,6 +2105,29 @@ const MIGRATIONS = [
       );
     }
   },
+  {
+    version: 44,
+    name: 'license_subject_templates_hardening',
+    up: async (client) => {
+      await client.query(
+        `UPDATE notification_templates
+         SET subject_template = CASE
+               WHEN event_type = 'license_approval_requested' THEN '[APPROVAL REQUIRED] License: {{license_name}}'
+               WHEN event_type = 'license_approval_requested_info' THEN '[STATUS UPDATE] License approval started: {{license_name}}'
+               WHEN event_type = 'license_approved' THEN '[APPROVED] License: {{license_name}}'
+               WHEN event_type = 'license_rejected' THEN '[REJECTED] License: {{license_name}}'
+               ELSE subject_template
+             END,
+             updated_at = NOW()
+         WHERE event_type IN (
+           'license_approval_requested',
+           'license_approval_requested_info',
+           'license_approved',
+           'license_rejected'
+         )`
+      );
+    }
+  },
 ];
 
 async function runMigrations(pool) {
