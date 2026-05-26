@@ -1905,6 +1905,53 @@ const MIGRATIONS = [
       }
     }
   },
+  {
+    version: 39,
+    name: 'notification_templates_unify_approval_cta_labels',
+    up: async (client) => {
+      const templates = [
+        {
+          event_type: 'maintenance_owner_approval_requested',
+          cta_html: '<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#1d4ed8;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>',
+        },
+        {
+          event_type: 'maintenance_owner_reschedule_proposed',
+          cta_html: '<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#0f766e;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>',
+        },
+        {
+          event_type: 'maintenance_owner_reschedule_countered',
+          cta_html: '<p style="margin:16px 0 0"><a href="{{app_url}}/maintenance/{{id}}" style="background:#b45309;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>',
+        },
+        {
+          event_type: 'license_approval_requested',
+          cta_html: '<p style="margin:16px 0 0"><a href="{{approval_url}}" style="background:#1d4ed8;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>',
+        },
+        {
+          event_type: 'license_approved',
+          cta_html: '<p style="margin:16px 0 0"><a href="{{app_url}}/licenses" style="background:#15803d;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>',
+        },
+        {
+          event_type: 'license_rejected',
+          cta_html: '<p style="margin:16px 0 0"><a href="{{app_url}}/licenses" style="background:#dc2626;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>',
+        },
+      ];
+
+      for (const t of templates) {
+        await client.query(
+          `UPDATE notification_templates
+           SET body_html_template = regexp_replace(
+             body_html_template,
+             '<p style="margin:16px 0 0"><a[^<]*>[^<]*</a></p>',
+             $1,
+             'g'
+           ),
+           updated_at = NOW()
+           WHERE event_type = $2`,
+          [t.cta_html, t.event_type]
+        );
+      }
+    }
+  },
 ];
 
 async function runMigrations(pool) {

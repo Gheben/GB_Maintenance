@@ -70,6 +70,7 @@ const emptyLicenseForm = {
   reminder_days: 30,
   approval_required: true,
   approval_status: 'pending',
+  approval_requested_at: null,
   estimated_cost: '',
   currency: 'EUR',
   notes: '',
@@ -168,6 +169,19 @@ function approvalStatusMeta(status, approvalRequired = true) {
   if (status === 'approved') return { label: 'Approved', cls: 'bg-green-100 text-green-700' }
   if (status === 'rejected') return { label: 'Rejected', cls: 'bg-red-100 text-red-700' }
   return { label: 'Pending', cls: 'bg-amber-100 text-amber-700' }
+}
+
+function formatDateTimeLabel(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('it-IT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 const FALLBACK_REGION_CODES = [
@@ -1110,6 +1124,7 @@ export default function Licenses() {
         reminder_days: d.reminder_days || 30,
         approval_required: d.approval_required !== false,
         approval_status: d.approval_status || 'pending',
+        approval_requested_at: d.approval_requested_at || null,
         estimated_cost: d.estimated_cost ?? '',
         currency: d.currency || 'EUR',
         notes: d.notes || '',
@@ -1169,6 +1184,19 @@ export default function Licenses() {
     try {
       const r = await licensesApi.requestApproval(id, { expiry_hours: 72 })
       toast.success(r.data?.message || 'Approval email sent')
+      const requestedAt = r.data?.approval_requested_at || null
+      if (editingLicense?.id === id && requestedAt) {
+        setEditingLicense(prev => prev ? {
+          ...prev,
+          approval_requested_at: requestedAt,
+          approval_status: 'pending',
+        } : prev)
+        setLicenseForm(prev => ({
+          ...prev,
+          approval_requested_at: requestedAt,
+          approval_status: 'pending',
+        }))
+      }
       await loadLicenses()
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error sending approval email')
@@ -1771,6 +1799,11 @@ export default function Licenses() {
                     <button type="button" className="action-text-btn" onClick={() => openLicenseActionConfirm('request-approval', editingLicense)} title="Request approval email">Send approval</button>
                     <button type="button" className="action-icon-btn action-icon-btn-success" onClick={() => openLicenseActionConfirm('approve', editingLicense)} title="Approve"><CheckCircle2 size={14} /></button>
                     <button type="button" className="action-icon-btn action-icon-btn-warn" onClick={() => openLicenseActionConfirm('reject', editingLicense)} title="Reject"><XCircle size={14} /></button>
+                    {!!(licenseForm.approval_requested_at || editingLicense?.approval_requested_at) && (
+                      <span className="text-xs text-gray-500 ml-1">
+                        Last send: {formatDateTimeLabel(licenseForm.approval_requested_at || editingLicense?.approval_requested_at)}
+                      </span>
+                    )}
                   </>
                 )}
                 <button type="button" className="action-icon-btn action-icon-btn-danger" onClick={() => openLicenseActionConfirm('delete', editingLicense)} title="Delete"><Trash2 size={14} /></button>

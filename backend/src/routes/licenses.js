@@ -793,13 +793,15 @@ router.post('/:id/request-approval', requireAdmin, [
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = hashApprovalToken(token);
 
-  await query(
+  const updated = await query(
     `UPDATE licenses
      SET approval_status='pending', approval_token_hash=$1, approval_token_expires_at=$2,
          approval_requested_at=NOW(), updated_at=NOW()
-     WHERE id=$3`,
+     WHERE id=$3
+     RETURNING approval_requested_at`,
     [tokenHash, expiresAt.toISOString(), lic.id]
   );
+  const approvalRequestedAt = updated.rows?.[0]?.approval_requested_at || null;
 
   const appBaseUrl = await getAppBaseUrl();
   const approvalUrl = `${appBaseUrl}/licenses/approval?token=${token}`;
@@ -813,7 +815,11 @@ router.post('/:id/request-approval', requireAdmin, [
 
   await sendEmailNotification('license_approval_requested', recipients, vars, 'license', lic.id);
 
-  res.json({ message: `Approval request sent to ${recipients.join(', ')}`, expires_at: expiresAt.toISOString() });
+  res.json({
+    message: `Approval request sent to ${recipients.join(', ')}`,
+    expires_at: expiresAt.toISOString(),
+    approval_requested_at: approvalRequestedAt,
+  });
 });
 
 router.delete('/:id', requireAdmin, [param('id').isUUID()], async (req, res) => {
