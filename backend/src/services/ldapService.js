@@ -211,7 +211,7 @@ function extractRawAttributeFromSearchEntry(entry, attrName) {
   const attr = String(attrName || '').trim().toLowerCase();
   if (!attr) return null;
 
-  const candidates = [entry?.raw?.attributes, entry?.pojo?.attributes];
+  const candidates = [entry?.attributes, entry?.raw?.attributes, entry?.pojo?.attributes];
   for (const attrs of candidates) {
     if (!Array.isArray(attrs)) continue;
     for (const a of attrs) {
