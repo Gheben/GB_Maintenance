@@ -1952,6 +1952,93 @@ const MIGRATIONS = [
       }
     }
   },
+  {
+    version: 40,
+    name: 'license_templates_add_details_and_documents',
+    up: async (client) => {
+      const templates = [
+        {
+          event_type: 'license_approval_requested',
+          name: 'License Approval Requested',
+          subject_template: '[APPROVAL REQUIRED] License: {{license_name}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#0f172a">License Approval Required</h2>
+<p style="margin:0 0 14px;color:#334155">A license request is in approval phase. This is a status update for the involved parties.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">License</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px;border:1px solid #e2e8f0">{{supplier_company}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Requester</td><td style="padding:8px;border:1px solid #e2e8f0">{{requester_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Expiry Date</td><td style="padding:8px;border:1px solid #e2e8f0">{{expiry_date}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Documents</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_documents_html}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{approval_url}}" style="background:#1d4ed8;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>
+<p style="margin:8px 0 0;color:#64748b;font-size:12px">If the button does not work, open this URL in your browser: {{approval_url}}</p>`,
+        },
+        {
+          event_type: 'license_approved',
+          name: 'License Approved',
+          subject_template: '[APPROVED] License: {{license_name}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#166534">License Approved</h2>
+<p style="margin:0 0 14px;color:#334155">The license has been approved and renewal can proceed.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">License</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px;border:1px solid #e2e8f0">{{supplier_company}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px;border:1px solid #e2e8f0">{{approval_status}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Approved By</td><td style="padding:8px;border:1px solid #e2e8f0">{{acted_by}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Approved At</td><td style="padding:8px;border:1px solid #e2e8f0">{{approved_at}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Documents</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_documents_html}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/licenses" style="background:#15803d;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>`,
+        },
+        {
+          event_type: 'license_rejected',
+          name: 'License Rejected',
+          subject_template: '[REJECTED] License: {{license_name}}',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#b91c1c">License Rejected</h2>
+<p style="margin:0 0 14px;color:#334155">The license request has been rejected.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">License</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px;border:1px solid #e2e8f0">{{supplier_company}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Status</td><td style="padding:8px;border:1px solid #e2e8f0">{{approval_status}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Rejected By</td><td style="padding:8px;border:1px solid #e2e8f0">{{acted_by}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Rejected At</td><td style="padding:8px;border:1px solid #e2e8f0">{{rejected_at}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Reason</td><td style="padding:8px;border:1px solid #e2e8f0">{{reason}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Documents</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_documents_html}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/licenses" style="background:#dc2626;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Approval Page</a></p>`,
+        },
+        {
+          event_type: 'license_expiry_reminder',
+          name: 'License Expiry Reminder',
+          subject_template: '[EXPIRY REMINDER] {{license_name}} expires in {{days_left}} days',
+          body_html_template: `<h2 style="margin:0 0 12px;color:#92400e">License Expiry Reminder</h2>
+<p style="margin:0 0 14px;color:#334155">This license is approaching its expiration date and is expected to enter approval flow soon.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">License</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Supplier</td><td style="padding:8px;border:1px solid #e2e8f0">{{supplier_company}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Days Left</td><td style="padding:8px;border:1px solid #e2e8f0">{{days_left}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Expiry Date</td><td style="padding:8px;border:1px solid #e2e8f0">{{expiry_date}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Documents</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_documents_html}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/licenses" style="background:#b45309;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Licenses</a></p>`,
+        },
+      ];
+
+      for (const t of templates) {
+        await client.query(
+          `INSERT INTO notification_templates (name, event_type, subject_template, body_html_template, is_active)
+           VALUES ($1, $2, $3, $4, true)
+           ON CONFLICT (event_type)
+           DO UPDATE SET
+             name = EXCLUDED.name,
+             subject_template = EXCLUDED.subject_template,
+             body_html_template = EXCLUDED.body_html_template,
+             is_active = true,
+             updated_at = NOW()`,
+          [t.name, t.event_type, t.subject_template, t.body_html_template]
+        );
+      }
+    }
+  },
 ];
 
 async function runMigrations(pool) {

@@ -43,6 +43,46 @@ function buildApproverEmailMatchClause(paramPos) {
   )`;
 }
 
+function normalizeLicenseDocumentsForEmail(value) {
+  const parsed = Array.isArray(value)
+    ? value
+    : (() => {
+        if (!value) return [];
+        if (typeof value === 'string') {
+          try {
+            const obj = JSON.parse(value);
+            return Array.isArray(obj) ? obj : [];
+          } catch {
+            return [];
+          }
+        }
+        return [];
+      })();
+
+  return parsed
+    .filter(d => d && typeof d === 'object')
+    .map(d => ({
+      name: String(d.name || '').trim(),
+      url: String(d.url || '').trim(),
+    }))
+    .filter(d => d.name || d.url);
+}
+
+function buildLicenseDocumentsHtml(documents) {
+  const docs = normalizeLicenseDocumentsForEmail(documents);
+  if (!docs.length) return '-';
+
+  const items = docs.map((doc) => {
+    const label = doc.name || doc.url;
+    if (doc.url) {
+      return `<li><a href="${doc.url}" style="color:#1d4ed8;text-decoration:underline">${label}</a></li>`;
+    }
+    return `<li>${label}</li>`;
+  });
+
+  return `<ul style="margin:0;padding-left:18px">${items.join('')}</ul>`;
+}
+
 function extractApproverIdentity(row) {
   if (!row || typeof row !== 'object') return { approverUserId: null, approverEmails: [] };
   const approverEmails = collectContactEmails(row.approver_contact);
@@ -193,11 +233,13 @@ function buildLicenseTemplateVars(license, extraVars = {}) {
     license_name: license.name,
     license_description: license.description || '-',
     supplier_company: license.supplier_company || '-',
+    requester_name: extraVars.requester_name || license.created_by_email || '-',
     approval_status: license.approval_status || '-',
     activation_date: license.activation_date ? String(license.activation_date).slice(0, 10) : '-',
     duration_months: license.duration_months || '-',
     expiry_date: license.expiry_date ? String(license.expiry_date).slice(0, 10) : '-',
     renewal_date: license.renewal_date ? String(license.renewal_date).slice(0, 10) : '-',
+    license_documents_html: buildLicenseDocumentsHtml(license.documents),
     reason: normalizedReason,
     rejection_reason: normalizedReason,
     ...extraVars,
@@ -206,10 +248,12 @@ function buildLicenseTemplateVars(license, extraVars = {}) {
 
 async function getLicenseNotificationContext(licenseId) {
   return getOne(
-        `SELECT l.id, l.name, l.description, l.approval_status, l.activation_date, l.duration_months, l.expiry_date, l.renewal_date,
+            `SELECT l.id, l.name, l.description, l.approval_status, l.activation_date, l.duration_months, l.expiry_date, l.renewal_date,
           l.rejection_reason,
+              l.documents,
             l.owner_contact, l.maintainer_contact, l.approver_contact,
             s.company AS supplier_company,
+              s.email AS supplier_email,
             uo.email AS owner_user_email,
             um.email AS maintainer_user_email,
             ua.email AS approver_user_email,
@@ -234,7 +278,7 @@ function collectLicenseRecipientEmails(license, includeApprover = false) {
 
   add(license.owner_user_email);
   add(license.maintainer_user_email);
-  add(license.created_by_email);
+  add(license.supplier_email);
   collectContactEmails(license.owner_contact).forEach(add);
   collectContactEmails(license.maintainer_contact).forEach(add);
   if (includeApprover) {
@@ -798,8 +842,16 @@ router.post('/:id/request-approval', requireAdmin, [
 
   const approverEmails = new Set(collectContactEmails(lic.approver_contact));
   if (lic.approver_user_email) approverEmails.add(String(lic.approver_user_email).trim().toLowerCase());
-  const recipients = [...approverEmails];
-  if (recipients.length === 0) return res.status(400).json({ error: 'No approver email configured' });
+  if (approverEmails.size === 0) return res.status(400).json({ error: 'No approver email configured' });
+
+  const context = await getLicenseNotificationContext(lic.id);
+  const recipients = context
+    ? collectLicenseRecipientEmails(context, true)
+    : [...new Set([
+        ...collectContactEmails(lic.approver_contact),
+        lic.approver_user_email,
+      ].filter(Boolean).map(v => String(v).trim().toLowerCase()))];
+  if (recipients.length === 0) return res.status(400).json({ error: 'No recipients configured for this license' });
 
   const hours = Number(req.body.expiry_hours || 72);
   const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
@@ -819,7 +871,6 @@ router.post('/:id/request-approval', requireAdmin, [
   const appBaseUrl = await getAppBaseUrl();
   const approvalUrl = `${appBaseUrl}/licenses/approval?token=${token}`;
 
-  const context = await getLicenseNotificationContext(lic.id);
   const vars = buildLicenseTemplateVars(context || { id: lic.id, name: lic.name }, {
     approval_url: approvalUrl,
     expires_at: expiresAt.toISOString(),

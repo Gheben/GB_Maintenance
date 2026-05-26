@@ -146,6 +146,7 @@ async function _checkReminders() {
         supplier_company: license.supplier_company || '-',
         activation_date: license.activation_date ? String(license.activation_date).slice(0, 10) : '-',
         expiry_date: String(license.expiry_date).slice(0, 10),
+        days_left: license.reminder_days || 30,
         reminder_days: license.reminder_days || 30,
       }, 'license', license.id);
 
