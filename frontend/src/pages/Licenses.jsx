@@ -1796,17 +1796,17 @@ export default function Licenses() {
                 <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 mr-1">License actions</span>
                 {licenseForm.approval_required && (
                   <>
-                    <button type="button" className="action-text-btn" onClick={() => openLicenseActionConfirm('request-approval', editingLicense)} title="Request approval email">Send approval</button>
+                    <button type="button" className="action-text-btn rounded-md border border-gray-300 bg-white px-2.5 py-1 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-700" onClick={() => openLicenseActionConfirm('request-approval', editingLicense)} title="Request approval email">Send approval</button>
                     <button type="button" className="action-icon-btn action-icon-btn-success" onClick={() => openLicenseActionConfirm('approve', editingLicense)} title="Approve"><CheckCircle2 size={14} /></button>
                     <button type="button" className="action-icon-btn action-icon-btn-warn" onClick={() => openLicenseActionConfirm('reject', editingLicense)} title="Reject"><XCircle size={14} /></button>
-                    {!!(licenseForm.approval_requested_at || editingLicense?.approval_requested_at) && (
-                      <span className="text-xs text-gray-500 ml-1">
-                        Last send: {formatDateTimeLabel(licenseForm.approval_requested_at || editingLicense?.approval_requested_at)}
-                      </span>
-                    )}
                   </>
                 )}
                 <button type="button" className="action-icon-btn action-icon-btn-danger" onClick={() => openLicenseActionConfirm('delete', editingLicense)} title="Delete"><Trash2 size={14} /></button>
+                {licenseForm.approval_required && !!(licenseForm.approval_requested_at || editingLicense?.approval_requested_at) && (
+                  <span className="text-xs text-gray-500 ml-1">
+                    Last send: {formatDateTimeLabel(licenseForm.approval_requested_at || editingLicense?.approval_requested_at)}
+                  </span>
+                )}
               </div>
             )}
 
