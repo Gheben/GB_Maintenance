@@ -12,6 +12,26 @@ router.use(requireAuth);
 const CRITICALITIES = ['critical','high','medium','low'];
 const STATUSES = ['operational','degraded','partial_outage','major_outage','under_maintenance'];
 
+function formatDateForPublicApi(value, { includeTime = false } = {}) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return new Intl.DateTimeFormat('it-IT', includeTime
+    ? {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }
+    : {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }
+  ).format(d);
+}
+
 function normalizeOwnerTargets(value) {
   if (!Array.isArray(value)) return [];
   const out = [];
@@ -114,7 +134,15 @@ router.get('/', async (req, res) => {
      ${where} ORDER BY s.system_name NULLS LAST, s.name LIMIT $${i++} OFFSET $${i}`,
     [...params, parseInt(limit), offset]
   );
-  res.json({ data: rows, total, page: parseInt(page), limit: parseInt(limit) });
+  res.json({
+    data: rows.map((row) => ({
+      ...row,
+      next_license_expiry: formatDateForPublicApi(row.next_license_expiry),
+    })),
+    total,
+    page: parseInt(page),
+    limit: parseInt(limit),
+  });
 });
 
 // ─── GET /api/services/:id ────────────────────────────────────────────────────
@@ -680,7 +708,10 @@ router.get('/:id/licenses', async (req, res) => {
      ORDER BY l.name`,
     [req.params.id]
   );
-  res.json(rows);
+  res.json(rows.map((row) => ({
+    ...row,
+    expiry_date: formatDateForPublicApi(row.expiry_date),
+  })));
 });
 
 // ─── PUT /api/services/:id/licenses ─────────────────────────────────────────

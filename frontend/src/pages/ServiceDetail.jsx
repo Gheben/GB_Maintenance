@@ -19,6 +19,44 @@ function approvalStatusMeta(status) {
   return { label: 'Pending', cls: 'bg-amber-100 text-amber-700' }
 }
 
+function parsePublicApiDate(value) {
+  if (!value) return null
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value
+
+  const text = String(value).trim()
+  if (!text) return null
+
+  const parsedNative = new Date(text)
+  if (!Number.isNaN(parsedNative.getTime())) return parsedNative
+
+  const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:,\s*(\d{2}):(\d{2}))?$/)
+  if (!m) return null
+
+  const day = Number(m[1])
+  const month = Number(m[2])
+  const year = Number(m[3])
+  const hour = m[4] ? Number(m[4]) : 0
+  const minute = m[5] ? Number(m[5]) : 0
+  const d = new Date(year, month - 1, day, hour, minute)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function formatDateOnlyLabel(value) {
+  if (!value) return ''
+
+  const text = String(value).trim()
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) return text
+
+  const d = parsePublicApiDate(value)
+  if (!d) return text
+
+  return d.toLocaleDateString('it-IT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
 function ProbeFavicon({ probeType, probeUrl }) {
   if (!probeUrl || !['http', 'https', 'tls'].includes(probeType)) return null
   let host = ''
@@ -718,7 +756,7 @@ export default function ServiceDetail() {
                       <div className="font-medium">{l.name}</div>
                       <div className="mt-1 flex items-center gap-2 text-xs">
                         <span className={`px-2 py-0.5 rounded-full ${approvalStatusMeta(l.approval_status).cls}`}>{approvalStatusMeta(l.approval_status).label}</span>
-                        {l.expiry_date && <span className="text-gray-500">Expiry: {String(l.expiry_date).slice(0, 10)}</span>}
+                        {l.expiry_date && <span className="text-gray-500">Expiry: {formatDateOnlyLabel(l.expiry_date)}</span>}
                       </div>
                     </div>
                     {canEdit && editMode && (
@@ -763,7 +801,7 @@ export default function ServiceDetail() {
                         <div className="text-sm font-medium">{l.name}</div>
                         <div className="mt-1 flex items-center gap-2 text-xs">
                           <span className={`px-2 py-0.5 rounded-full ${approvalStatusMeta(l.approval_status).cls}`}>{approvalStatusMeta(l.approval_status).label}</span>
-                          {l.expiry_date && <span className="text-gray-500">Expiry: {String(l.expiry_date).slice(0, 10)}</span>}
+                          {l.expiry_date && <span className="text-gray-500">Expiry: {formatDateOnlyLabel(l.expiry_date)}</span>}
                         </div>
                       </button>
                     ))}

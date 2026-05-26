@@ -14,10 +14,48 @@ import { useAuth } from '../contexts/AuthContext'
 const CATEGORIES = ['application','infrastructure','database','network','hardware','api','other']
 const CRITICALITIES = ['critical','high','medium','low']
 
+function parsePublicApiDate(value) {
+  if (!value) return null
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value
+
+  const text = String(value).trim()
+  if (!text) return null
+
+  const parsedNative = new Date(text)
+  if (!Number.isNaN(parsedNative.getTime())) return parsedNative
+
+  const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:,\s*(\d{2}):(\d{2}))?$/)
+  if (!m) return null
+
+  const day = Number(m[1])
+  const month = Number(m[2])
+  const year = Number(m[3])
+  const hour = m[4] ? Number(m[4]) : 0
+  const minute = m[5] ? Number(m[5]) : 0
+  const d = new Date(year, month - 1, day, hour, minute)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function formatDateOnlyLabel(value) {
+  if (!value) return ''
+
+  const text = String(value).trim()
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) return text
+
+  const d = parsePublicApiDate(value)
+  if (!d) return text
+
+  return d.toLocaleDateString('it-IT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
 function LicenseState({ row }) {
   const total = Number(row.license_count || 0)
   const expired = Number(row.expired_license_count || 0)
-  const next = row.next_license_expiry ? new Date(row.next_license_expiry) : null
+  const next = parsePublicApiDate(row.next_license_expiry)
 
   if (!total) return <span className="text-gray-400">—</span>
 
@@ -25,7 +63,7 @@ function LicenseState({ row }) {
   if (expired > 0) badge = <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Expired</span>
   if (next && !Number.isNaN(next.getTime())) {
     const days = Math.ceil((next.getTime() - Date.now()) / 86400000)
-    const date = next.toISOString().slice(0, 10)
+    const date = formatDateOnlyLabel(next)
     if (days <= 30) badge = <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Expiring {date}</span>
     else badge = <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Valid {date}</span>
   }
