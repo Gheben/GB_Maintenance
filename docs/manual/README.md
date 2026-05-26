@@ -2,9 +2,6 @@
 
 > Automatically generated screenshots and feature walkthrough
 
-Generated at: 2026-05-26T13:09:37.747Z
-Base URL: http://localhost:5173
-
 ## Quick Intro Guide
 
 Each section below highlights one key area of the platform with a desktop screenshot and a short functional description.
