@@ -5,21 +5,14 @@ import { Pagination } from '../components/Pagination'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
 import {
-  BadgeCheck,
   Building2,
   CheckCircle2,
-  CircleDot,
   Eye,
-  Image as ImageIcon,
-  LayoutList,
   Palette,
   Pencil,
   Plus,
   Save,
   Search,
-  ShieldCheck,
-  Sparkles,
-  Star,
   Trash2,
   Upload,
   UserRound,
@@ -32,30 +25,6 @@ import {
 } from 'lucide-react'
 import { QuickCreateUserModal } from '../components/QuickCreateModals'
 import { useAuth } from '../contexts/AuthContext'
-
-const SIDE_ICON_COMPONENTS = {
-  'check-circle': CheckCircle2,
-  'badge-check': BadgeCheck,
-  'shield-check': ShieldCheck,
-  'layout-list': LayoutList,
-  image: ImageIcon,
-  palette: Palette,
-  sparkles: Sparkles,
-  star: Star,
-  'circle-dot': CircleDot,
-}
-
-const SIDE_ICON_OPTIONS = [
-  { value: 'check-circle', label: 'Check Circle' },
-  { value: 'badge-check', label: 'Badge Check' },
-  { value: 'shield-check', label: 'Shield Check' },
-  { value: 'layout-list', label: 'List' },
-  { value: 'image', label: 'Image' },
-  { value: 'palette', label: 'Palette' },
-  { value: 'sparkles', label: 'Sparkles' },
-  { value: 'star', label: 'Star' },
-  { value: 'circle-dot', label: 'Circle Dot' },
-]
 
 const emptyLicenseForm = {
   name: '',
@@ -843,26 +812,16 @@ function ContactPicker({ label, placeholder, value, onChange, onSearch, loading,
   )
 }
 
-function TemplateVisualEditor({ templateConfig, setTemplateConfig, templateUploading, onUploadLogo, readOnly = false }) {
+function TemplateVisualEditor({ templateConfig, setTemplateConfig, readOnly = false }) {
   const accent = templateConfig.approval_page_primary_color || '#2563eb'
   const appName = templateConfig.app_name || 'GB Maintenance'
-  const logo = templateConfig.approval_page_logo_url || ''
+  const logo = templateConfig.app_brand_image_url || templateConfig.approval_page_logo_url || ''
   const initials = appName
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map(p => p[0]?.toUpperCase())
     .join('') || 'GB'
-  const rowsRaw = Number(templateConfig.approval_page_side_rows_count || 4)
-  const rowsCount = Number.isFinite(rowsRaw) ? Math.min(8, Math.max(1, Math.trunc(rowsRaw))) : 4
-  const sideRows = Array.from({ length: rowsCount }, (_, i) => {
-    const idx = i + 1
-    const textKey = `approval_page_side_point_${idx}`
-    const iconKey = `approval_page_side_icon_${idx}`
-    const iconName = String(templateConfig[iconKey] || 'check-circle')
-    const Icon = SIDE_ICON_COMPONENTS[iconName] || CheckCircle2
-    return { idx, textKey, iconKey, iconName, Icon }
-  })
   const footerPreview = String(templateConfig.approval_page_footer_text || 'Powered by {app_name}').replaceAll('{app_name}', appName)
 
   const setField = (key, value) => {
@@ -877,7 +836,7 @@ function TemplateVisualEditor({ templateConfig, setTemplateConfig, templateUploa
         background: `radial-gradient(circle at top left, ${accent}22, transparent 35%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)`,
       }}
     >
-      <div className="grid gap-4 lg:grid-cols-[1.12fr_0.88fr]">
+      <div>
         <section className="rounded-2xl border border-white/70 bg-white/90 shadow-md overflow-hidden">
           <div className="p-4 sm:p-5 border-b border-gray-100" style={{ background: `linear-gradient(135deg, ${accent}18, transparent 70%)` }}>
             <div className="flex gap-3 items-start">
@@ -887,15 +846,6 @@ function TemplateVisualEditor({ templateConfig, setTemplateConfig, templateUploa
                 ) : (
                   <div className="w-12 h-12 rounded-xl text-white font-bold flex items-center justify-center" style={{ backgroundColor: accent }}>
                     {initials}
-                  </div>
-                )}
-                {!readOnly && (
-                  <div className="mt-2 flex gap-1.5">
-                    <label className="text-[11px] px-2 py-1 rounded border border-gray-200 cursor-pointer hover:bg-gray-50">
-                      Upload
-                      <input type="file" accept="image/*" className="hidden" disabled={templateUploading} onChange={e => onUploadLogo(e.target.files?.[0])} />
-                    </label>
-                    {!!logo && <button type="button" className="text-[11px] px-2 py-1 rounded border border-red-200 text-red-700" onClick={() => setField('approval_page_logo_url', '')}>Remove</button>}
                   </div>
                 )}
               </div>
@@ -971,67 +921,16 @@ function TemplateVisualEditor({ templateConfig, setTemplateConfig, templateUploa
                 </div>
               </div>
             )}
+
+            <div className="pt-1">
+              {readOnly ? (
+                <div className="text-sm" style={{ color: accent }}>{templateConfig.approval_page_back_to_login_label || ''}</div>
+              ) : (
+                <input className="input h-9" value={templateConfig.approval_page_back_to_login_label || ''} onChange={e => setField('approval_page_back_to_login_label', e.target.value)} placeholder="Back to login label" />
+              )}
+            </div>
           </div>
         </section>
-
-        <aside className="rounded-2xl border border-white/70 bg-white/85 shadow-md p-4 sm:p-5 space-y-3">
-          {readOnly ? (
-            <div className="text-xs uppercase tracking-[0.2em] text-gray-500 font-semibold">{templateConfig.approval_page_side_kicker || ''}</div>
-          ) : (
-            <input className="input h-8 text-xs uppercase tracking-[0.2em]" value={templateConfig.approval_page_side_kicker || ''} onChange={e => setField('approval_page_side_kicker', e.target.value)} placeholder="Sidebar kicker" />
-          )}
-
-          {readOnly ? (
-            <h4 className="text-xl font-bold text-gray-900">{templateConfig.approval_page_side_title || ''}</h4>
-          ) : (
-            <input className="input h-10 text-base font-semibold" value={templateConfig.approval_page_side_title || ''} onChange={e => setField('approval_page_side_title', e.target.value)} placeholder="Sidebar title" />
-          )}
-
-          {readOnly ? (
-            <p className="text-sm text-gray-600">{templateConfig.approval_page_side_description || ''}</p>
-          ) : (
-            <textarea className="input min-h-[72px] text-sm" value={templateConfig.approval_page_side_description || ''} onChange={e => setField('approval_page_side_description', e.target.value)} placeholder="Sidebar description" />
-          )}
-
-          <div className="space-y-2">
-            {!readOnly && (
-              <div className="grid grid-cols-1 sm:grid-cols-[130px_1fr] gap-2">
-                <label className="text-xs text-gray-500 uppercase tracking-wide self-center">Sidebar rows</label>
-                <select className="input h-9" value={rowsCount} onChange={e => setField('approval_page_side_rows_count', Number(e.target.value))}>
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </div>
-            )}
-
-            {sideRows.map((row) => (
-              <div key={row.textKey} className="rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2 text-sm">
-                {readOnly ? (
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-white" style={{ backgroundColor: accent }}>
-                      <row.Icon size={14} />
-                    </span>
-                    <span>{templateConfig[row.textKey] || ''}</span>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_170px] gap-2">
-                    <input className="input h-8" value={templateConfig[row.textKey] || ''} onChange={e => setField(row.textKey, e.target.value)} placeholder={`Sidebar bullet ${row.idx}`} />
-                    <select className="input h-8" value={row.iconName} onChange={e => setField(row.iconKey, e.target.value)}>
-                      {SIDE_ICON_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="pt-1">
-            {readOnly ? (
-              <div className="text-sm" style={{ color: accent }}>{templateConfig.approval_page_back_to_login_label || ''}</div>
-            ) : (
-              <input className="input h-9" value={templateConfig.approval_page_back_to_login_label || ''} onChange={e => setField('approval_page_back_to_login_label', e.target.value)} placeholder="Back to login label" />
-            )}
-          </div>
-        </aside>
       </div>
 
       <div className="pt-3 text-center text-xs text-gray-500">
@@ -1099,7 +998,6 @@ export default function Licenses() {
   const [templateConfig, setTemplateConfig] = useState(templateDefaults)
   const [templateLoading, setTemplateLoading] = useState(false)
   const [templateSaving, setTemplateSaving] = useState(false)
-  const [templateUploading, setTemplateUploading] = useState(false)
   const [showTemplatePreview, setShowTemplatePreview] = useState(false)
   const [showQuickCreateUser, setShowQuickCreateUser] = useState(false)
   const [quickCreateContactTarget, setQuickCreateContactTarget] = useState('owner_contacts')
@@ -1143,7 +1041,8 @@ export default function Licenses() {
     settingsApi.getGeneral()
       .then(r => {
         const data = r.data || {}
-        setTemplateConfig({ ...templateDefaults, ...data })
+        const siteLogo = data.app_brand_image_url || ''
+        setTemplateConfig({ ...templateDefaults, ...data, approval_page_logo_url: siteLogo })
       })
       .catch(() => {
         setTemplateConfig(templateDefaults)
@@ -1673,20 +1572,6 @@ export default function Licenses() {
     }
   }
 
-  const uploadTemplateLogo = async (file) => {
-    if (!file) return
-    try {
-      setTemplateUploading(true)
-      const r = await uploadsApi.uploadLicenseTemplateLogo(file)
-      setTemplateConfig(prev => ({ ...prev, approval_page_logo_url: r.data?.url || '' }))
-      toast.success('Logo uploaded')
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Logo upload error')
-    } finally {
-      setTemplateUploading(false)
-    }
-  }
-
   const saveTemplate = async (e) => {
     e.preventDefault()
     try {
@@ -1905,7 +1790,7 @@ export default function Licenses() {
               ) : (
                 <form onSubmit={saveTemplate} className="space-y-6">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <p className="text-sm text-gray-500">Edit texts directly in the same visual position where they appear on the approval page.</p>
+                    <p className="text-sm text-gray-500">Edit texts directly in the same visual position where they appear on the approval page. The logo is inherited from site settings.</p>
                     <button type="button" className="btn-secondary" onClick={() => setShowTemplatePreview(true)}>
                       <Eye size={15} />Preview popup
                     </button>
@@ -1914,8 +1799,6 @@ export default function Licenses() {
                   <TemplateVisualEditor
                     templateConfig={templateConfig}
                     setTemplateConfig={setTemplateConfig}
-                    templateUploading={templateUploading}
-                    onUploadLogo={uploadTemplateLogo}
                   />
 
                   <div className="flex justify-end">
@@ -1935,8 +1818,6 @@ export default function Licenses() {
           <TemplateVisualEditor
             templateConfig={templateConfig}
             setTemplateConfig={setTemplateConfig}
-            templateUploading={false}
-            onUploadLogo={() => {}}
             readOnly
           />
         </Modal>

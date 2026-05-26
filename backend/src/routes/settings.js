@@ -118,7 +118,7 @@ router.get('/public-branding', async (req, res) => {
     app_brand_image_url: general.app_brand_image_url || defaults.app_brand_image_url,
     approval_page_title: general.approval_page_title || defaults.approval_page_title,
     approval_page_subtitle: general.approval_page_subtitle || defaults.approval_page_subtitle,
-    approval_page_logo_url: general.approval_page_logo_url || defaults.approval_page_logo_url,
+    approval_page_logo_url: general.app_brand_image_url || defaults.app_brand_image_url || '',
     approval_page_primary_color: general.approval_page_primary_color || defaults.approval_page_primary_color,
     approval_page_side_kicker: general.approval_page_side_kicker || defaults.approval_page_side_kicker,
     approval_page_side_title: general.approval_page_side_title || defaults.approval_page_side_title,

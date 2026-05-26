@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Layout } from '../components/Layout'
-import { notificationsApi, maintenanceApi, incidentsApi, blackoutApi } from '../api'
+import { notificationsApi, maintenanceApi, incidentsApi, blackoutApi, licensesApi } from '../api'
 import { useNotifications } from '../contexts/NotificationsContext'
 import { Pagination } from '../components/Pagination'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
@@ -107,6 +107,7 @@ export default function Notifications() {
     if (t === 'maintenance') return 'maintenance'
     if (t === 'incident') return 'incident'
     if (t === 'blackout' || t === 'blackout_period') return 'blackout'
+    if (t === 'license' || t === 'licenses') return 'license'
     return ''
   }
 
@@ -134,6 +135,9 @@ export default function Notifications() {
       } else if (refType === 'blackout') {
         const r = await blackoutApi.get(refId)
         setDetailData(r.data || null)
+      } else if (refType === 'license') {
+        const r = await licensesApi.get(refId)
+        setDetailData(r.data || null)
       }
     } catch (err) {
       setDetailError(err.response?.data?.error || 'Unable to load linked details')
@@ -148,6 +152,8 @@ export default function Notifications() {
       ? 'Incident detail'
       : detailType === 'blackout'
         ? 'Blackout detail'
+        : detailType === 'license'
+          ? 'License detail'
         : 'Notification detail'
 
   return (
@@ -227,6 +233,9 @@ export default function Notifications() {
               </tbody>
             </table>
             <div className="p-4"><Pagination page={logPage} limit={logLimit} total={logTotal} onChange={setLogPage} onLimitChange={setLogLimit} /></div>
+            <div className="px-4 pb-4 text-xs text-gray-500">
+              Notification log entries are automatically deleted after 30 days.
+            </div>
           </div>
         )}
       </div>

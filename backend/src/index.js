@@ -411,12 +411,34 @@ async function runAuditAutoPurge() {
   }
 }
 
+async function runNotificationLogAutoPurge() {
+  try {
+    const result = await query(
+      `DELETE FROM notification_log WHERE created_at < NOW() - INTERVAL '30 days'`
+    );
+
+    if (result.rowCount > 0) {
+      logger.info(`[Notify] Auto-purge removed ${result.rowCount} notification_log rows older than 30 days`);
+    }
+  } catch (err) {
+    logger.error(`[Notify] Auto-purge failed: ${err.message}`);
+  }
+}
+
 function scheduleAuditAutoPurge() {
   const every24hMs = 24 * 60 * 60 * 1000;
   setTimeout(() => {
     runAuditAutoPurge();
     setInterval(runAuditAutoPurge, every24hMs);
   }, 15000);
+}
+
+function scheduleNotificationLogAutoPurge() {
+  const every24hMs = 24 * 60 * 60 * 1000;
+  setTimeout(() => {
+    runNotificationLogAutoPurge();
+    setInterval(runNotificationLogAutoPurge, every24hMs);
+  }, 20000);
 }
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
@@ -432,6 +454,7 @@ async function bootstrap() {
   schedulerService.start();
   probeService.start();
   scheduleAuditAutoPurge();
+  scheduleNotificationLogAutoPurge();
 
   const PORT = process.env.PORT || 4680;
   server.listen(PORT, () => {
