@@ -78,6 +78,43 @@ function getCachedBranding() {
   }
 }
 
+function normalizeApprovalDocuments(value) {
+  const parsed = Array.isArray(value)
+    ? value
+    : (() => {
+        if (!value) return []
+        if (typeof value === 'string') {
+          try {
+            const obj = JSON.parse(value)
+            return Array.isArray(obj) ? obj : []
+          } catch {
+            return []
+          }
+        }
+        return []
+      })()
+
+  return parsed
+    .filter(item => item && typeof item === 'object')
+    .map(item => ({
+      name: String(item.name || '').trim(),
+      url: String(item.url || '').trim(),
+    }))
+    .filter(item => item.name || item.url)
+}
+
+function normalizeApprovalDocumentUrl(rawUrl, appUrl = '') {
+  const trimmed = String(rawUrl || '').trim()
+  if (!trimmed) return ''
+
+  const malformedMatch = trimmed.match(/^https?:\/\/\/+(.+)$/i)
+  const collapsed = malformedMatch ? `/${String(malformedMatch[1] || '').replace(/^\/+/, '')}` : trimmed
+
+  if (/^https?:\/\//i.test(collapsed)) return collapsed
+  if (/^\//.test(collapsed) && appUrl) return `${String(appUrl).replace(/\/$/, '')}${collapsed}`
+  return collapsed
+}
+
 export default function LicenseApproval() {
   const [searchParams] = useSearchParams()
   const token = useMemo(() => (searchParams.get('token') || '').trim(), [searchParams])
@@ -219,6 +256,7 @@ export default function LicenseApproval() {
   }).filter(item => String(item.text || '').trim().length > 0)
   const footerTextTemplate = branding.approval_page_footer_text || DEFAULT_BRANDING.approval_page_footer_text
   const footerText = String(footerTextTemplate).replaceAll('{app_name}', appName)
+  const docs = normalizeApprovalDocuments(info?.documents)
   const initials = appName
     .split(/\s+/)
     .filter(Boolean)
@@ -315,6 +353,29 @@ export default function LicenseApproval() {
                 <div className="rounded-2xl border border-gray-200 bg-white p-4">
                   <label className="block text-sm font-semibold mb-2 text-gray-800">{branding.approval_page_reject_reason_label || DEFAULT_BRANDING.approval_page_reject_reason_label}</label>
                   <textarea className="input min-h-[120px]" rows={4} value={reason} onChange={e => setReason(e.target.value)} placeholder={branding.approval_page_reject_reason_placeholder || DEFAULT_BRANDING.approval_page_reject_reason_placeholder} />
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                  <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Documents</div>
+                  {docs.length > 0 ? (
+                    <ul className="mt-2 list-disc pl-5 text-sm text-gray-800 space-y-1">
+                      {docs.map((doc, idx) => {
+                        const href = normalizeApprovalDocumentUrl(doc.url, branding.app_url)
+                        const label = doc.name || href || `Document ${idx + 1}`
+                        return (
+                          <li key={`${label}-${idx}`}>
+                            {href ? (
+                              <a href={href} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline break-all">{label}</a>
+                            ) : (
+                              <span>{label}</span>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm text-gray-500">No documents attached</p>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap gap-3">

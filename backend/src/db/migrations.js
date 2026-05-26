@@ -2076,6 +2076,22 @@ const MIGRATIONS = [
       );
     }
   },
+  {
+    version: 42,
+    name: 'approval_templates_force_documents_row',
+    up: async (client) => {
+      const docsRow = '<tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Documents</td><td style="padding:8px;border:1px solid #e2e8f0">{{license_documents_html}}</td></tr>';
+      await client.query(
+        `UPDATE notification_templates
+         SET body_html_template = replace(body_html_template, '</table>', $1 || E'\n</table>'),
+             updated_at = NOW()
+         WHERE event_type IN ('license_approval_requested', 'license_approval_requested_info')
+           AND POSITION('{{license_documents_html}}' IN COALESCE(body_html_template, '')) = 0
+           AND POSITION('</table>' IN COALESCE(body_html_template, '')) > 0`,
+        [docsRow]
+      );
+    }
+  },
 ];
 
 async function runMigrations(pool) {

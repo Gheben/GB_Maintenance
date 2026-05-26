@@ -72,14 +72,41 @@ function normalizeLicenseDocumentsForEmail(value) {
     .filter(d => d.name || d.url);
 }
 
-function buildLicenseDocumentsHtml(documents) {
+function normalizeDocumentUrlForEmail(rawUrl, appBaseUrl = '') {
+  const trimmed = String(rawUrl || '').trim();
+  if (!trimmed) return '';
+
+  // Fix malformed links like "http:///uploads/file.pdf".
+  const malformedMatch = trimmed.match(/^https?:\/\/\/+(.+)$/i);
+  const collapsed = malformedMatch ? `/${String(malformedMatch[1] || '').replace(/^\/+/, '')}` : trimmed;
+
+  const pathOnly = collapsed.match(/^\/?uploads\//i)
+    ? `/${collapsed.replace(/^\/+/, '')}`
+    : collapsed;
+
+  if (/^https?:\/\//i.test(pathOnly)) return pathOnly;
+  if (/^\//.test(pathOnly) && appBaseUrl) return `${appBaseUrl}${pathOnly}`;
+  return pathOnly;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildLicenseDocumentsHtml(documents, appBaseUrl = '') {
   const docs = normalizeLicenseDocumentsForEmail(documents);
   if (!docs.length) return '-';
 
   const items = docs.map((doc) => {
-    const label = doc.name || doc.url;
-    if (doc.url) {
-      return `<li><a href="${doc.url}" style="color:#1d4ed8;text-decoration:underline">${label}</a></li>`;
+    const normalizedUrl = normalizeDocumentUrlForEmail(doc.url, appBaseUrl);
+    const label = escapeHtml(doc.name || normalizedUrl || doc.url);
+    if (normalizedUrl) {
+      return `<li><a href="${escapeHtml(normalizedUrl)}" style="color:#1d4ed8;text-decoration:underline">${label}</a></li>`;
     }
     return `<li>${label}</li>`;
   });
@@ -185,6 +212,7 @@ async function getApprovalInfoByScope(scope, requestId) {
 
   return getOne(
     `SELECT l.id, l.name, l.description, l.approval_status, l.expiry_date, l.renewal_date,
+            l.documents,
             l.approval_token_expires_at AS expires_at,
             s.company AS supplier_company
      FROM licenses l
@@ -243,7 +271,7 @@ function buildLicenseTemplateVars(license, extraVars = {}) {
     duration_months: license.duration_months || '-',
     expiry_date: license.expiry_date ? String(license.expiry_date).slice(0, 10) : '-',
     renewal_date: license.renewal_date ? String(license.renewal_date).slice(0, 10) : '-',
-    license_documents_html: buildLicenseDocumentsHtml(license.documents),
+    license_documents_html: buildLicenseDocumentsHtml(license.documents, String(extraVars.app_url || '').trim()),
     reason: normalizedReason,
     rejection_reason: normalizedReason,
     ...extraVars,
@@ -325,10 +353,16 @@ async function notifyLicenseEvent(eventType, licenseId, extraVars = {}, includeA
   const toEmails = collectLicenseRecipientEmails(license, includeApprover);
   if (toEmails.length === 0) return;
 
+  const appBaseUrl = await getAppBaseUrl();
+  const mergedVars = {
+    app_url: appBaseUrl,
+    ...extraVars,
+  };
+
   await sendEmailNotification(
     eventType,
     toEmails,
-    buildLicenseTemplateVars(license, extraVars),
+    buildLicenseTemplateVars(license, mergedVars),
     'license',
     licenseId
   );
@@ -440,6 +474,7 @@ router.get('/approval/:token', [param('token').isString().isLength({ min: 20, ma
   const tokenHash = hashApprovalToken(req.params.token);
   const row = await getOne(
     `SELECT l.id, l.name, l.description, l.approval_status, l.expiry_date, l.renewal_date, l.approval_required,
+            l.documents,
             l.approval_token_expires_at, s.company AS supplier_company
      FROM licenses l
      LEFT JOIN suppliers s ON s.id=l.supplier_id
@@ -460,6 +495,7 @@ router.get('/approval/:token', [param('token').isString().isLength({ min: 20, ma
     approval_status: row.approval_status,
     expiry_date: row.expiry_date,
     renewal_date: row.renewal_date,
+    documents: row.documents,
     expires_at: row.approval_token_expires_at,
   });
 });
@@ -579,11 +615,20 @@ router.use(requireAuth);
 
 function normalizeDocuments(value) {
   if (!Array.isArray(value)) return [];
+
+  const malformedToPath = (input) => {
+    const trimmed = String(input || '').trim();
+    if (!trimmed) return '';
+    const malformedMatch = trimmed.match(/^https?:\/\/\/+(.+)$/i);
+    if (!malformedMatch) return trimmed;
+    return `/${String(malformedMatch[1] || '').replace(/^\/+/, '')}`;
+  };
+
   return value
     .filter(d => d && typeof d === 'object')
     .map(d => ({
       name: String(d.name || '').trim(),
-      url: String(d.url || '').trim(),
+      url: malformedToPath(d.url),
     }))
     .filter(d => d.name || d.url);
 }
@@ -962,6 +1007,7 @@ router.post('/:id/request-approval', requireAdmin, [
   )];
 
   const vars = buildLicenseTemplateVars(context || { id: lic.id, name: lic.name }, {
+    app_url: appBaseUrl,
     approval_url: approvalUrl,
     status_url: statusUrl,
     expires_at: expiresAt.toISOString(),
