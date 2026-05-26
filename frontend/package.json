@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "manual:setup": "playwright install chromium",
+    "manual:capture": "node scripts/manual/generate-manual.mjs --capture",
+    "manual:build": "node scripts/manual/generate-manual.mjs --build",
+    "manual:generate": "node scripts/manual/generate-manual.mjs --capture --build"
   },
   "dependencies": {
     "axios": "^1.7.2",
@@ -22,6 +26,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
+    "playwright": "^1.54.2",
     "postcss": "^8.4.39",
     "sharp": "^0.34.5",
     "tailwindcss": "^3.4.6",

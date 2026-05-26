@@ -293,6 +293,63 @@ To keep UI and notification content aligned, license approval/status endpoints r
 
 ---
 
+## 📚 Automated Product Manual (Real Screenshots)
+
+You can generate a feature manual with real UI screenshots automatically.
+
+### What is included
+
+- Scenario-based capture for key pages (Dashboard, Assets, Services, Maintenance, Incidents, Notifications, Reports, Licenses, Settings)
+- Desktop + mobile screenshots in one run
+- Automatic markdown manual build with embedded images
+- Optional masking of sensitive selectors
+
+### Files
+
+- Scenario config: `frontend/scripts/manual/scenarios.json`
+- Generator script: `frontend/scripts/manual/generate-manual.mjs`
+- Output manual: `docs/manual/README.md`
+- Output screenshots: `docs/manual/screenshots/*.png`
+
+### Setup
+
+```bash
+cd frontend
+npm install
+npm run manual:setup
+```
+
+### Generate manual
+
+With local dev stack running (`frontend` on `5173`, `backend` on `4680`):
+
+```bash
+cd frontend
+MANUAL_BASE_URL=http://localhost:5173 \
+MANUAL_USERNAME=sysadmin \
+MANUAL_PASSWORD=ChangeMe! \
+npm run manual:generate
+```
+
+On Windows PowerShell:
+
+```powershell
+cd frontend
+$env:MANUAL_BASE_URL = "http://localhost:5173"
+$env:MANUAL_USERNAME = "sysadmin"
+$env:MANUAL_PASSWORD = "ChangeMe!"
+npm run manual:generate
+```
+
+### Notes
+
+- To customize pages/actions, edit `scenarios.json`.
+- To run only screenshot capture: `npm run manual:capture`
+- To rebuild markdown from existing manifest/screenshots: `npm run manual:build`
+- If needed, set `MANUAL_HEADLESS=false` to see browser actions live.
+
+---
+
 ## 🗂️ Project Structure
 
 ```

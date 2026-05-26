@@ -1,0 +1,97 @@
+{
+  "title": "GB Maintenance - Product Manual",
+  "subtitle": "Automatically generated screenshots and feature walkthrough",
+  "viewports": [
+    {
+      "id": "desktop",
+      "label": "Desktop",
+      "width": 1440,
+      "height": 960
+    },
+    {
+      "id": "mobile",
+      "label": "Mobile",
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "maskSelectors": [
+    "[data-sensitive]",
+    "input[type='password']",
+    ".user-email",
+    ".token",
+    ".api-key"
+  ],
+  "scenarios": [
+    {
+      "id": "dashboard",
+      "title": "Dashboard Overview",
+      "description": "Main KPIs and system summary.",
+      "path": "/",
+      "waitFor": "main"
+    },
+    {
+      "id": "assets",
+      "title": "Assets Management",
+      "description": "Asset inventory list with search and filters.",
+      "path": "/assets",
+      "waitFor": "table"
+    },
+    {
+      "id": "services",
+      "title": "Services Management",
+      "description": "Service catalog and operational status.",
+      "path": "/services",
+      "waitFor": "table"
+    },
+    {
+      "id": "maintenance",
+      "title": "Maintenance Planning",
+      "description": "Planned windows and operations lifecycle.",
+      "path": "/maintenance",
+      "waitFor": "table"
+    },
+    {
+      "id": "incidents",
+      "title": "Incident Tracking",
+      "description": "Incident list, severity and updates.",
+      "path": "/incidents",
+      "waitFor": "table"
+    },
+    {
+      "id": "calendar",
+      "title": "Operations Calendar",
+      "description": "Calendar view of maintenance and events.",
+      "path": "/calendar",
+      "waitFor": "main"
+    },
+    {
+      "id": "notifications",
+      "title": "Notifications Center",
+      "description": "In-app notifications and delivery log.",
+      "path": "/notifications",
+      "waitFor": "main"
+    },
+    {
+      "id": "reports",
+      "title": "Reporting",
+      "description": "Charts and export-ready operational reports.",
+      "path": "/reports",
+      "waitFor": "main"
+    },
+    {
+      "id": "licenses",
+      "title": "Licenses Workflow",
+      "description": "License registry, approvals and supplier links.",
+      "path": "/licenses",
+      "waitFor": "main"
+    },
+    {
+      "id": "settings",
+      "title": "Settings",
+      "description": "Platform configuration and integrations.",
+      "path": "/settings",
+      "waitFor": "main"
+    }
+  ]
+}
