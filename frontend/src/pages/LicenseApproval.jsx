@@ -115,6 +115,53 @@ function normalizeApprovalDocumentUrl(rawUrl, appUrl = '') {
   return collapsed
 }
 
+function parsePublicApiDate(value) {
+  if (!value) return null
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value
+
+  const text = String(value).trim()
+  if (!text) return null
+
+  const parsedNative = new Date(text)
+  if (!Number.isNaN(parsedNative.getTime())) return parsedNative
+
+  const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:,\s*(\d{2}):(\d{2}))?$/)
+  if (!m) return null
+
+  const day = Number(m[1])
+  const month = Number(m[2])
+  const year = Number(m[3])
+  const hour = m[4] ? Number(m[4]) : 0
+  const minute = m[5] ? Number(m[5]) : 0
+  const d = new Date(year, month - 1, day, hour, minute)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function formatPublicApiDate(value, { includeTime = false } = {}) {
+  if (!value) return '—'
+
+  const text = String(value).trim()
+  if (/^\d{2}\/\d{2}\/\d{4}(?:,\s*\d{2}:\d{2})?$/.test(text)) return text
+
+  const d = parsePublicApiDate(value)
+  if (!d) return text || '—'
+
+  return d.toLocaleString('it-IT', includeTime
+    ? {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }
+    : {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }
+  )
+}
+
 export default function LicenseApproval() {
   const [searchParams] = useSearchParams()
   const token = useMemo(() => (searchParams.get('token') || '').trim(), [searchParams])
@@ -339,9 +386,9 @@ export default function LicenseApproval() {
                   {[
                     ['License', info.name || '—'],
                     ['Supplier', info.supplier_company || '—'],
-                    ['Expiry', info.expiry_date ? String(info.expiry_date).slice(0, 10) : '—'],
+                    ['Expiry', formatPublicApiDate(info.expiry_date)],
                     ['Status', info.approval_status || '—'],
-                    ['Link expires', info.expires_at ? new Date(info.expires_at).toLocaleString() : '—'],
+                    ['Link expires', formatPublicApiDate(info.expires_at, { includeTime: true })],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
                       <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">{label}</div>

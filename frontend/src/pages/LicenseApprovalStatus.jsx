@@ -31,6 +31,53 @@ function getCachedBranding() {
   }
 }
 
+function parsePublicApiDate(value) {
+  if (!value) return null
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value
+
+  const text = String(value).trim()
+  if (!text) return null
+
+  const parsedNative = new Date(text)
+  if (!Number.isNaN(parsedNative.getTime())) return parsedNative
+
+  const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:,\s*(\d{2}):(\d{2}))?$/)
+  if (!m) return null
+
+  const day = Number(m[1])
+  const month = Number(m[2])
+  const year = Number(m[3])
+  const hour = m[4] ? Number(m[4]) : 0
+  const minute = m[5] ? Number(m[5]) : 0
+  const d = new Date(year, month - 1, day, hour, minute)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function formatPublicApiDate(value, { includeTime = false } = {}) {
+  if (!value) return '—'
+
+  const text = String(value).trim()
+  if (/^\d{2}\/\d{2}\/\d{4}(?:,\s*\d{2}:\d{2})?$/.test(text)) return text
+
+  const d = parsePublicApiDate(value)
+  if (!d) return text || '—'
+
+  return d.toLocaleString('it-IT', includeTime
+    ? {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }
+    : {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }
+  )
+}
+
 export default function LicenseApprovalStatus() {
   const [searchParams] = useSearchParams()
   const token = useMemo(() => (searchParams.get('token') || '').trim(), [searchParams])
@@ -81,8 +128,8 @@ export default function LicenseApprovalStatus() {
   const logoUrl = String(branding.approval_page_logo_url || '').trim()
   const title = 'License Approval Status'
   const subtitle = 'Track the request status and approver coverage.'
-  const approvedDate = info?.approved_at ? new Date(info.approved_at) : null
-  const rejectedDate = info?.rejected_at ? new Date(info.rejected_at) : null
+  const approvedDate = parsePublicApiDate(info?.approved_at)
+  const rejectedDate = parsePublicApiDate(info?.rejected_at)
   const hasApprovedDate = approvedDate && !Number.isNaN(approvedDate.getTime())
   const hasRejectedDate = rejectedDate && !Number.isNaN(rejectedDate.getTime())
 
@@ -186,12 +233,12 @@ export default function LicenseApprovalStatus() {
                   </div>
                   <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
                     <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Requested At</div>
-                    <div className="mt-1 text-sm font-medium text-gray-900">{info.approval_requested_at ? new Date(info.approval_requested_at).toLocaleString() : '—'}</div>
+                    <div className="mt-1 text-sm font-medium text-gray-900">{formatPublicApiDate(info.approval_requested_at, { includeTime: true })}</div>
                   </div>
                   <div className="rounded-2xl border border-gray-200 bg-gray-50/80 px-4 py-3">
                     <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">Last Decision</div>
                     <div className="mt-1 text-sm font-medium text-gray-900">
-                      {latestDecisionStatus ? `${latestDecisionStatus === 'approved' ? 'Approved' : 'Rejected'} - ${latestDecisionDate ? latestDecisionDate.toLocaleString() : '—'}` : 'Pending'}
+                      {latestDecisionStatus ? `${latestDecisionStatus === 'approved' ? 'Approved' : 'Rejected'} - ${formatPublicApiDate(latestDecisionDate, { includeTime: true })}` : 'Pending'}
                     </div>
                   </div>
                 </div>

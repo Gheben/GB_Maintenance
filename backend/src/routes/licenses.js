@@ -400,6 +400,10 @@ function formatDateForEmail(value, { includeTime = false } = {}) {
   ).format(d);
 }
 
+function formatDateForPublicApi(value, { includeTime = false } = {}) {
+  return formatDateForEmail(value, { includeTime });
+}
+
 function buildLicenseTemplateVars(license, extraVars = {}) {
   const resolvedApprovalStatus =
     extraVars.approval_status !== undefined && extraVars.approval_status !== null
@@ -537,7 +541,12 @@ router.get('/approval/:token/requests', optionalAuth, [param('token').isString()
   const requests = await listPendingApprovalsByScope(scope);
   res.json({
     current_request_id: scope.sourceLicenseId,
-    requests,
+    requests: requests.map((row) => ({
+      ...row,
+      expiry_date: formatDateForPublicApi(row.expiry_date),
+      renewal_date: formatDateForPublicApi(row.renewal_date),
+      expires_at: formatDateForPublicApi(row.expires_at, { includeTime: true }),
+    })),
   });
 });
 
@@ -557,7 +566,12 @@ router.get('/approval/:token/request/:id', optionalAuth, [
   const row = await getApprovalInfoByScope(scope, req.params.id);
   if (!row) return res.status(404).json({ error: 'Approval request not found' });
 
-  res.json(row);
+  res.json({
+    ...row,
+    expiry_date: formatDateForPublicApi(row.expiry_date),
+    renewal_date: formatDateForPublicApi(row.renewal_date),
+    expires_at: formatDateForPublicApi(row.expires_at, { includeTime: true }),
+  });
 });
 
 router.post('/approval/:token/request/:id/approve', optionalAuth, [
@@ -660,10 +674,10 @@ router.get('/approval/:token', optionalAuth, [param('token').isString().isLength
     description: row.description,
     supplier_company: row.supplier_company,
     approval_status: row.approval_status,
-    expiry_date: row.expiry_date,
-    renewal_date: row.renewal_date,
+    expiry_date: formatDateForPublicApi(row.expiry_date),
+    renewal_date: formatDateForPublicApi(row.renewal_date),
     documents: row.documents,
-    expires_at: row.approval_token_expires_at,
+    expires_at: formatDateForPublicApi(row.approval_token_expires_at, { includeTime: true }),
   });
 });
 
@@ -708,15 +722,15 @@ router.get('/status/:token', [param('token').isString().isLength({ min: 20, max:
     description: row.description,
     supplier_company: row.supplier_company,
     approval_status: row.approval_status,
-    approval_requested_at: row.approval_requested_at,
-    approved_at: row.approved_at,
-    rejected_at: row.rejected_at,
+    approval_requested_at: formatDateForPublicApi(row.approval_requested_at, { includeTime: true }),
+    approved_at: formatDateForPublicApi(row.approved_at, { includeTime: true }),
+    rejected_at: formatDateForPublicApi(row.rejected_at, { includeTime: true }),
     rejection_reason: row.rejection_reason,
-    expiry_date: row.expiry_date,
-    renewal_date: row.renewal_date,
+    expiry_date: formatDateForPublicApi(row.expiry_date),
+    renewal_date: formatDateForPublicApi(row.renewal_date),
     approvers_notified: approversNotified,
     approver_emails: approverEmails,
-    status_link_expires_at: row.status_token_expires_at,
+    status_link_expires_at: formatDateForPublicApi(row.status_token_expires_at, { includeTime: true }),
   });
 });
 
