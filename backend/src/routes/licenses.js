@@ -117,17 +117,38 @@ function buildLicenseDocumentsHtml(documents, appBaseUrl = '') {
 function extractApproverIdentity(row) {
   if (!row || typeof row !== 'object') return { approverUserId: null, approverEmails: [] };
   const approverEmails = collectContactEmails(row.approver_contact);
+
+  const userLabel = String(
+    row.approver_user_display_name || row.approver_user_username || row.approver_user_email || ''
+  ).trim();
+
+  const contactItems = collectContactItems(row.approver_contact);
+  const contactName = String(
+    (contactItems.find(item => String(item?.name || item?.display_name || '').trim())?.name) ||
+    (contactItems.find(item => String(item?.name || item?.display_name || '').trim())?.display_name) ||
+    ''
+  ).trim();
+  const contactEmail = String(contactItems.find(item => String(item?.email || '').trim())?.email || '').trim();
+  const contactLabel = contactName || contactEmail;
+
+  const approverActorLabel = userLabel || contactLabel || approverEmails[0] || 'Approver';
+
   return {
     approverUserId: row.approver_user_id || null,
     approverEmails,
+    approverActorLabel,
   };
 }
 
 async function findApprovalScopeByTokenHash(tokenHash) {
   const row = await getOne(
-    `SELECT id, approver_user_id, approver_contact, approval_status, approval_required, approval_token_expires_at
-     FROM licenses
-     WHERE approval_token_hash=$1`,
+    `SELECT l.id, l.approver_user_id, l.approver_contact, l.approval_status, l.approval_required, l.approval_token_expires_at,
+            ua.display_name AS approver_user_display_name,
+            ua.username AS approver_user_username,
+            ua.email AS approver_user_email
+     FROM licenses l
+     LEFT JOIN users ua ON ua.id=l.approver_user_id
+     WHERE l.approval_token_hash=$1`,
     [tokenHash]
   );
   if (!row) return null;
@@ -146,6 +167,7 @@ async function findApprovalScopeByTokenHash(tokenHash) {
     sourceLicenseId: row.id,
     approverUserId: identity.approverUserId,
     approverEmails: identity.approverEmails,
+    approverActorLabel: identity.approverActorLabel,
   };
 }
 
@@ -426,7 +448,7 @@ router.post('/approval/:token/request/:id/approve', [
   );
 
   await notifyLicenseEvent('license_approved', req.params.id, {
-    acted_by: 'Approval Link',
+    acted_by: scope.approverActorLabel || 'Approver',
     approved_at: new Date().toISOString(),
   }, true).catch(() => {});
 
@@ -458,7 +480,7 @@ router.post('/approval/:token/request/:id/reject', [
   );
 
   await notifyLicenseEvent('license_rejected', req.params.id, {
-    acted_by: 'Approval Link',
+    acted_by: scope.approverActorLabel || 'Approver',
     rejected_at: new Date().toISOString(),
     reason: req.body.reason || '-',
     rejection_reason: req.body.reason || '-',
@@ -550,7 +572,14 @@ router.post('/approval/:token/approve', [param('token').isString().isLength({ mi
 
   const tokenHash = hashApprovalToken(req.params.token);
   const row = await getOne(
-    `SELECT id, approval_status, approval_token_expires_at FROM licenses WHERE approval_token_hash=$1`,
+    `SELECT l.id, l.approval_status, l.approval_token_expires_at,
+            l.approver_contact,
+            ua.display_name AS approver_user_display_name,
+            ua.username AS approver_user_username,
+            ua.email AS approver_user_email
+     FROM licenses l
+     LEFT JOIN users ua ON ua.id=l.approver_user_id
+     WHERE l.approval_token_hash=$1`,
     [tokenHash]
   );
   if (!row) return res.status(404).json({ error: 'Approval link not found' });
@@ -567,8 +596,10 @@ router.post('/approval/:token/approve', [param('token').isString().isLength({ mi
     [row.id]
   );
 
+  const approverIdentity = extractApproverIdentity(row);
+
   await notifyLicenseEvent('license_approved', row.id, {
-    acted_by: 'Approval Link',
+    acted_by: approverIdentity.approverActorLabel || 'Approver',
     approved_at: new Date().toISOString(),
   }).catch(() => {});
 
@@ -584,7 +615,14 @@ router.post('/approval/:token/reject', [
 
   const tokenHash = hashApprovalToken(req.params.token);
   const row = await getOne(
-    `SELECT id, approval_status, approval_token_expires_at FROM licenses WHERE approval_token_hash=$1`,
+    `SELECT l.id, l.approval_status, l.approval_token_expires_at,
+            l.approver_contact,
+            ua.display_name AS approver_user_display_name,
+            ua.username AS approver_user_username,
+            ua.email AS approver_user_email
+     FROM licenses l
+     LEFT JOIN users ua ON ua.id=l.approver_user_id
+     WHERE l.approval_token_hash=$1`,
     [tokenHash]
   );
   if (!row) return res.status(404).json({ error: 'Approval link not found' });
@@ -601,8 +639,10 @@ router.post('/approval/:token/reject', [
     [req.body.reason || null, row.id]
   );
 
+  const approverIdentity = extractApproverIdentity(row);
+
   await notifyLicenseEvent('license_rejected', row.id, {
-    acted_by: 'Approval Link',
+    acted_by: approverIdentity.approverActorLabel || 'Approver',
     rejected_at: new Date().toISOString(),
     reason: req.body.reason || '-',
     rejection_reason: req.body.reason || '-',
