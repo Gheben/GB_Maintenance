@@ -123,15 +123,22 @@ function extractApproverIdentity(row) {
   ).trim();
 
   const contactItems = collectContactItems(row.approver_contact);
+  const namedContact = contactItems.find(item => String(item?.name || item?.display_name || '').trim());
   const contactName = String(
-    (contactItems.find(item => String(item?.name || item?.display_name || '').trim())?.name) ||
-    (contactItems.find(item => String(item?.name || item?.display_name || '').trim())?.display_name) ||
+    namedContact?.name ||
+    namedContact?.display_name ||
     ''
   ).trim();
   const contactEmail = String(contactItems.find(item => String(item?.email || '').trim())?.email || '').trim();
   const contactLabel = contactName || contactEmail;
-  const primaryEmail = String(row.supplier_email || '').trim();
-  const company = String(row.supplier_company || '').trim();
+  const primaryEmail = String(row.approver_user_email || contactEmail || '').trim();
+  const company = String(
+    contactItems.find(item => String(item?.company || item?.company_name || item?.organization || item?.org || '').trim())?.company ||
+    contactItems.find(item => String(item?.company || item?.company_name || item?.organization || item?.org || '').trim())?.company_name ||
+    contactItems.find(item => String(item?.company || item?.company_name || item?.organization || item?.org || '').trim())?.organization ||
+    contactItems.find(item => String(item?.company || item?.company_name || item?.organization || item?.org || '').trim())?.org ||
+    ''
+  ).trim();
 
   const details = [];
   if (primaryEmail) details.push(primaryEmail);
