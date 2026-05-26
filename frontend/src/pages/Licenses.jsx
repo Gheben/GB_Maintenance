@@ -174,6 +174,13 @@ function approvalStatusMeta(status, approvalRequired = true) {
   return { label: 'Pending', cls: 'bg-amber-100 text-amber-700' }
 }
 
+function getEffectiveApprovalStatus(status, approvedAt, rejectedAt) {
+  const normalized = String(status || '').toLowerCase()
+  if (normalized === 'approved' || approvedAt) return 'approved'
+  if (normalized === 'rejected' || rejectedAt) return 'rejected'
+  return 'pending'
+}
+
 function formatDateTimeLabel(value) {
   if (!value) return ''
   const date = new Date(value)
@@ -1047,7 +1054,11 @@ export default function Licenses() {
 
   const loadLicenses = async () => {
     const r = await licensesApi.list({ page: licensesPage, limit: licensesLimit, q: licensesQ })
-    setLicenses(r.data?.data || [])
+    const rows = Array.isArray(r.data?.data) ? r.data.data : []
+    setLicenses(rows.map(row => ({
+      ...row,
+      approval_status: getEffectiveApprovalStatus(row.approval_status, row.approved_at, row.rejected_at),
+    })))
     setLicensesTotal(r.data?.total || 0)
   }
 
@@ -1108,11 +1119,23 @@ export default function Licenses() {
       .finally(() => setLoadingFormLookups(false))
   }, [showLicenseForm, formLookupsLoaded, loadingFormLookups])
 
-  const supplierOptions = useMemo(() => supplierLookup.map(s => ({ id: s.id, label: `${s.company} - ${s.first_name} ${s.last_name}` })), [supplierLookup])
+  const supplierOptions = useMemo(() => {
+    const base = supplierLookup.map(s => ({ id: s.id, label: `${s.company} - ${s.first_name} ${s.last_name}` }))
+    const selectedId = editingLicense?.supplier_id
+    const selectedName = editingLicense?.supplier_company || editingLicense?.supplier || ''
+    if (selectedId && selectedName && !base.some(s => s.id === selectedId)) {
+      return [{ id: selectedId, label: selectedName }, ...base]
+    }
+    return base
+  }, [supplierLookup, editingLicense])
   const selectedSupplierLabel = useMemo(() => {
     const found = supplierOptions.find(s => s.id === licenseForm.supplier_id)
-    return found?.label || 'No supplier selected'
-  }, [supplierOptions, licenseForm.supplier_id])
+    if (found?.label) return found.label
+    if (licenseForm.supplier_id && editingLicense?.supplier_id === licenseForm.supplier_id) {
+      return editingLicense?.supplier_company || editingLicense?.supplier || 'No supplier selected'
+    }
+    return 'No supplier selected'
+  }, [supplierOptions, licenseForm.supplier_id, editingLicense])
   const filteredSupplierOptions = useMemo(() => {
     const q = supplierPickerQ.trim().toLowerCase()
     if (!q) return supplierOptions
@@ -1146,7 +1169,7 @@ export default function Licenses() {
       setEditingLicense(d)
       setLicenses(prev => prev.map(item => item.id === d.id ? {
         ...item,
-        approval_status: d.approval_status,
+        approval_status: getEffectiveApprovalStatus(d.approval_status, d.approved_at, d.rejected_at),
         approval_requested_at: d.approval_requested_at,
         approved_at: d.approved_at,
         rejected_at: d.rejected_at,
@@ -1166,7 +1189,7 @@ export default function Licenses() {
         expiry_date: d.custom_expiry_date ? String(d.custom_expiry_date).slice(0, 10) : (d.expiry_date ? String(d.expiry_date).slice(0, 10) : ''),
         reminder_days: d.reminder_days || 30,
         approval_required: d.approval_required !== false,
-        approval_status: d.approval_status || 'pending',
+        approval_status: getEffectiveApprovalStatus(d.approval_status, d.approved_at, d.rejected_at),
         approval_requested_at: d.approval_requested_at || null,
         approved_at: d.approved_at || null,
         rejected_at: d.rejected_at || null,
@@ -1209,6 +1232,21 @@ export default function Licenses() {
     try {
       await licensesApi.approve(id)
       toast.success('License approved')
+      const nowIso = new Date().toISOString()
+      if (editingLicense?.id === id) {
+        setEditingLicense(prev => prev ? {
+          ...prev,
+          approval_status: 'approved',
+          approved_at: nowIso,
+          rejected_at: null,
+        } : prev)
+        setLicenseForm(prev => ({
+          ...prev,
+          approval_status: 'approved',
+          approved_at: nowIso,
+          rejected_at: null,
+        }))
+      }
       await loadLicenses()
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error')
@@ -1219,6 +1257,19 @@ export default function Licenses() {
     try {
       await licensesApi.reject(id, 'Rejected from license list')
       toast.success('License rejected')
+      const nowIso = new Date().toISOString()
+      if (editingLicense?.id === id) {
+        setEditingLicense(prev => prev ? {
+          ...prev,
+          approval_status: 'rejected',
+          rejected_at: nowIso,
+        } : prev)
+        setLicenseForm(prev => ({
+          ...prev,
+          approval_status: 'rejected',
+          rejected_at: nowIso,
+        }))
+      }
       await loadLicenses()
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error')
