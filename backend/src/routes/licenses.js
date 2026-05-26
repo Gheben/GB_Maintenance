@@ -261,6 +261,11 @@ async function getAppBaseUrl() {
   return (process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
 }
 
+async function getGeneralConfig() {
+  const row = await getOne("SELECT value FROM settings WHERE key='general_config'");
+  return row ? JSON.parse(row.value || '{}') : {};
+}
+
 function getContactEmail(contact) {
   const emails = collectContactEmails(contact);
   return emails.length > 0 ? emails[0] : null;
@@ -1048,6 +1053,7 @@ router.post('/:id/request-approval', requireAdmin, [
   const approvalRequestedAt = updated.rows?.[0]?.approval_requested_at || null;
 
   const appBaseUrl = await getAppBaseUrl();
+  const generalCfg = await getGeneralConfig();
   const approvalUrl = `${appBaseUrl}/licenses/approval?token=${token}`;
   const statusUrl = `${appBaseUrl}/licenses/approval-status?token=${statusToken}`;
 
@@ -1062,7 +1068,9 @@ router.post('/:id/request-approval', requireAdmin, [
   )];
 
   const requesterBase = String(req.user?.display_name || req.user?.username || req.user?.email || 'Requester').trim();
-  const requesterCompany = String(context?.supplier_company || '').trim();
+  const requesterCompany = String(
+    req.user?.company || req.user?.organization || req.user?.org || generalCfg?.app_name || ''
+  ).trim();
   const requesterName = requesterCompany ? `${requesterBase} (${requesterCompany})` : requesterBase;
 
   const vars = buildLicenseTemplateVars(context || { id: lic.id, name: lic.name }, {
