@@ -557,6 +557,7 @@ router.post('/approval/:token/request/:id/approve', optionalAuth, [
   );
 
   await notifyLicenseEvent('license_approved', req.params.id, {
+    approval_status: 'approved',
     acted_by: scope.approverActorLabel || 'Approver',
     approved_at: new Date().toISOString(),
   }, true).catch(() => {});
@@ -590,6 +591,7 @@ router.post('/approval/:token/request/:id/reject', optionalAuth, [
   );
 
   await notifyLicenseEvent('license_rejected', req.params.id, {
+    approval_status: 'rejected',
     acted_by: scope.approverActorLabel || 'Approver',
     rejected_at: new Date().toISOString(),
     reason: req.body.reason || '-',
@@ -729,6 +731,7 @@ router.post('/approval/:token/approve', optionalAuth, [param('token').isString()
   const approverIdentity = extractApproverIdentity(row);
 
   await notifyLicenseEvent('license_approved', row.id, {
+    approval_status: 'approved',
     acted_by: approverIdentity.approverActorLabel || 'Approver',
     approved_at: new Date().toISOString(),
   }).catch(() => {});
@@ -778,6 +781,7 @@ router.post('/approval/:token/reject', optionalAuth, [
   const approverIdentity = extractApproverIdentity(row);
 
   await notifyLicenseEvent('license_rejected', row.id, {
+    approval_status: 'rejected',
     acted_by: approverIdentity.approverActorLabel || 'Approver',
     rejected_at: new Date().toISOString(),
     reason: req.body.reason || '-',
@@ -1087,6 +1091,7 @@ router.post('/:id/approve', requireAdmin, [param('id').isUUID()], async (req, re
   );
 
   await notifyLicenseEvent('license_approved', req.params.id, {
+    approval_status: 'approved',
     acted_by: formatActorLabel(
       req.user?.display_name || req.user?.username || '',
       req.user?.email || '',
@@ -1113,6 +1118,7 @@ router.post('/:id/reject', requireAdmin, [
   );
 
   await notifyLicenseEvent('license_rejected', req.params.id, {
+    approval_status: 'rejected',
     acted_by: formatActorLabel(
       req.user?.display_name || req.user?.username || '',
       req.user?.email || '',
