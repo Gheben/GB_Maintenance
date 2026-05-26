@@ -130,8 +130,15 @@ function extractApproverIdentity(row) {
   ).trim();
   const contactEmail = String(contactItems.find(item => String(item?.email || '').trim())?.email || '').trim();
   const contactLabel = contactName || contactEmail;
+  const primaryEmail = String(row.approver_user_email || approverEmails[0] || '').trim();
+  const company = String(row.supplier_company || '').trim();
 
-  const approverActorLabel = userLabel || contactLabel || approverEmails[0] || 'Approver';
+  const details = [];
+  if (primaryEmail) details.push(primaryEmail);
+  if (company) details.push(company);
+
+  const actorBase = userLabel || contactLabel || primaryEmail || 'Approver';
+  const approverActorLabel = details.length > 0 ? `${actorBase} (${details.join(', ')})` : actorBase;
 
   return {
     approverUserId: row.approver_user_id || null,
@@ -145,9 +152,11 @@ async function findApprovalScopeByTokenHash(tokenHash) {
     `SELECT l.id, l.approver_user_id, l.approver_contact, l.approval_status, l.approval_required, l.approval_token_expires_at,
             ua.display_name AS approver_user_display_name,
             ua.username AS approver_user_username,
-            ua.email AS approver_user_email
+                 ua.email AS approver_user_email,
+                 s.company AS supplier_company
      FROM licenses l
      LEFT JOIN users ua ON ua.id=l.approver_user_id
+               LEFT JOIN suppliers s ON s.id=l.supplier_id
      WHERE l.approval_token_hash=$1`,
     [tokenHash]
   );
@@ -576,9 +585,11 @@ router.post('/approval/:token/approve', [param('token').isString().isLength({ mi
             l.approver_contact,
             ua.display_name AS approver_user_display_name,
             ua.username AS approver_user_username,
-            ua.email AS approver_user_email
+            ua.email AS approver_user_email,
+            s.company AS supplier_company
      FROM licenses l
      LEFT JOIN users ua ON ua.id=l.approver_user_id
+     LEFT JOIN suppliers s ON s.id=l.supplier_id
      WHERE l.approval_token_hash=$1`,
     [tokenHash]
   );
@@ -619,9 +630,11 @@ router.post('/approval/:token/reject', [
             l.approver_contact,
             ua.display_name AS approver_user_display_name,
             ua.username AS approver_user_username,
-            ua.email AS approver_user_email
+            ua.email AS approver_user_email,
+            s.company AS supplier_company
      FROM licenses l
      LEFT JOIN users ua ON ua.id=l.approver_user_id
+     LEFT JOIN suppliers s ON s.id=l.supplier_id
      WHERE l.approval_token_hash=$1`,
     [tokenHash]
   );
