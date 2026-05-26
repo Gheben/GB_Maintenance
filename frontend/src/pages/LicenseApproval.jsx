@@ -143,6 +143,16 @@ export default function LicenseApproval() {
       setSelectedRequestId(targetId)
       await loadInfoById(targetId)
     } catch (err) {
+      const status = Number(err?.response?.status || 0)
+      const errMsg = String(err?.response?.data?.error || '')
+      const alreadyProcessed = info && String(info.approval_status || '').toLowerCase() !== 'pending'
+      if (status === 404 && /approval link not found/i.test(errMsg) && alreadyProcessed) {
+        setError('')
+        setResult(prev => prev || 'Request already processed')
+        setLoading(false)
+        return
+      }
+
       try {
         // Backward compatibility for legacy single-request tokens.
         const fallback = await licensesApi.approvalInfo(token)
@@ -310,7 +320,7 @@ export default function LicenseApproval() {
                 <div className="flex flex-wrap gap-3">
                   <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-white font-medium shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60" style={{ backgroundColor: accent }} disabled={busy || String(info.approval_status || '').toLowerCase() !== 'pending'} onClick={approve}><CheckCircle2 size={18} />{branding.approval_page_approve_button_label || DEFAULT_BRANDING.approval_page_approve_button_label}</button>
                   <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-700 font-medium border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60" disabled={busy || String(info.approval_status || '').toLowerCase() !== 'pending'} onClick={reject}><XCircle size={18} />{branding.approval_page_reject_button_label || DEFAULT_BRANDING.approval_page_reject_button_label}</button>
-                  <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-600 font-medium border border-gray-200 bg-gray-50 hover:bg-gray-100 disabled:opacity-60" disabled={busy} onClick={load}><RefreshCw size={18} />{branding.approval_page_refresh_button_label || DEFAULT_BRANDING.approval_page_refresh_button_label}</button>
+                  <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-600 font-medium border border-gray-200 bg-gray-50 hover:bg-gray-100 disabled:opacity-60" disabled={busy || String(info.approval_status || '').toLowerCase() !== 'pending'} onClick={load}><RefreshCw size={18} />{branding.approval_page_refresh_button_label || DEFAULT_BRANDING.approval_page_refresh_button_label}</button>
                 </div>
               </div>
             )}

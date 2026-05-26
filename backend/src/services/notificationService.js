@@ -57,7 +57,7 @@ function buildEmailHtmlDocument({ appName, appUrl, subject, bodyHtml }) {
               </tr>
               <tr>
                 <td style="padding:14px 24px;background-color:#f8fafc;border-top:1px solid #e2e8f0;font-family:Segoe UI,Arial,sans-serif;font-size:12px;line-height:18px;color:#64748b;">
-                  This is an automated notification from ${safeAppName}.${safeAppUrl ? ` Open: <a href="${safeAppUrl}" style="color:#1d4ed8;text-decoration:underline;">${safeAppUrl}</a>` : ''}
+                  This is an automated notification from ${safeAppName}.
                 </td>
               </tr>
             </table>
