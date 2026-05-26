@@ -10,8 +10,6 @@ import { licensesApi, settingsApi } from '../api'
 
 const DEFAULT_BRANDING = {
   app_name: 'GB Maintenance',
-  approval_page_title: 'License Approval Status',
-  approval_page_subtitle: 'Track the request status and approver coverage.',
   approval_page_logo_url: '',
   approval_page_primary_color: '#2563eb',
   approval_page_footer_text: 'Powered by {app_name}',
@@ -79,8 +77,8 @@ export default function LicenseApprovalStatus() {
   const accent = branding.approval_page_primary_color || DEFAULT_BRANDING.approval_page_primary_color
   const appName = branding.app_name || DEFAULT_BRANDING.app_name
   const logoUrl = String(branding.approval_page_logo_url || '').trim()
-  const title = branding.approval_page_title || DEFAULT_BRANDING.approval_page_title
-  const subtitle = branding.approval_page_subtitle || DEFAULT_BRANDING.approval_page_subtitle
+  const title = 'License Approval Status'
+  const subtitle = 'Track the request status and approver coverage.'
   const status = String(info?.approval_status || '').toLowerCase()
   const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Pending'
   const statusCls = status === 'approved'
