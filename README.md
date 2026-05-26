@@ -24,7 +24,7 @@ Ideal for IT departments that need to track hardware, software licenses, service
 - 📄 **License Management** — Software licenses with expiry tracking, renewal dates, approval workflows, and email notifications
 - ✅ **Approval Workflow** — Token-based public approval page, fully brandable (logo, colors, texts) per-customer
 - 🏢 **Supplier Management** — Supplier registry with contact info, website (with favicon preview), and contract details (SLA, emergency contacts, availability, documents)
-- 🔔 **Notifications** — Configurable email templates for approval requests, approval and rejection events
+- 🔔 **Notifications** — Configurable email templates plus in-app notifications for license workflow actors (approval, rejection, expiry reminders)
 - 📊 **Probes** — Scheduled connectivity checks on assets/services with status history
 - 🔐 **Authentication** — Local users, LDAP/Active Directory, SSO (Authentik, NetScaler), SAML 2.0
 - 👥 **User Management** — `superadmin`, `admin`, `user` roles with per-section permissions
@@ -250,7 +250,9 @@ Software licenses with:
 - Expiry and renewal date tracking with configurable reminder days
 - Approval workflow (pending / approved / rejected)
 - Token-based public approval page (brandable per-customer)
-- Email notifications on request, approval, and rejection
+- Email notifications on request, approval, rejection, and expiry reminders
+- In-app notifications for internal actors involved in license flow (owner, maintainer, approver, requester)
+- Automatic in-app recipient match by email: if a supplier/contact email matches an existing active local/LDAP user account, that user receives the in-app notification
 - Linked assets and services
 
 ### Suppliers
@@ -281,6 +283,13 @@ http://localhost:4681/docs
 ```
 
 When accessed while already logged in, the Swagger UI is automatically authenticated. You can also paste a JWT token manually. API calls are collapsed by default; expand a section to view details and try requests.
+
+### License approval/status date format
+
+To keep UI and notification content aligned, license approval/status endpoints return formatted date strings:
+
+- Date only: `dd/MM/yyyy`
+- Date+time: `dd/MM/yyyy, HH:mm`
 
 ---
 

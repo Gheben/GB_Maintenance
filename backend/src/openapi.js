@@ -24,6 +24,15 @@ The token is valid for the duration configured in \`JWT_EXPIRES_IN\` (default **
 
 ---
 
+### Date format for license approval APIs
+
+For license approval/status endpoints, date fields are returned as **formatted strings** for UI/email consistency:
+
+- Date only: \`dd/MM/yyyy\`
+- Date+time: \`dd/MM/yyyy, HH:mm\`
+
+---
+
 ### Role hierarchy
 
 | Role | Level |
@@ -54,6 +63,7 @@ API keys are created from **Settings -> API Keys**.
     { name: 'Groups',        description: 'Local groups and LDAP mappings' },
     { name: 'Assets',        description: 'Company assets (servers, VMs, network services)' },
     { name: 'Services',      description: 'Application services' },
+    { name: 'Licenses',      description: 'License lifecycle, approval workflow, and public approval/status pages' },
     { name: 'Maintenance',   description: 'Scheduled and unscheduled maintenance windows' },
     { name: 'Incidents',     description: 'Incidents and status updates' },
     { name: 'Notifications', description: 'In-app notifications and logs' },
@@ -471,6 +481,85 @@ API keys are created from **Settings -> API Keys**.
     },
 
     // ─── MAINTENANCE ──────────────────────────────────────────────────────────
+    '/licenses': {
+      get: { tags: ['Licenses'], summary: 'License list (paginated) with formatted date fields',
+        parameters: [
+          { in: 'query', name: 'page', schema: { type: 'integer', default: 1 } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 25 } },
+          { in: 'query', name: 'q', schema: { type: 'string' } },
+        ],
+        responses: { 200: { description: 'Paginated licenses. Date fields are returned as dd/MM/yyyy or dd/MM/yyyy, HH:mm.' } },
+      },
+    },
+    '/licenses/{id}': {
+      get: { tags: ['Licenses'], summary: 'License details with linked assets/services and formatted date fields',
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: { 200: { description: 'License details' } },
+      },
+    },
+    '/licenses/{id}/request-approval': {
+      post: { tags: ['Licenses'], summary: 'Send approval request email + in-app notifications to internal actors',
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
+        requestBody: {
+          required: false,
+          content: { 'application/json': { schema: { type: 'object', properties: { expiry_hours: { type: 'integer', minimum: 1, maximum: 168 } } } } },
+        },
+        responses: {
+          200: { description: 'Approval request sent. Response dates are formatted string values.' },
+          400: { description: 'Validation/configuration error' },
+          404: { description: 'License not found' },
+        },
+      },
+    },
+    '/licenses/approval/{token}': {
+      get: { tags: ['Licenses'], summary: 'Public approval link details (formatted date fields)', security: [],
+        parameters: [{ in: 'path', name: 'token', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Approval request info' },
+          404: { description: 'Approval link not found' },
+          410: { description: 'Approval link expired' },
+        },
+      },
+    },
+    '/licenses/approval/{token}/requests': {
+      get: { tags: ['Licenses'], summary: 'Public approval list scoped by approver identity (formatted date fields)', security: [],
+        parameters: [{ in: 'path', name: 'token', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Pending requests for this approver scope' } },
+      },
+    },
+    '/licenses/approval/{token}/request/{id}': {
+      get: { tags: ['Licenses'], summary: 'Public approval request details by request id (formatted date fields)', security: [],
+        parameters: [
+          { in: 'path', name: 'token', required: true, schema: { type: 'string' } },
+          { in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
+        responses: { 200: { description: 'Approval request detail' } },
+      },
+    },
+    '/licenses/status/{token}': {
+      get: { tags: ['Licenses'], summary: 'Public approval status by status token (formatted date fields)', security: [],
+        parameters: [{ in: 'path', name: 'token', required: true, schema: { type: 'string' } }],
+        responses: {
+          200: { description: 'Approval status details (dates are formatted strings)' },
+          404: { description: 'Status link not found' },
+          410: { description: 'Status link expired' },
+        },
+      },
+    },
+    '/assets/{id}/licenses': {
+      get: { tags: ['Assets'], summary: 'Asset-license assignments with formatted license expiry date',
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: { 200: { description: 'License rows linked/available for the asset' } },
+      },
+    },
+    '/services/{id}/licenses': {
+      get: { tags: ['Services'], summary: 'Service-license assignments with formatted license expiry date',
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
+        responses: { 200: { description: 'License rows linked/available for the service' } },
+      },
+    },
+
+    // ─── MAINTENANCE ──────────────────────────────────────────────────────────
     '/maintenance': {
       get: { tags: ['Maintenance'], summary: 'Maintenance list',
         parameters: [
@@ -560,7 +649,7 @@ API keys are created from **Settings -> API Keys**.
 
     // ─── NOTIFICATIONS ────────────────────────────────────────────────────────
     '/notifications': {
-      get: { tags: ['Notifications'], summary: 'Current user in-app notifications',
+      get: { tags: ['Notifications'], summary: 'Current user in-app notifications (includes license workflow/expiry events for internal users)',
         parameters: [{ in: 'query', name: 'unread', schema: { type: 'boolean' } }],
         responses: { 200: { description: 'Notifications + unread_count' } },
       },
