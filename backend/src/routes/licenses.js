@@ -3,7 +3,7 @@ const { body, param, query: qv, validationResult } = require('express-validator'
 const { requireAuth, requireAdmin, optionalAuth } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const crypto = require('crypto');
-const { sendEmailNotification } = require('../services/notificationService');
+const { sendEmailNotification, sendInApp } = require('../services/notificationService');
 
 const router = Router();
 
@@ -442,6 +442,7 @@ async function getLicenseNotificationContext(licenseId) {
   return getOne(
             `SELECT l.id, l.name, l.description, l.approval_status, l.activation_date, l.duration_months, l.expiry_date, l.renewal_date,
           l.rejection_reason,
+            l.owner_user_id, l.maintainer_user_id, l.approver_user_id, l.created_by AS created_by_user_id,
               l.documents,
             l.owner_contact, l.maintainer_contact, l.approver_contact,
             s.company AS supplier_company,
@@ -480,6 +481,21 @@ function collectLicenseRecipientEmails(license, includeApprover = false) {
   return [...recipients];
 }
 
+function collectLicenseRecipientUserIds(license, includeApprover = false) {
+  const recipients = new Set();
+  const add = (value) => {
+    const id = String(value || '').trim();
+    if (id) recipients.add(id);
+  };
+
+  add(license.owner_user_id);
+  add(license.maintainer_user_id);
+  add(license.created_by_user_id);
+  if (includeApprover) add(license.approver_user_id);
+
+  return [...recipients];
+}
+
 function collectApproverRecipientEmails(license) {
   const recipients = new Set();
   const add = (value) => {
@@ -500,6 +516,7 @@ function collectStakeholderRecipientEmails(license) {
 
   add(license.owner_user_email);
   add(license.maintainer_user_email);
+  add(license.created_by_email);
   add(license.supplier_email);
   collectContactEmails(license.owner_contact).forEach(add);
   collectContactEmails(license.maintainer_contact).forEach(add);
@@ -507,11 +524,63 @@ function collectStakeholderRecipientEmails(license) {
   return [...recipients];
 }
 
+function collectApproverRecipientUserIds(license) {
+  const recipients = new Set();
+  const add = (value) => {
+    const id = String(value || '').trim();
+    if (id) recipients.add(id);
+  };
+
+  add(license.approver_user_id);
+  return [...recipients];
+}
+
+function collectStakeholderRecipientUserIds(license) {
+  const recipients = new Set();
+  const add = (value) => {
+    const id = String(value || '').trim();
+    if (id) recipients.add(id);
+  };
+
+  add(license.owner_user_id);
+  add(license.maintainer_user_id);
+  add(license.created_by_user_id);
+  return [...recipients];
+}
+
+function buildLicenseInAppPayload(eventType, license, vars = {}) {
+  const licenseName = String(license?.name || vars?.license_name || 'License').trim() || 'License';
+  const supplier = String(license?.supplier_company || vars?.supplier_company || '').trim();
+
+  const titleByEvent = {
+    license_approval_requested: `Approval required: ${licenseName}`,
+    license_approval_requested_info: `Approval started: ${licenseName}`,
+    license_approved: `License approved: ${licenseName}`,
+    license_rejected: `License rejected: ${licenseName}`,
+    license_expiry_reminder: `License expiring soon: ${licenseName}`,
+  };
+
+  const messageByEvent = {
+    license_approval_requested: `A decision is required for license ${licenseName}${supplier ? ` (${supplier})` : ''}.`,
+    license_approval_requested_info: `Approval workflow started for license ${licenseName}${supplier ? ` (${supplier})` : ''}.`,
+    license_approved: `License ${licenseName} has been approved${vars?.acted_by ? ` by ${vars.acted_by}` : ''}.`,
+    license_rejected: `License ${licenseName} has been rejected${vars?.acted_by ? ` by ${vars.acted_by}` : ''}.`,
+    license_expiry_reminder: `License ${licenseName} expires on ${vars?.expiry_date || '-'}.`,
+  };
+
+  return {
+    type: eventType,
+    title: titleByEvent[eventType] || `License update: ${licenseName}`,
+    message: messageByEvent[eventType] || `Status update for license ${licenseName}.`,
+  };
+}
+
 async function notifyLicenseEvent(eventType, licenseId, extraVars = {}, includeApprover = false) {
   const license = await getLicenseNotificationContext(licenseId);
   if (!license) return;
   const toEmails = collectLicenseRecipientEmails(license, includeApprover);
-  if (toEmails.length === 0) return;
+  const toUserIds = collectLicenseRecipientUserIds(license, includeApprover);
+  if (toEmails.length === 0 && toUserIds.length === 0) return;
 
   const appBaseUrl = await getAppBaseUrl();
   const mergedVars = {
@@ -519,13 +588,29 @@ async function notifyLicenseEvent(eventType, licenseId, extraVars = {}, includeA
     ...extraVars,
   };
 
-  await sendEmailNotification(
-    eventType,
-    toEmails,
-    buildLicenseTemplateVars(license, mergedVars),
-    'license',
-    licenseId
-  );
+  const templateVars = buildLicenseTemplateVars(license, mergedVars);
+  const inAppPayload = buildLicenseInAppPayload(eventType, license, templateVars);
+
+  const tasks = [];
+  if (toEmails.length > 0) {
+    tasks.push(
+      sendEmailNotification(
+        eventType,
+        toEmails,
+        templateVars,
+        'license',
+        licenseId
+      )
+    );
+  }
+  if (toUserIds.length > 0) {
+    tasks.push(Promise.all(
+      toUserIds.map((uid) =>
+        sendInApp(uid, inAppPayload.type, inAppPayload.title, inAppPayload.message, 'license', licenseId)
+      )
+    ));
+  }
+  await Promise.allSettled(tasks);
 }
 
 router.get('/approval/:token/requests', optionalAuth, [param('token').isString().isLength({ min: 20, max: 300 })], async (req, res) => {
@@ -1259,12 +1344,21 @@ router.post('/:id/request-approval', requireAdmin, [
 
   const approverRecipients = context ? collectApproverRecipientEmails(context) : recipients;
   const stakeholderRecipients = context ? collectStakeholderRecipientEmails(context) : [];
+  const approverUserIds = context ? collectApproverRecipientUserIds(context) : [];
+  const stakeholderUserIds = context ? collectStakeholderRecipientUserIds(context) : [];
   const normalizedApprovers = [...new Set(approverRecipients.map(v => String(v || '').trim().toLowerCase()).filter(Boolean))];
   const normalizedStakeholders = [...new Set(
     stakeholderRecipients
       .map(v => String(v || '').trim().toLowerCase())
       .filter(Boolean)
       .filter(v => !normalizedApprovers.includes(v))
+  )];
+  const normalizedApproverUserIds = [...new Set(approverUserIds.map(v => String(v || '').trim()).filter(Boolean))];
+  const normalizedStakeholderUserIds = [...new Set(
+    stakeholderUserIds
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+      .filter(v => !normalizedApproverUserIds.includes(v))
   )];
 
   const requesterBase = String(req.user?.display_name || req.user?.username || req.user?.email || 'Requester').trim();
@@ -1296,6 +1390,26 @@ router.post('/:id/request-approval', requireAdmin, [
   }
   if (normalizedStakeholders.length > 0) {
     await sendEmailNotification('license_approval_requested_info', normalizedStakeholders, vars, 'license', lic.id);
+  }
+  const inAppTasks = [];
+  const approverInApp = buildLicenseInAppPayload('license_approval_requested', context || { name: lic.name }, vars);
+  const stakeholderInApp = buildLicenseInAppPayload('license_approval_requested_info', context || { name: lic.name }, vars);
+  if (normalizedApproverUserIds.length > 0) {
+    inAppTasks.push(Promise.all(
+      normalizedApproverUserIds.map((uid) =>
+        sendInApp(uid, approverInApp.type, approverInApp.title, approverInApp.message, 'license', lic.id)
+      )
+    ));
+  }
+  if (normalizedStakeholderUserIds.length > 0) {
+    inAppTasks.push(Promise.all(
+      normalizedStakeholderUserIds.map((uid) =>
+        sendInApp(uid, stakeholderInApp.type, stakeholderInApp.title, stakeholderInApp.message, 'license', lic.id)
+      )
+    ));
+  }
+  if (inAppTasks.length > 0) {
+    await Promise.allSettled(inAppTasks);
   }
 
   res.json({

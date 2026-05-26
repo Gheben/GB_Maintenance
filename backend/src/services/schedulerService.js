@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { query, getMany, getOne } = require('../db/database');
-const { notifyMaintenance, sendEmailNotification } = require('./notificationService');
+const { notifyMaintenance, sendEmailNotification, sendInApp } = require('./notificationService');
 const logger = require('../utils/logger');
 const wsService = require('./wsService');
 
@@ -119,8 +119,9 @@ async function _checkReminders() {
     }
 
     const expiringLicenses = await getMany(
-      `SELECT l.id, l.name, l.expiry_date, l.reminder_days, l.owner_contact,
-              uo.email AS owner_user_email, s.company AS supplier_company
+          `SELECT l.id, l.name, l.expiry_date, l.reminder_days, l.owner_contact,
+            l.owner_user_id, l.maintainer_user_id, l.approver_user_id, l.created_by AS created_by_user_id,
+            uo.email AS owner_user_email, s.company AS supplier_company
        FROM licenses l
        LEFT JOIN users uo ON uo.id=l.owner_user_id
        LEFT JOIN suppliers s ON s.id=l.supplier_id
@@ -160,6 +161,29 @@ async function _checkReminders() {
         days_left: license.reminder_days || 30,
         reminder_days: license.reminder_days || 30,
       }, 'license', license.id);
+
+      const inAppUserIds = [...new Set([
+        license.owner_user_id,
+        license.maintainer_user_id,
+        license.approver_user_id,
+        license.created_by_user_id,
+      ].map(v => String(v || '').trim()).filter(Boolean))];
+
+      if (inAppUserIds.length > 0) {
+        const expiryLabel = formatDateForEmail(license.expiry_date);
+        await Promise.allSettled(
+          inAppUserIds.map((uid) =>
+            sendInApp(
+              uid,
+              'license_expiry_reminder',
+              `License expiring soon: ${license.name}`,
+              `License ${license.name} expires on ${expiryLabel}.`,
+              'license',
+              license.id
+            )
+          )
+        );
+      }
 
       logger.info(`[Scheduler] Sent expiry reminder for license ${license.id}`);
     }
