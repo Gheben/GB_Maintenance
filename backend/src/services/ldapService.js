@@ -693,10 +693,50 @@ module.exports = {
   saveLdapSettings,
   authenticateUser,
   testLdapConnection,
+  findUserAvatarFromLdap,
   searchUsers,
   searchGroups,
   countUsersInGroups,
 };
+
+async function findUserAvatarFromLdap({ username, email, upn } = {}) {
+  const cfg = await getLdapSettings();
+  if (!cfg || !cfg.enabled || !ldap) return null;
+
+  const searchBase = cfg.search_base || cfg.base_dn;
+  if (!searchBase) return null;
+
+  const normalizedUsername = _normalizeUsernameInput(username || '');
+  const normalizedEmail = String(email || '').trim();
+  const normalizedUpn = String(upn || '').trim();
+
+  const candidates = [];
+  if (normalizedUsername) candidates.push(`(sAMAccountName=${_escapeLdap(normalizedUsername)})`);
+  if (normalizedEmail) candidates.push(`(mail=${_escapeLdap(normalizedEmail)})`);
+  if (normalizedUpn) candidates.push(`(userPrincipalName=${_escapeLdap(normalizedUpn)})`);
+  if (candidates.length === 0) return null;
+
+  const filter = `(&(objectClass=user)(|${candidates.join('')}))`;
+  const client = _createClient(cfg);
+  try {
+    await _bind(client, _bindPrincipal(cfg), _bindPassword(cfg));
+    const entries = await _search(client, searchBase, {
+      filter,
+      scope: 'sub',
+      attributes: ['thumbnailPhoto'],
+      sizeLimit: 1,
+    });
+
+    const entry = Array.isArray(entries) ? entries.find(Boolean) : null;
+    if (!entry) return null;
+    return normalizeThumbnailPhotoDataUrl(entry.thumbnailPhoto);
+  } catch (err) {
+    logger.warn(`LDAP avatar lookup failed: ${err.message}`);
+    return null;
+  } finally {
+    client.destroy();
+  }
+}
 
 async function searchUsers(q) {
   const cfg = await getLdapSettings();

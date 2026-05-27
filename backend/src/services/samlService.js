@@ -4,6 +4,7 @@ try { nodeSaml = require('@node-saml/node-saml'); } catch { nodeSaml = null; }
 const { query, getOne } = require('../db/database');
 const logger = require('../utils/logger');
 const { ROLE_DEFAULTS } = require('./authService');
+const ldapService = require('./ldapService');
 
 const SETTINGS_KEY = 'saml_config';
 
@@ -90,21 +91,36 @@ async function validateCallback(req) {
   const display  = (displayAttr && profile[displayAttr]) || profile['http://schemas.microsoft.com/identity/claims/displayname'] || username;
   const role     = cfg.default_role || 'viewer';
   const perms    = JSON.stringify(ROLE_DEFAULTS[role] || {});
+  const avatarPhotoDataUrl = await ldapService.findUserAvatarFromLdap({
+    username,
+    email,
+    upn: profile.userPrincipalName || profile['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn'] || null,
+  }).catch((err) => {
+    logger.warn(`SAML LDAP avatar sync failed: ${err.message}`);
+    return null;
+  });
 
   const existing = await getOne("SELECT id FROM users WHERE username=$1 AND auth_type='saml'", [username]);
   if (existing) {
     await query(
-      `UPDATE users SET display_name=$1, email=$2, last_login_at=NOW(), updated_at=NOW(), is_active=true WHERE id=$3`,
-      [display, email, existing.id]
+      `UPDATE users
+       SET display_name=$1,
+           email=$2,
+           avatar_photo_data_url=COALESCE($3, avatar_photo_data_url),
+           last_login_at=NOW(),
+           updated_at=NOW(),
+           is_active=true
+       WHERE id=$4`,
+      [display, email, avatarPhotoDataUrl, existing.id]
     );
     return getOne('SELECT * FROM users WHERE id=$1', [existing.id]);
   } else {
     const colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6'];
     const color = colors[Math.floor(Math.random() * colors.length)];
     const result = await query(
-      `INSERT INTO users (username, display_name, email, role, auth_type, permissions, avatar_color, last_login_at)
-       VALUES ($1, $2, $3, $4, 'saml', $5, $6, NOW()) RETURNING id`,
-      [username, display, email, role, perms, color]
+      `INSERT INTO users (username, display_name, email, role, auth_type, permissions, avatar_color, avatar_photo_data_url, last_login_at)
+       VALUES ($1, $2, $3, $4, 'saml', $5, $6, $7, NOW()) RETURNING id`,
+      [username, display, email, role, perms, color, avatarPhotoDataUrl]
     );
     return getOne('SELECT * FROM users WHERE id=$1', [result.rows[0].id]);
   }
