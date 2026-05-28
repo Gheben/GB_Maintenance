@@ -56,10 +56,31 @@ const NAV = [
   { href: '/docs/', icon: BookOpen, label: 'API Docs', perm: 'apikeys' },
 ]
 
+function getUserInitials(user) {
+  const display = String(user?.display_name || '').trim()
+  const username = String(user?.username || '').trim()
+  const base = display || username
+  if (!base) return 'U'
+
+  const words = base.split(/\s+/).filter(Boolean)
+  if (words.length >= 2) {
+    return `${words[0][0] || ''}${words[1][0] || ''}`.toUpperCase()
+  }
+
+  const single = words[0] || base
+  const parts = single.split(/[._-]+/).filter(Boolean)
+  if (parts.length >= 2) {
+    return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase()
+  }
+
+  return single.slice(0, 2).toUpperCase()
+}
+
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const { user, logout, hasPermission } = useAuth()
   const navigate = useNavigate()
   const [branding, setBranding] = useState(() => brandingMemoryCache || getCachedBranding() || DEFAULT_BRANDING)
+  const [avatarLoadError, setAvatarLoadError] = useState(false)
 
   const appBase = String(import.meta.env.BASE_URL || '/')
   const normalizedBase = appBase.endsWith('/') ? appBase : `${appBase}/`
@@ -126,6 +147,11 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const cl = collapsed && isDesktop
   const appName = branding.app_name || 'GB Maintenance'
   const brandImage = String(branding.app_brand_image_url || '').trim()
+  const userInitials = getUserInitials(user)
+
+  useEffect(() => {
+    setAvatarLoadError(false)
+  }, [user?.id, user?.avatar_photo_data_url])
 
   const handleLogout = async () => { await logout(); navigate('/login') }
 
@@ -234,29 +260,45 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
 
         {/* User footer */}
         <div className={`${cl ? 'px-1' : 'px-3'} py-2 border-t border-gray-700 space-y-1`}>
-          {user && cl && user.avatar_photo_data_url && (
+          {user && cl && (
             <div className="flex justify-center py-1">
-              <img
-                src={user.avatar_photo_data_url}
-                alt={user.display_name || user.username}
-                className="w-8 h-8 rounded-full object-cover border border-gray-700"
-                loading="lazy"
-                title={user.display_name || user.username}
-                onError={(e) => { e.currentTarget.style.display = 'none' }}
-              />
+              {!avatarLoadError && user.avatar_photo_data_url ? (
+                <img
+                  src={user.avatar_photo_data_url}
+                  alt={user.display_name || user.username}
+                  className="w-8 h-8 rounded-full object-cover border border-gray-700"
+                  loading="lazy"
+                  title={user.display_name || user.username}
+                  onError={() => setAvatarLoadError(true)}
+                />
+              ) : (
+                <div
+                  className="w-8 h-8 rounded-full border border-gray-700 bg-gray-800 text-gray-200 text-xs font-semibold flex items-center justify-center"
+                  title={user.display_name || user.username}
+                >
+                  {userInitials}
+                </div>
+              )}
             </div>
           )}
           {user && !cl && (
             <div className="px-3 py-1.5 min-w-0 flex items-center gap-2">
-              {user.avatar_photo_data_url ? (
+              {!avatarLoadError && user.avatar_photo_data_url ? (
                 <img
                   src={user.avatar_photo_data_url}
                   alt={user.display_name || user.username}
                   className="w-7 h-7 rounded-full object-cover border border-gray-700 flex-shrink-0"
                   loading="lazy"
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  onError={() => setAvatarLoadError(true)}
                 />
-              ) : null}
+              ) : (
+                <div
+                  className="w-7 h-7 rounded-full border border-gray-700 bg-gray-800 text-gray-200 text-[11px] font-semibold flex items-center justify-center flex-shrink-0"
+                  title={user.display_name || user.username}
+                >
+                  {userInitials}
+                </div>
+              )}
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-200 truncate leading-tight"
                   title={user.display_name || user.username}>
