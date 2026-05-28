@@ -148,6 +148,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const appName = branding.app_name || 'GB Maintenance'
   const brandImage = String(branding.app_brand_image_url || '').trim()
   const userInitials = getUserInitials(user)
+  const showPhotoInCollapsedSidebar = String(user?.auth_type || '').toLowerCase() !== 'local'
 
   useEffect(() => {
     setAvatarLoadError(false)
@@ -262,7 +263,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
         <div className={`${cl ? 'px-1' : 'px-3'} py-2 border-t border-gray-700 space-y-1`}>
           {user && cl && (
             <div className="flex justify-center py-1">
-              {!avatarLoadError && user.avatar_photo_data_url ? (
+              {showPhotoInCollapsedSidebar && !avatarLoadError && user.avatar_photo_data_url ? (
                 <img
                   src={user.avatar_photo_data_url}
                   alt={user.display_name || user.username}
