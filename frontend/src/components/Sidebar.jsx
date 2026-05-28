@@ -234,6 +234,18 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
 
         {/* User footer */}
         <div className={`${cl ? 'px-1' : 'px-3'} py-2 border-t border-gray-700 space-y-1`}>
+          {user && cl && user.avatar_photo_data_url && (
+            <div className="flex justify-center py-1">
+              <img
+                src={user.avatar_photo_data_url}
+                alt={user.display_name || user.username}
+                className="w-8 h-8 rounded-full object-cover border border-gray-700"
+                loading="lazy"
+                title={user.display_name || user.username}
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
+              />
+            </div>
+          )}
           {user && !cl && (
             <div className="px-3 py-1.5 min-w-0 flex items-center gap-2">
               {user.avatar_photo_data_url ? (
