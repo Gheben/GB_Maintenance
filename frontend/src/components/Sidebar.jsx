@@ -156,6 +156,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
   const appName = branding.app_name || 'GB Maintenance'
   const brandImage = String(branding.app_brand_image_url || '').trim()
   const userInitials = getUserInitials(user)
+  const isLocalUser = String(user?.auth_type || '').toLowerCase() === 'local'
   const showPhotoInCollapsedSidebar = String(user?.auth_type || '').toLowerCase() !== 'local'
 
   useEffect(() => {
@@ -300,14 +301,14 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
                   loading="lazy"
                   onError={() => setAvatarLoadError(true)}
                 />
-              ) : (
+              ) : !isLocalUser ? (
                 <div
                   className="w-7 h-7 rounded-full border border-gray-700 bg-gray-800 text-gray-200 text-[11px] font-semibold flex items-center justify-center flex-shrink-0"
                   title={user.display_name || user.username}
                 >
                   {userInitials}
                 </div>
-              )}
+              ) : null}
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-200 truncate leading-tight"
                   title={user.display_name || user.username}>
