@@ -62,12 +62,20 @@ function getUserInitials(user) {
   const base = display || username
   if (!base) return 'U'
 
-  const words = base.split(/\s+/).filter(Boolean)
+  const cleanWord = (word) => String(word || '')
+    .replace(/^[^A-Za-zÀ-ÖØ-öø-ÿ]+/, '')
+    .replace(/[^A-Za-zÀ-ÖØ-öø-ÿ0-9]+$/, '')
+
+  const words = base
+    .split(/\s+/)
+    .map(cleanWord)
+    .filter((w) => /^[A-Za-zÀ-ÖØ-öø-ÿ]/.test(w))
+
   if (words.length >= 2) {
     return `${words[0][0] || ''}${words[1][0] || ''}`.toUpperCase()
   }
 
-  const single = words[0] || base
+  const single = cleanWord(words[0] || base)
   const parts = single.split(/[._-]+/).filter(Boolean)
   if (parts.length >= 2) {
     return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase()
