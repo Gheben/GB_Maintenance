@@ -850,16 +850,7 @@ export default function AssetDetail() {
                 {impactedOffices.length === 0 ? (
                   <p className="text-xs text-gray-400">No office data available</p>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {impactedOffices.map((office) => (
-                      <span
-                        key={office}
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"
-                      >
-                        {office}
-                      </span>
-                    ))}
-                  </div>
+                  <p className="text-xs text-gray-400">Click "Show offices" to view the full office list.</p>
                 )}
               </div>
               <div className="flex justify-start gap-2">
