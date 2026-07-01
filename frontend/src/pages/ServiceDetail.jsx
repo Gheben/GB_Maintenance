@@ -413,7 +413,6 @@ export default function ServiceDetail() {
       || String(l.approval_status || '').toLowerCase().includes(q)
       || String(l.supplier_name || '').toLowerCase().includes(q)
   })
-  const assignedTargets = Array.isArray(service.user_targets) ? service.user_targets : []
 
   const openMaintenanceDetail = async (maintenanceId) => {
     try {
@@ -556,22 +555,6 @@ export default function ServiceDetail() {
                 <span className="font-medium text-gray-700 dark:text-gray-300">Owner:</span>
                 <span>{service.owner_label || service.owner_name}</span>
                 {service.owner_email && <a href={`mailto:${service.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs"><Mail size={12} />{service.owner_email}</a>}
-              </div>
-            )}
-            {assignedTargets.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between gap-3 flex-wrap text-sm">
-                  <span className="font-medium text-gray-700 dark:text-gray-300">Assigned users / groups</span>
-                  <span className="text-xs text-gray-500">{assignedTargets.length} target(s)</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {assignedTargets.map((t, idx) => (
-                    <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
-                      {t.name || t.id || t.dn}
-                      <span className="opacity-70">{t.type}</span>
-                    </span>
-                  ))}
-                </div>
               </div>
             )}
             {impactedOffices.length > 0 && (
@@ -860,19 +843,12 @@ export default function ServiceDetail() {
         {tab === 'users' && (
           <div className="card overflow-hidden">
             <div className="p-3 border-b border-gray-100 dark:border-gray-700">
-              {assignedTargets.length > 0 && (
-                <div className="mb-3">
-                  <p className="text-xs font-medium text-gray-500 mb-2">Assigned targets</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {assignedTargets.map((t, idx) => (
-                      <span key={`${t.type}:${t.id || t.dn || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">
-                        {t.name || t.id || t.dn}
-                        <span className="opacity-70">{t.type}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className="mb-3">
+                <p className="text-xs font-medium text-gray-500 mb-1">Users involved ({filteredUsers.length})</p>
+                <p className="text-xs text-gray-400">
+                  User list is hidden by default to reduce visual noise. Click "Show users" to open the full list.
+                </p>
+              </div>
               <div className="mb-3">
                 <p className="text-xs font-medium text-gray-500 mb-1">Offices involved ({impactedOffices.length})</p>
                 {impactedOffices.length === 0 ? (
@@ -904,13 +880,6 @@ export default function ServiceDetail() {
                 </button>
               </div>
             </div>
-            {filteredUsers.length === 0 && (
-              <p className="text-gray-500 text-sm p-5 text-center">
-                {assignedTargets.length > 0
-                  ? 'Targets are assigned, but no local users were resolved from current mappings.'
-                  : 'No software users assigned to this service.'}
-              </p>
-            )}
 
             {usersModalOpen && (
               <Modal title="Users involved" onClose={() => setUsersModalOpen(false)} size="xl">
