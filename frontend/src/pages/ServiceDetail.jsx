@@ -845,9 +845,11 @@ export default function ServiceDetail() {
             <div className="p-3 border-b border-gray-100 dark:border-gray-700">
               <div className="mb-3">
                 <p className="text-xs font-medium text-gray-500 mb-1">Users involved ({filteredUsers.length})</p>
-                <p className="text-xs text-gray-400">
-                  User list is hidden by default to reduce visual noise. Click "Show users" to open the full list.
-                </p>
+                {filteredUsers.length === 0 ? (
+                  <p className="text-xs text-gray-400">No users data available</p>
+                ) : (
+                  <p className="text-xs text-gray-400">Click "Show users" to view the full user list.</p>
+                )}
               </div>
               <div className="mb-3">
                 <p className="text-xs font-medium text-gray-500 mb-1">Offices involved ({impactedOffices.length})</p>
