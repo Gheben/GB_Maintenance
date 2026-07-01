@@ -628,8 +628,8 @@ export default function Settings() {
                 <span className="text-sm font-medium">Enable SAML 2.0 authentication</span>
               </label>
 
-              {/* Auto-redirect */}
-              {saml.enabled && (
+              <div className={`space-y-5 transition-opacity duration-200 ${!saml.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                {/* Auto-redirect */}
                 <label className="flex items-start gap-3 cursor-pointer bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg px-4 py-3">
                   <input type="checkbox" checked={!!saml.auto_redirect}
                     onChange={e => { setSaml(s => ({ ...s, auto_redirect: e.target.checked })); setSamlDirty(true) }}
@@ -643,10 +643,9 @@ export default function Settings() {
                     </p>
                   </div>
                 </label>
-              )}
 
-              {/* LDAP group mapping integration note */}
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4 space-y-2">
+                {/* LDAP group mapping integration note */}
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4 space-y-2">
                 <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 uppercase tracking-wide">Integration with LDAP group mapping</p>
                 <p className="text-xs text-amber-700 dark:text-amber-300">
                   If group mappings are configured in <strong>User management → LDAP / Active Directory</strong>,
@@ -660,7 +659,7 @@ export default function Settings() {
                   this reduces traffic to the Domain Controller and ensures group resolution
                   even if the DC is temporarily unreachable.
                 </p>
-              </div>
+                </div>
 
               {/* Dati da comunicare all'IdP */}
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4 space-y-3">
@@ -788,6 +787,7 @@ export default function Settings() {
                   {samlResult.message}
                 </div>
               )}
+              </div>
             </form>
           </Section>
         )}
