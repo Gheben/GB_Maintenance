@@ -116,54 +116,10 @@ async function assetsIncludePartIsRelevant(assetIds = []) {
   return !!row;
 }
 
-async function expandMaintenanceLinks(assetIds = [], serviceIds = []) {
-  const assetSet = new Set((Array.isArray(assetIds) ? assetIds : []).filter(Boolean));
-  const serviceSet = new Set((Array.isArray(serviceIds) ? serviceIds : []).filter(Boolean));
-
-  if (assetSet.size === 0 && serviceSet.size === 0) {
-    return { asset_ids: [], service_ids: [] };
-  }
-
-  let changed = true;
-  let safety = 0;
-  while (changed && safety < 6) {
-    safety += 1;
-    changed = false;
-
-    if (assetSet.size > 0) {
-      const rows = await getMany(
-        `SELECT DISTINCT sa.service_id
-         FROM service_assets sa
-         WHERE sa.asset_id = ANY($1::uuid[])`,
-        [Array.from(assetSet)]
-      );
-      for (const r of rows) {
-        if (r.service_id && !serviceSet.has(r.service_id)) {
-          serviceSet.add(r.service_id);
-          changed = true;
-        }
-      }
-    }
-
-    if (serviceSet.size > 0) {
-      const rows = await getMany(
-        `SELECT DISTINCT sa.asset_id
-         FROM service_assets sa
-         WHERE sa.service_id = ANY($1::uuid[])`,
-        [Array.from(serviceSet)]
-      );
-      for (const r of rows) {
-        if (r.asset_id && !assetSet.has(r.asset_id)) {
-          assetSet.add(r.asset_id);
-          changed = true;
-        }
-      }
-    }
-  }
-
+function normalizeMaintenanceLinks(assetIds = [], serviceIds = []) {
   return {
-    asset_ids: Array.from(assetSet),
-    service_ids: Array.from(serviceSet),
+    asset_ids: [...new Set((Array.isArray(assetIds) ? assetIds : []).filter(Boolean))],
+    service_ids: [...new Set((Array.isArray(serviceIds) ? serviceIds : []).filter(Boolean))],
   };
 }
 
@@ -766,8 +722,8 @@ router.post('/', requireOperator, [
   const status = needsApproval ? 'pending_approval' : 'scheduled';
 
   // Any Part-IS relevant asset in scope forces the owner approval flow, regardless of the request flag.
-  const expandedLinks = await expandMaintenanceLinks(req.body.asset_ids || [], req.body.service_ids || []);
-  const partIsInvolved = await assetsIncludePartIsRelevant(expandedLinks.asset_ids);
+  const selectedLinks = normalizeMaintenanceLinks(req.body.asset_ids || [], req.body.service_ids || []);
+  const partIsInvolved = await assetsIncludePartIsRelevant(selectedLinks.asset_ids);
   const ownerApprovalRequired = req.body.owner_approval_required === true || partIsInvolved;
   const ownerApprovalStatus = ownerApprovalRequired ? 'pending' : 'not_required';
 
@@ -792,11 +748,11 @@ router.post('/', requireOperator, [
   );
   const id = result.rows[0].id;
 
-  // Auto-include correlated entities through service_assets mapping.
-  for (const aid of expandedLinks.asset_ids) {
+  // Persist only entities explicitly selected by the user.
+  for (const aid of selectedLinks.asset_ids) {
     await query(`INSERT INTO maintenance_assets (maintenance_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, aid]);
   }
-  for (const sid of expandedLinks.service_ids) {
+  for (const sid of selectedLinks.service_ids) {
     await query(`INSERT INTO maintenance_services (maintenance_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, sid]);
   }
 
@@ -1009,20 +965,20 @@ router.put('/:id', requireOperator, async (req, res) => {
     const currentServiceRows = await getMany('SELECT service_id FROM maintenance_services WHERE maintenance_id=$1', [req.params.id]);
     const nextAssetIds = Array.isArray(req.body.asset_ids) ? req.body.asset_ids : currentAssetRows.map(r => r.asset_id);
     const nextServiceIds = Array.isArray(req.body.service_ids) ? req.body.service_ids : currentServiceRows.map(r => r.service_id);
-    const expandedLinks = await expandMaintenanceLinks(nextAssetIds, nextServiceIds);
+    const selectedLinks = normalizeMaintenanceLinks(nextAssetIds, nextServiceIds);
 
     await query('DELETE FROM maintenance_assets WHERE maintenance_id=$1', [req.params.id]);
     await query('DELETE FROM maintenance_services WHERE maintenance_id=$1', [req.params.id]);
 
-    for (const aid of expandedLinks.asset_ids) {
+    for (const aid of selectedLinks.asset_ids) {
       await query(`INSERT INTO maintenance_assets (maintenance_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, aid]);
     }
-    for (const sid of expandedLinks.service_ids) {
+    for (const sid of selectedLinks.service_ids) {
       await query(`INSERT INTO maintenance_services (maintenance_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, sid]);
     }
 
     // Adding a Part-IS relevant asset always forces the owner approval flow (never auto-disabled).
-    if (!maint.owner_approval_required && await assetsIncludePartIsRelevant(expandedLinks.asset_ids)) {
+    if (!maint.owner_approval_required && await assetsIncludePartIsRelevant(selectedLinks.asset_ids)) {
       partIsNewlyRequired = true;
       sets.push(`owner_approval_required=$${i++}`); vals.push(true);
       sets.push(`owner_approval_status=$${i++}`); vals.push('pending');

@@ -342,7 +342,7 @@ export default function MaintenanceDetail() {
 
             <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-4">
               <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Assets and Services</h4>
-              <p className="text-xs text-gray-500">Correlated assets/services are auto-included from current service-asset mappings.</p>
+              <p className="text-xs text-gray-500">Only selected assets and services are linked. Related items are shown separately as derived impact.</p>
               <ItemPicker
                 label={`Assets (${editForm.asset_ids.length} selected)`}
                 allItems={allAssets}
