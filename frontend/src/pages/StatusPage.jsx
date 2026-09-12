@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { statusApi } from '../api'
 import { format } from 'date-fns'
-import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Building2 } from 'lucide-react'
+import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Building2, Server, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { Modal } from '../components/Modal'
 
@@ -52,6 +52,7 @@ function MaintenanceCard({ m, colorClass }) {
   const { user } = useAuth()
   const isLoggedIn = !!user || !!localStorage.getItem('token')
   const users = m.involved_users || []
+  const affectedAssets = m.affected_assets || []
   // Subscribe is only offered for public maintenances with no user_targets
   const showSubscribeBtn = isLoggedIn && users.length === 0
   const uniqueOffices = [...new Set(users.map(u => u.office).filter(Boolean))]
@@ -123,6 +124,25 @@ function MaintenanceCard({ m, colorClass }) {
       {m.description && <p className="text-xs text-gray-400 mt-1">{m.description}</p>}
       {m.notes && <p className="text-xs text-gray-400 mt-1 italic">{m.notes}</p>}
       {isLoggedIn && m.reopen_reason && <p className="text-xs text-amber-700 mt-1"><strong>Reopen reason:</strong> {m.reopen_reason}</p>}
+
+      {affectedAssets.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+            <Server size={11} />
+            Affected assets:
+          </span>
+          {affectedAssets.map(asset => (
+            <span
+              key={asset.id}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${asset.is_direct ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
+              title={asset.is_direct ? 'Selected asset' : 'Related asset'}
+            >
+              {asset.part_is_relevant && <ShieldCheck size={11} className="text-amber-600" />}
+              {asset.name}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="mt-2 flex flex-wrap gap-3">
         {hasHistory && (

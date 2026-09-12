@@ -6,6 +6,7 @@ const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
 const { notifyMaintenance, sendEmailNotification, sendInApp } = require('../services/notificationService');
 const wsService = require('../services/wsService');
+const { getMaintenanceAffectedAssets } = require('../utils/maintenanceScope');
 
 const router = Router();
 
@@ -103,7 +104,50 @@ async function userCanAccessMaintenance(user, maintenanceId) {
     )`,
     [maintenanceId, user.id]
   );
-  return !!accessible;
+  if (accessible) return true;
+
+  const relatedAccess = await getOne(
+    `WITH related_services AS (
+       SELECT service_id FROM maintenance_services WHERE maintenance_id=$1
+       UNION
+       SELECT sa.service_id
+       FROM maintenance_assets ma
+       JOIN service_assets sa ON sa.asset_id=ma.asset_id
+       WHERE ma.maintenance_id=$1
+     ), scope_assets AS (
+       SELECT asset_id FROM maintenance_assets WHERE maintenance_id=$1
+       UNION
+       SELECT sa.asset_id FROM service_assets sa
+       WHERE sa.service_id IN (SELECT service_id FROM related_services)
+     )
+     SELECT 1
+     WHERE EXISTS (
+       SELECT 1 FROM scope_assets scope
+       JOIN assets a ON a.id=scope.asset_id
+       WHERE a.owner_id=$2
+          OR EXISTS (SELECT 1 FROM user_group_members ugm WHERE ugm.group_id=a.owner_group_id AND ugm.user_id=$2)
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) target
+            WHERE (target->>'type'='user' AND target->>'id'=$2::text)
+               OR (target->>'type'='local_group' AND (target->>'id') ~* '^[0-9a-f-]{36}$'
+                   AND EXISTS (SELECT 1 FROM user_group_members ugm WHERE ugm.group_id=(target->>'id')::uuid AND ugm.user_id=$2))
+          )
+     ) OR EXISTS (
+       SELECT 1 FROM related_services scope
+       JOIN services s ON s.id=scope.service_id
+       WHERE s.owner_id=$2
+          OR EXISTS (SELECT 1 FROM user_group_members ugm WHERE ugm.group_id=s.owner_group_id AND ugm.user_id=$2)
+          OR EXISTS (SELECT 1 FROM service_subscribers ss WHERE ss.service_id=s.id AND ss.user_id=$2)
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) target
+            WHERE (target->>'type'='user' AND target->>'id'=$2::text)
+               OR (target->>'type'='local_group' AND (target->>'id') ~* '^[0-9a-f-]{36}$'
+                   AND EXISTS (SELECT 1 FROM user_group_members ugm WHERE ugm.group_id=(target->>'id')::uuid AND ugm.user_id=$2))
+          )
+     )`,
+    [maintenanceId, user.id]
+  );
+  return !!relatedAccess;
 }
 
 async function assetsIncludePartIsRelevant(assetIds = []) {
@@ -613,19 +657,8 @@ router.get('/:id', async (req, res) => {
     );
   }
 
-  // Also derive affected assets via direct service links
-  const serviceIds = directServices.map(s => s.id);
-  let serviceDerivedAssets = [];
-  if (serviceIds.length > 0) {
-    serviceDerivedAssets = await getMany(
-      `SELECT DISTINCT a.id, a.name, a.category, a.status, a.criticality, a.part_is_relevant
-       FROM assets a
-       JOIN service_assets sa ON sa.asset_id=a.id
-       WHERE sa.service_id=ANY($1::uuid[])
-         AND a.id NOT IN (SELECT asset_id FROM maintenance_assets WHERE maintenance_id=$2)`,
-      [serviceIds, req.params.id]
-    );
-  }
+  // Derive related assets through explicitly selected services and services linked to selected assets.
+  const affectedAssets = (await getMaintenanceAffectedAssets(req.params.id)).filter(a => !a.is_direct);
 
   const statusHistory = await getMany(
     `SELECT sh.id, sh.status, sh.changed_by, sh.reason, sh.created_at
@@ -635,7 +668,7 @@ router.get('/:id', async (req, res) => {
     [req.params.id]
   ).catch(() => []);
 
-  const response = { ...maint, assets, services: directServices, affectedServices: assetDerivedServices, affectedAssets: serviceDerivedAssets, statusHistory };
+  const response = { ...maint, assets, services: directServices, affectedServices: assetDerivedServices, affectedAssets, statusHistory };
   
   // Transform reopened_by_user data if exists
   if (maint.reopened_by_user_id) {
@@ -1199,7 +1232,19 @@ router.delete('/:id', requireAdmin, [
 // ─── GET /api/maintenance/:id/users ──────────────────────────────────────────
 router.get('/:id/users', async (req, res) => {
   const rows = await getMany(
-    `WITH resolved_users AS (
+    `WITH related_services AS (
+       SELECT service_id FROM maintenance_services WHERE maintenance_id=$1
+       UNION
+       SELECT sa.service_id
+       FROM maintenance_assets ma
+       JOIN service_assets sa ON sa.asset_id=ma.asset_id
+       WHERE ma.maintenance_id=$1
+     ), scope_assets AS (
+       SELECT asset_id FROM maintenance_assets WHERE maintenance_id=$1
+       UNION
+       SELECT sa.asset_id FROM service_assets sa
+       WHERE sa.service_id IN (SELECT service_id FROM related_services)
+     ), resolved_users AS (
        SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
        FROM service_subscribers ss
        JOIN maintenance_services ms ON ms.service_id = ss.service_id
@@ -1214,7 +1259,7 @@ router.get('/:id/users', async (req, res) => {
        WHERE ma.maintenance_id = $1 AND u.id IS NOT NULL
        UNION
        SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
-       FROM maintenance_assets ma
+      FROM scope_assets ma
        JOIN assets a ON a.id = ma.asset_id
        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
        JOIN users u ON (
@@ -1229,7 +1274,7 @@ router.get('/:id/users', async (req, res) => {
            )
          )
        )
-       WHERE ma.maintenance_id = $1 AND u.is_active = true
+      WHERE u.is_active = true
        UNION
        SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
               lc.username,
@@ -1238,7 +1283,7 @@ router.get('/:id/users', async (req, res) => {
               lc.office,
               'viewer'::text AS role,
               'ldap'::text AS auth_type
-       FROM maintenance_assets ma
+      FROM scope_assets ma
        JOIN assets a ON a.id = ma.asset_id
        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
        JOIN ldap_users_cache lc ON (
@@ -1250,7 +1295,7 @@ router.get('/:id/users', async (req, res) => {
            OR LOWER(COALESCE(lc.upn, '')) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
          )
        )
-       WHERE ma.maintenance_id = $1
+      WHERE TRUE
        UNION
        SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
               lc.username,
@@ -1259,7 +1304,7 @@ router.get('/:id/users', async (req, res) => {
               lc.office,
               'viewer'::text AS role,
               'ldap'::text AS auth_type
-       FROM maintenance_assets ma
+      FROM scope_assets ma
        JOIN assets a ON a.id = ma.asset_id
        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
        JOIN ldap_users_cache lc ON (
@@ -1272,7 +1317,7 @@ router.get('/:id/users', async (req, res) => {
               OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), '')), ',', 1)
          )
        )
-       WHERE ma.maintenance_id = $1
+      WHERE TRUE
        UNION
        SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
               lc.username,
@@ -1281,7 +1326,7 @@ router.get('/:id/users', async (req, res) => {
               lc.office,
               'viewer'::text AS role,
               'ldap'::text AS auth_type
-       FROM maintenance_assets ma
+      FROM scope_assets ma
        JOIN assets a ON a.id = ma.asset_id
        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
        JOIN ldap_group_mappings lgm ON (
@@ -1295,7 +1340,7 @@ router.get('/:id/users', async (req, res) => {
          WHERE LOWER(m.dn) = LOWER(lgm.ldap_group_dn)
             OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(lgm.ldap_group_dn), ',', 1)
        )
-       WHERE ma.maintenance_id = $1 AND lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
+      WHERE lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
        UNION
        SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
        FROM maintenance_services ms

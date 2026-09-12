@@ -2,6 +2,7 @@ const { query, getOne, getMany } = require('../db/database');
 const { sendMail, renderTemplate } = require('../utils/mailer');
 const logger = require('../utils/logger');
 const axios = require('axios');
+const { getMaintenanceAffectedAssets, getMaintenanceAffectedServices } = require('../utils/maintenanceScope');
 
 function htmlToPlainText(html) {
   return String(html || '')
@@ -155,31 +156,9 @@ async function getMaintenanceSubscribers(maintenanceId) {
   const emails = new Set();
   const userIds = new Set();
 
-  // Get assets linked to maintenance (via maintenance_assets)
-  const assets = await getMany(
-    `SELECT asset_id FROM maintenance_assets WHERE maintenance_id=$1`,
-    [maintenanceId]
-  );
-
-  // Get services linked directly (via maintenance_services) + via assets
-  let allServiceIds = new Set();
-
-  if (assets.length > 0) {
-    const assetIds = assets.map(a => a.asset_id);
-    const assetServices = await getMany(
-      `SELECT DISTINCT service_id FROM service_assets WHERE asset_id = ANY($1::uuid[])`,
-      [assetIds]
-    );
-    assetServices.forEach(s => allServiceIds.add(s.service_id));
-  }
-
-  const directServices = await getMany(
-    `SELECT service_id FROM maintenance_services WHERE maintenance_id=$1`,
-    [maintenanceId]
-  );
-  directServices.forEach(s => allServiceIds.add(s.service_id));
-
-  const serviceIds = [...allServiceIds];
+  const affectedAssets = await getMaintenanceAffectedAssets(maintenanceId);
+  const assetIds = affectedAssets.map(asset => asset.id);
+  const serviceIds = (await getMaintenanceAffectedServices(maintenanceId)).map(service => service.service_id);
 
   // Direct maintenance status subscribers — always fetched, independent of services
   const statusSubs = await getMany(
@@ -190,35 +169,27 @@ async function getMaintenanceSubscribers(maintenanceId) {
     [maintenanceId]
   ).catch(() => []);
 
-  if (serviceIds.length === 0) {
-    for (const ss of statusSubs) {
-      if (ss.user_email) emails.add(ss.user_email);
-      if (ss.user_id) userIds.add(ss.user_id);
-    }
-    return { emails: [...emails], userIds: [...userIds] };
-  }
-
   // Subscribers
-  const subs = await getMany(
+  const subs = serviceIds.length > 0 ? await getMany(
     `SELECT DISTINCT ss.email, u.email as user_email, u.id as user_id, ss.notify_maintenance
      FROM service_subscribers ss
      LEFT JOIN users u ON u.id = ss.user_id
      WHERE ss.service_id = ANY($1::uuid[]) AND ss.notify_maintenance = true`,
     [serviceIds]
-  );
+  ) : [];
 
   // (statusSubs already fetched above)
 
   // Service owners
-  const owners = await getMany(
+  const owners = serviceIds.length > 0 ? await getMany(
     `SELECT DISTINCT s.owner_id as user_id, u.email as user_email
      FROM services s JOIN users u ON u.id=s.owner_id
      WHERE s.id = ANY($1::uuid[]) AND s.owner_id IS NOT NULL AND u.is_active=true`,
     [serviceIds]
-  );
+  ) : [];
 
   // Users audience from service user_targets
-  const targetServiceOwners = await getMany(
+  const targetServiceOwners = serviceIds.length > 0 ? await getMany(
     `SELECT DISTINCT u.id AS user_id, u.email AS user_email
      FROM services s
      JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
@@ -235,13 +206,12 @@ async function getMaintenanceSubscribers(maintenanceId) {
      )
      WHERE s.id = ANY($1::uuid[]) AND u.is_active=true`,
     [serviceIds]
-  ).catch(() => []);
+  ).catch(() => []) : [];
 
-  // Users audience from asset user_targets linked to maintenance
-  const targetAssetOwners = await getMany(
+  // Users audience from directly selected and related asset user_targets.
+  const targetAssetOwners = assetIds.length > 0 ? await getMany(
     `SELECT DISTINCT u.id AS user_id, u.email AS user_email
-     FROM maintenance_assets ma
-     JOIN assets a ON a.id=ma.asset_id
+     FROM assets a
      JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
      JOIN users u ON (
        (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
@@ -254,9 +224,64 @@ async function getMaintenanceSubscribers(maintenanceId) {
          )
        )
      )
-     WHERE ma.maintenance_id = $1 AND u.is_active=true`,
-    [maintenanceId]
-  ).catch(() => []);
+     WHERE a.id = ANY($1::uuid[]) AND u.is_active=true`,
+    [assetIds]
+  ).catch(() => []) : [];
+
+  const targetLdapAssetUsers = assetIds.length > 0 ? await getMany(
+    `WITH asset_targets AS (
+       SELECT ot
+       FROM assets a
+       JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
+       WHERE a.id = ANY($1::uuid[])
+     )
+     SELECT DISTINCT lc.email AS user_email
+     FROM asset_targets target
+     JOIN ldap_users_cache lc ON (
+       target.ot->>'type' = 'ldap_user'
+       AND NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), '') IS NOT NULL
+       AND (
+         LOWER(COALESCE(lc.dn, '')) = LOWER(NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), ''))
+         OR LOWER(COALESCE(lc.username, '')) = LOWER(NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), ''))
+         OR LOWER(COALESCE(lc.upn, '')) = LOWER(NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), ''))
+       )
+     )
+     WHERE lc.email IS NOT NULL
+     UNION
+     SELECT DISTINCT NULLIF(BTRIM(target.ot->>'email'), '') AS user_email
+     FROM asset_targets target
+     WHERE target.ot->>'type' = 'ldap_user'
+       AND NULLIF(BTRIM(target.ot->>'email'), '') IS NOT NULL
+     UNION
+     SELECT DISTINCT lc.email AS user_email
+     FROM asset_targets target
+     JOIN ldap_users_cache lc ON (
+       target.ot->>'type' = 'ldap_group'
+       AND EXISTS (
+         SELECT 1
+         FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) member(dn)
+         WHERE LOWER(member.dn) = LOWER(NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), ''))
+            OR SPLIT_PART(LOWER(member.dn), ',', 1) = SPLIT_PART(LOWER(NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), '')), ',', 1)
+       )
+     )
+     WHERE lc.email IS NOT NULL
+     UNION
+     SELECT DISTINCT lc.email AS user_email
+     FROM asset_targets target
+     JOIN ldap_group_mappings lgm ON (
+       target.ot->>'type' = 'local_group'
+       AND (target.ot->>'id') ~* '^[0-9a-f-]{36}$'
+       AND lgm.local_group_id=(target.ot->>'id')::uuid
+     )
+     JOIN ldap_users_cache lc ON EXISTS (
+       SELECT 1
+       FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) member(dn)
+       WHERE LOWER(member.dn) = LOWER(lgm.ldap_group_dn)
+          OR SPLIT_PART(LOWER(member.dn), ',', 1) = SPLIT_PART(LOWER(lgm.ldap_group_dn), ',', 1)
+     )
+     WHERE lc.email IS NOT NULL`,
+    [assetIds]
+  ).catch(() => []) : [];
 
   for (const sub of subs) {
     if (sub.email) emails.add(sub.email);
@@ -279,6 +304,9 @@ async function getMaintenanceSubscribers(maintenanceId) {
     if (o.user_email) emails.add(o.user_email);
     if (o.user_id) userIds.add(o.user_id);
   }
+  for (const user of targetLdapAssetUsers) {
+    if (user.user_email) emails.add(user.user_email);
+  }
 
   return { emails: [...emails], userIds: [...userIds] };
 }
@@ -290,6 +318,7 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
     if (!maint) return;
 
     const { emails, userIds } = await getMaintenanceSubscribers(maintenanceId);
+    const affectedAssets = await getMaintenanceAffectedAssets(maintenanceId);
 
     const vars = {
       id: maint.id,
@@ -302,6 +331,8 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
       actual_end: maint.actual_end ? new Date(maint.actual_end).toLocaleString('it-IT') : '-',
       description: maint.description || '-',
       notes: maint.notes || '-',
+      affected_assets: affectedAssets.map(asset => asset.name).join(', ') || '-',
+      primary_assets: affectedAssets.filter(asset => asset.is_direct).map(asset => asset.name).join(', ') || '-',
       ...extraVars
     };
 

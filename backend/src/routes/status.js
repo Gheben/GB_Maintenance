@@ -7,24 +7,42 @@ const router = Router();
 async function computeInvolvedUsersRows(maintenanceIds) {
   if (!Array.isArray(maintenanceIds) || maintenanceIds.length === 0) return [];
   return getMany(
-    `-- Direct users in asset.user_targets linked via maintenance_assets
+    `WITH related_services AS (
+       SELECT maintenance_id, service_id
+       FROM maintenance_services
+       WHERE maintenance_id = ANY($1::uuid[])
+       UNION
+       SELECT ma.maintenance_id, sa.service_id
+       FROM maintenance_assets ma
+       JOIN service_assets sa ON sa.asset_id=ma.asset_id
+       WHERE ma.maintenance_id = ANY($1::uuid[])
+     ), scope_assets AS (
+       SELECT maintenance_id, asset_id
+       FROM maintenance_assets
+       WHERE maintenance_id = ANY($1::uuid[])
+       UNION
+       SELECT rs.maintenance_id, sa.asset_id
+       FROM related_services rs
+       JOIN service_assets sa ON sa.service_id=rs.service_id
+     )
+     -- Users in directly selected and related asset user_targets
      SELECT DISTINCT mwa.maintenance_id,
             COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office
-     FROM maintenance_assets mwa
+     FROM scope_assets mwa
      JOIN assets a ON a.id = mwa.asset_id
      JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
-     JOIN users u ON u.id = (ot->>'id')::uuid
+         JOIN users u ON (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid
      WHERE mwa.maintenance_id = ANY($1::uuid[])
        AND ot->>'type' = 'user'
        AND u.is_active = true
      UNION
-     -- Local group members in asset.user_targets linked via maintenance_assets
+    -- Local group members in directly selected and related asset user_targets
      SELECT DISTINCT mwa.maintenance_id,
             COALESCE(u.display_name, u.username) AS name, u.id AS user_id, u.office
-     FROM maintenance_assets mwa
+    FROM scope_assets mwa
      JOIN assets a ON a.id = mwa.asset_id
      JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
-     JOIN user_group_members ugm ON ugm.group_id = (ot->>'id')::uuid
+    JOIN user_group_members ugm ON (ot->>'id') ~* '^[0-9a-f-]{36}$' AND ugm.group_id = (ot->>'id')::uuid
      JOIN users u ON u.id = ugm.user_id
      WHERE mwa.maintenance_id = ANY($1::uuid[])
        AND ot->>'type' = 'local_group'
@@ -38,7 +56,7 @@ async function computeInvolvedUsersRows(maintenanceIds) {
      JOIN service_assets sa ON sa.asset_id = mwa.asset_id
      JOIN services sv ON sv.id = sa.service_id
      JOIN LATERAL jsonb_array_elements(COALESCE(sv.user_targets, '[]'::jsonb)) ot ON true
-     JOIN users u ON u.id = (ot->>'id')::uuid
+    JOIN users u ON (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid
      WHERE mwa.maintenance_id = ANY($1::uuid[])
        AND ot->>'type' = 'user'
        AND u.is_active = true
@@ -50,7 +68,7 @@ async function computeInvolvedUsersRows(maintenanceIds) {
      JOIN service_assets sa ON sa.asset_id = mwa.asset_id
      JOIN services sv ON sv.id = sa.service_id
      JOIN LATERAL jsonb_array_elements(COALESCE(sv.user_targets, '[]'::jsonb)) ot ON true
-     JOIN user_group_members ugm ON ugm.group_id = (ot->>'id')::uuid
+    JOIN user_group_members ugm ON (ot->>'id') ~* '^[0-9a-f-]{36}$' AND ugm.group_id = (ot->>'id')::uuid
      JOIN users u ON u.id = ugm.user_id
      WHERE mwa.maintenance_id = ANY($1::uuid[])
        AND ot->>'type' = 'local_group'
@@ -63,7 +81,7 @@ async function computeInvolvedUsersRows(maintenanceIds) {
      FROM maintenance_services ms
      JOIN services sv ON sv.id = ms.service_id
      JOIN LATERAL jsonb_array_elements(COALESCE(sv.user_targets, '[]'::jsonb)) ot ON true
-     JOIN users u ON u.id = (ot->>'id')::uuid
+    JOIN users u ON (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id = (ot->>'id')::uuid
      WHERE ms.maintenance_id = ANY($1::uuid[])
        AND ot->>'type' = 'user'
        AND u.is_active = true
@@ -74,7 +92,7 @@ async function computeInvolvedUsersRows(maintenanceIds) {
      FROM maintenance_services ms
      JOIN services sv ON sv.id = ms.service_id
      JOIN LATERAL jsonb_array_elements(COALESCE(sv.user_targets, '[]'::jsonb)) ot ON true
-     JOIN user_group_members ugm ON ugm.group_id = (ot->>'id')::uuid
+    JOIN user_group_members ugm ON (ot->>'id') ~* '^[0-9a-f-]{36}$' AND ugm.group_id = (ot->>'id')::uuid
      JOIN users u ON u.id = ugm.user_id
      WHERE ms.maintenance_id = ANY($1::uuid[])
        AND ot->>'type' = 'local_group'
@@ -82,27 +100,6 @@ async function computeInvolvedUsersRows(maintenanceIds) {
        AND u.is_active = true`,
     [maintenanceIds]
   ).catch(() => []);
-}
-
-async function refreshInvolvedUsersCache(maintenanceIds) {
-  if (!Array.isArray(maintenanceIds) || maintenanceIds.length === 0) return;
-
-  const rows = await computeInvolvedUsersRows(maintenanceIds);
-
-  await query(
-    `DELETE FROM maintenance_involved_users_cache WHERE maintenance_id = ANY($1::uuid[])`,
-    [maintenanceIds]
-  );
-
-  for (const row of rows) {
-    await query(
-      `INSERT INTO maintenance_involved_users_cache (maintenance_id, user_id, name, office, refreshed_at)
-       VALUES ($1, $2, $3, $4, NOW())
-       ON CONFLICT (maintenance_id, user_id)
-       DO UPDATE SET name = EXCLUDED.name, office = EXCLUDED.office, refreshed_at = NOW()`,
-      [row.maintenance_id, row.user_id, row.name, row.office || null]
-    );
-  }
 }
 
 // ─── GET /api/status ── Public status page ────────────────────────────────────
@@ -207,50 +204,69 @@ router.get('/', async (req, res) => {
   ).catch(() => []);
 
   // For each maintenance (in_progress + upcoming + recent), get involved users count
-  const allMaintIds = [
+  const allMaintIds = [...new Set([
     ...in_progress_maintenance,
     ...upcoming_maintenance,
     ...recent_maintenance,
-  ].map(m => m.id);
+    ...maintenance_history,
+  ].map(m => m.id))];
 
   let involvedMap = {};
+  let affectedAssetsMap = {};
   if (allMaintIds.length > 0) {
-    const staleRows = await getMany(
-      `SELECT mw.id
-       FROM maintenance_windows mw
-       LEFT JOIN (
-         SELECT maintenance_id, MAX(refreshed_at) AS refreshed_at
-         FROM maintenance_involved_users_cache
-         WHERE maintenance_id = ANY($1::uuid[])
-         GROUP BY maintenance_id
-       ) c ON c.maintenance_id = mw.id
-       WHERE mw.id = ANY($1::uuid[])
-         AND (c.refreshed_at IS NULL OR c.refreshed_at < mw.updated_at)`,
-      [allMaintIds]
-    ).catch(() => []);
-
-    const staleIds = staleRows.map(r => r.id).filter(Boolean);
-    if (staleIds.length > 0) {
-      await refreshInvolvedUsersCache(staleIds);
-    }
-
-    const involvedRows = await getMany(
-      `SELECT maintenance_id, user_id, name, office
-       FROM maintenance_involved_users_cache
-       WHERE maintenance_id = ANY($1::uuid[])
-       ORDER BY name ASC`,
-      [allMaintIds]
-    ).catch(() => []);
+    const involvedRows = await computeInvolvedUsersRows(allMaintIds);
 
     for (const row of involvedRows) {
       if (!involvedMap[row.maintenance_id]) involvedMap[row.maintenance_id] = [];
       involvedMap[row.maintenance_id].push({ name: row.name, user_id: row.user_id, office: row.office || '' });
     }
+
+    const affectedAssetRows = await getMany(
+      `WITH related_services AS (
+         SELECT maintenance_id, service_id
+         FROM maintenance_services
+         WHERE maintenance_id = ANY($1::uuid[])
+         UNION
+         SELECT ma.maintenance_id, sa.service_id
+         FROM maintenance_assets ma
+         JOIN service_assets sa ON sa.asset_id=ma.asset_id
+         WHERE ma.maintenance_id = ANY($1::uuid[])
+       ), scope_assets AS (
+         SELECT maintenance_id, asset_id, TRUE AS is_direct
+         FROM maintenance_assets
+         WHERE maintenance_id = ANY($1::uuid[])
+         UNION ALL
+         SELECT rs.maintenance_id, sa.asset_id, FALSE AS is_direct
+         FROM related_services rs
+         JOIN service_assets sa ON sa.service_id=rs.service_id
+       )
+       SELECT scope_assets.maintenance_id, a.id, a.name, a.part_is_relevant,
+              BOOL_OR(scope_assets.is_direct) AS is_direct
+       FROM scope_assets
+       JOIN assets a ON a.id=scope_assets.asset_id
+       GROUP BY scope_assets.maintenance_id, a.id, a.name, a.part_is_relevant
+       ORDER BY BOOL_OR(scope_assets.is_direct) DESC, a.name`,
+      [allMaintIds]
+    ).catch(() => []);
+
+    for (const asset of affectedAssetRows) {
+      if (!affectedAssetsMap[asset.maintenance_id]) affectedAssetsMap[asset.maintenance_id] = [];
+      affectedAssetsMap[asset.maintenance_id].push({
+        id: asset.id,
+        name: asset.name,
+        part_is_relevant: asset.part_is_relevant,
+        is_direct: asset.is_direct,
+      });
+    }
   }
 
   // Attach involved users to each maintenance item
   function attachUsers(list) {
-    return list.map(m => ({ ...m, involved_users: involvedMap[m.id] || [] }));
+    return list.map(m => ({
+      ...m,
+      involved_users: involvedMap[m.id] || [],
+      affected_assets: affectedAssetsMap[m.id] || [],
+    }));
   }
 
   // Subscriber counts per maintenance
