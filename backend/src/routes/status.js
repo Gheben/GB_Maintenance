@@ -203,6 +203,81 @@ router.get('/', async (req, res) => {
      LIMIT 100`
   ).catch(() => []);
 
+  const allIncidentIds = [...new Set([...incidentRows, ...incident_history].map((incident) => incident.id))];
+  const allBlackoutIds = [...new Set([...blackout_periods, ...blackout_history].map((blackout) => blackout.id))];
+  const [incidentAssetRows, blackoutAssetRows] = await Promise.all([
+    allIncidentIds.length > 0 ? getMany(
+      `WITH related_services AS (
+         SELECT incident_id, service_id FROM incident_services WHERE incident_id = ANY($1::uuid[])
+         UNION
+         SELECT ia.incident_id, sa.service_id
+         FROM incident_assets ia
+         JOIN service_assets sa ON sa.asset_id=ia.asset_id
+         WHERE ia.incident_id = ANY($1::uuid[])
+       ), scope_assets AS (
+         SELECT incident_id AS event_id, asset_id, TRUE AS is_direct
+         FROM incident_assets WHERE incident_id = ANY($1::uuid[])
+         UNION ALL
+         SELECT rs.incident_id, sa.asset_id, FALSE
+         FROM related_services rs
+         JOIN service_assets sa ON sa.service_id=rs.service_id
+       )
+       SELECT scope_assets.event_id, a.id, a.name, a.part_is_relevant,
+              BOOL_OR(scope_assets.is_direct) AS is_direct
+       FROM scope_assets JOIN assets a ON a.id=scope_assets.asset_id
+       GROUP BY scope_assets.event_id, a.id, a.name, a.part_is_relevant
+       ORDER BY BOOL_OR(scope_assets.is_direct) DESC, a.name`,
+      [allIncidentIds]
+    ).catch(() => []) : [],
+    allBlackoutIds.length > 0 ? getMany(
+      `WITH related_services AS (
+         SELECT bp.id AS event_id, UNNEST(COALESCE(bp.service_ids, '{}'::uuid[])) AS service_id
+         FROM blackout_periods bp WHERE bp.id = ANY($1::uuid[])
+         UNION
+         SELECT bp.id, sa.service_id
+         FROM blackout_periods bp
+         CROSS JOIN LATERAL UNNEST(COALESCE(bp.asset_ids, '{}'::uuid[])) direct_asset(asset_id)
+         JOIN service_assets sa ON sa.asset_id=direct_asset.asset_id
+         WHERE bp.id = ANY($1::uuid[])
+       ), scope_assets AS (
+         SELECT bp.id AS event_id, direct_asset.asset_id, TRUE AS is_direct
+         FROM blackout_periods bp
+         CROSS JOIN LATERAL UNNEST(COALESCE(bp.asset_ids, '{}'::uuid[])) direct_asset(asset_id)
+         WHERE bp.id = ANY($1::uuid[])
+         UNION ALL
+         SELECT rs.event_id, sa.asset_id, FALSE
+         FROM related_services rs
+         JOIN service_assets sa ON sa.service_id=rs.service_id
+       )
+       SELECT scope_assets.event_id, a.id, a.name, a.part_is_relevant,
+              BOOL_OR(scope_assets.is_direct) AS is_direct
+       FROM scope_assets JOIN assets a ON a.id=scope_assets.asset_id
+       GROUP BY scope_assets.event_id, a.id, a.name, a.part_is_relevant
+       ORDER BY BOOL_OR(scope_assets.is_direct) DESC, a.name`,
+      [allBlackoutIds]
+    ).catch(() => []) : [],
+  ]);
+
+  function buildAffectedAssetsMap(rows) {
+    return rows.reduce((map, asset) => {
+      if (!map[asset.event_id]) map[asset.event_id] = [];
+      map[asset.event_id].push({
+        id: asset.id,
+        name: asset.name,
+        part_is_relevant: asset.part_is_relevant,
+        is_direct: asset.is_direct,
+      });
+      return map;
+    }, {});
+  }
+
+  const incidentAffectedAssets = buildAffectedAssetsMap(incidentAssetRows);
+  const blackoutAffectedAssets = buildAffectedAssetsMap(blackoutAssetRows);
+  const attachAffectedAssets = (items, affectedMap) => items.map((item) => ({
+    ...item,
+    affected_assets: affectedMap[item.id] || [],
+  }));
+
   // For each maintenance (in_progress + upcoming + recent), get involved users count
   const allMaintIds = [...new Set([
     ...in_progress_maintenance,
@@ -332,15 +407,15 @@ router.get('/', async (req, res) => {
     app_name: general.app_name || 'GB Maintenance',
     app_brand_image_url: general.app_brand_image_url || '',
     overall_status: overallStatus,
-    blackout_periods,
+    blackout_periods: attachAffectedAssets(blackout_periods, blackoutAffectedAssets),
     services,
-    active_incidents: incidents,
-    incident_history,
+    active_incidents: attachAffectedAssets(incidents, incidentAffectedAssets),
+    incident_history: attachAffectedAssets(incident_history, incidentAffectedAssets),
     in_progress_maintenance: attachMeta(in_progress_maintenance),
     upcoming_maintenance: attachMeta(upcoming_maintenance),
     recent_maintenance: attachMeta(recent_maintenance),
     maintenance_history: attachMeta(maintenance_history),
-    blackout_history,
+    blackout_history: attachAffectedAssets(blackout_history, blackoutAffectedAssets),
     // Legacy field kept for backward compat
     maintenance_summary: maintenance,
     last_updated: new Date().toISOString(),

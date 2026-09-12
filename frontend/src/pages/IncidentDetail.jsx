@@ -97,6 +97,7 @@ export default function IncidentDetail() {
   if (!incident) return <Layout title="Incident"><div className="text-center py-16 text-gray-500">Loading...</div></Layout>
 
   const canEdit = hasRole('superadmin','admin')
+  const relatedAssets = (incident.affectedAssets || []).filter((asset) => !asset.is_direct)
 
   const q = userSearch.toLowerCase()
   const filteredUsers = incidentUsers.filter((u) => {
@@ -169,9 +170,10 @@ export default function IncidentDetail() {
 
         {/* Affected tab */}
         {tab === 'affected' && (
-          <div className="card p-5">
-            <h3 className="font-medium mb-3 text-sm">Affected assets</h3>
-            {incident.assets?.length > 0 ? (
+          <div className="card p-5 space-y-4">
+            <div>
+              <h3 className="font-medium mb-3 text-sm">Selected assets</h3>
+              {incident.assets?.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {incident.assets.map(a => (
                   <Link key={a.id} to={`/assets/${a.id}`} className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline">
@@ -181,7 +183,21 @@ export default function IncidentDetail() {
                 ))}
               </div>
             ) : (
-              <p className="text-gray-500 text-sm">No affected assets</p>
+                <p className="text-gray-500 text-sm">No selected assets</p>
+            )}
+            </div>
+            {relatedAssets.length > 0 && (
+              <div>
+                <h3 className="font-medium mb-3 text-sm">Related affected assets</h3>
+                <div className="flex flex-wrap gap-2">
+                  {relatedAssets.map((asset) => (
+                    <Link key={asset.id} to={`/assets/${asset.id}`} className="inline-flex items-center gap-1 text-sm text-gray-600 hover:underline dark:text-gray-300">
+                      {asset.part_is_relevant && <ShieldCheck size={14} className="text-amber-600" title="Part-IS Relevant" />}
+                      {asset.name}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}

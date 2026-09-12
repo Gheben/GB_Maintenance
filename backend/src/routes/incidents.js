@@ -5,6 +5,7 @@ const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
 const { notifyIncident } = require('../services/notificationService');
 const wsService = require('../services/wsService');
+const { getAffectedAssets } = require('../utils/maintenanceScope');
 
 const router = Router();
 router.use(requireAuth);
@@ -77,12 +78,16 @@ router.get('/:id', async (req, res) => {
      FROM services s JOIN incident_services is2 ON is2.service_id=s.id WHERE is2.incident_id=$1`,
     [req.params.id]
   );
+  const affectedAssets = await getAffectedAssets(
+    assets.map((asset) => asset.id),
+    services.map((service) => service.id)
+  );
   const updates = await getMany(
     `SELECT iu.*, u.display_name as author FROM incident_updates iu
      LEFT JOIN users u ON u.id=iu.created_by WHERE iu.incident_id=$1 ORDER BY iu.created_at ASC`,
     [req.params.id]
   );
-  res.json({ ...incident, assets, services, updates });
+  res.json({ ...incident, assets, affectedAssets, services, updates });
 });
 
 // ─── POST /api/incidents ──────────────────────────────────────────────────────
@@ -219,22 +224,27 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 // ─── GET /api/incidents/:id/users ────────────────────────────────────────────
 router.get('/:id/users', async (req, res) => {
   const rows = await getMany(
-    `WITH resolved_users AS (
-       SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
-       FROM service_subscribers ss
-       JOIN incident_services is2 ON is2.service_id = ss.service_id
-       LEFT JOIN users u ON u.id = ss.user_id
-       WHERE is2.incident_id = $1 AND u.id IS NOT NULL
+    `WITH related_services AS (
+       SELECT service_id FROM incident_services WHERE incident_id=$1
        UNION
-       SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
-       FROM service_subscribers ss
-       JOIN service_assets sa ON sa.service_id = ss.service_id
-       JOIN incident_assets ia ON ia.asset_id = sa.asset_id
-       LEFT JOIN users u ON u.id = ss.user_id
-       WHERE ia.incident_id = $1 AND u.id IS NOT NULL
-       UNION
-       SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       SELECT sa.service_id
        FROM incident_assets ia
+       JOIN service_assets sa ON sa.asset_id=ia.asset_id
+       WHERE ia.incident_id=$1
+     ), scope_assets AS (
+       SELECT asset_id FROM incident_assets WHERE incident_id=$1
+       UNION
+       SELECT sa.asset_id FROM service_assets sa
+       WHERE sa.service_id IN (SELECT service_id FROM related_services)
+     ), resolved_users AS (
+       SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+       FROM service_subscribers ss
+       JOIN related_services is2 ON is2.service_id = ss.service_id
+       LEFT JOIN users u ON u.id = ss.user_id
+       WHERE u.id IS NOT NULL
+       UNION
+       SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
+      FROM scope_assets ia
        JOIN assets a ON a.id = ia.asset_id
        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
        JOIN users u ON (
@@ -249,7 +259,7 @@ router.get('/:id/users', async (req, res) => {
            )
          )
        )
-       WHERE ia.incident_id = $1 AND u.is_active = true
+      WHERE u.is_active = true
        UNION
        SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
               lc.username,
@@ -258,7 +268,7 @@ router.get('/:id/users', async (req, res) => {
               lc.office,
               'viewer'::text AS role,
               'ldap'::text AS auth_type
-       FROM incident_assets ia
+      FROM scope_assets ia
        JOIN assets a ON a.id = ia.asset_id
        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
        JOIN ldap_users_cache lc ON (
@@ -270,7 +280,6 @@ router.get('/:id/users', async (req, res) => {
            OR LOWER(COALESCE(lc.upn, '')) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
          )
        )
-       WHERE ia.incident_id = $1
        UNION
        SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
               lc.username,
@@ -279,7 +288,7 @@ router.get('/:id/users', async (req, res) => {
               lc.office,
               'viewer'::text AS role,
               'ldap'::text AS auth_type
-       FROM incident_assets ia
+      FROM scope_assets ia
        JOIN assets a ON a.id = ia.asset_id
        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
        JOIN ldap_users_cache lc ON (
@@ -292,7 +301,6 @@ router.get('/:id/users', async (req, res) => {
               OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), '')), ',', 1)
          )
        )
-       WHERE ia.incident_id = $1
        UNION
        SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
               lc.username,
@@ -301,7 +309,7 @@ router.get('/:id/users', async (req, res) => {
               lc.office,
               'viewer'::text AS role,
               'ldap'::text AS auth_type
-       FROM incident_assets ia
+      FROM scope_assets ia
        JOIN assets a ON a.id = ia.asset_id
        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
        JOIN ldap_group_mappings lgm ON (
@@ -315,10 +323,10 @@ router.get('/:id/users', async (req, res) => {
          WHERE LOWER(m.dn) = LOWER(lgm.ldap_group_dn)
             OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(lgm.ldap_group_dn), ',', 1)
        )
-       WHERE ia.incident_id = $1 AND lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
+      WHERE lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
        UNION
        SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
-       FROM incident_services is2
+      FROM related_services is2
        JOIN services s ON s.id = is2.service_id
        JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
        JOIN users u ON (
@@ -333,7 +341,7 @@ router.get('/:id/users', async (req, res) => {
            )
          )
        )
-       WHERE is2.incident_id = $1 AND u.is_active = true
+      WHERE u.is_active = true
        UNION
        SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
               lc.username,
@@ -342,7 +350,7 @@ router.get('/:id/users', async (req, res) => {
               lc.office,
               'viewer'::text AS role,
               'ldap'::text AS auth_type
-       FROM incident_services is2
+      FROM related_services is2
        JOIN services s ON s.id = is2.service_id
        JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
        JOIN ldap_users_cache lc ON (
@@ -354,7 +362,6 @@ router.get('/:id/users', async (req, res) => {
            OR LOWER(COALESCE(lc.upn, '')) = LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), ''))
          )
        )
-       WHERE is2.incident_id = $1
        UNION
        SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
               lc.username,
@@ -363,7 +370,7 @@ router.get('/:id/users', async (req, res) => {
               lc.office,
               'viewer'::text AS role,
               'ldap'::text AS auth_type
-       FROM incident_services is2
+      FROM related_services is2
        JOIN services s ON s.id = is2.service_id
        JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
        JOIN ldap_users_cache lc ON (
@@ -376,7 +383,6 @@ router.get('/:id/users', async (req, res) => {
               OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(NULLIF(BTRIM(COALESCE(ot->>'dn', ot->>'id', '')), '')), ',', 1)
          )
        )
-       WHERE is2.incident_id = $1
        UNION
        SELECT DISTINCT COALESCE(lc.dn, lc.username, lc.upn)::text AS id,
               lc.username,
@@ -385,7 +391,7 @@ router.get('/:id/users', async (req, res) => {
               lc.office,
               'viewer'::text AS role,
               'ldap'::text AS auth_type
-       FROM incident_services is2
+      FROM related_services is2
        JOIN services s ON s.id = is2.service_id
        JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
        JOIN ldap_group_mappings lgm ON (
@@ -399,7 +405,7 @@ router.get('/:id/users', async (req, res) => {
          WHERE LOWER(m.dn) = LOWER(lgm.ldap_group_dn)
             OR SPLIT_PART(LOWER(m.dn), ',', 1) = SPLIT_PART(LOWER(lgm.ldap_group_dn), ',', 1)
        )
-       WHERE is2.incident_id = $1 AND lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
+      WHERE lgm.ldap_group_dn IS NOT NULL AND BTRIM(lgm.ldap_group_dn) <> ''
      )
      SELECT DISTINCT id, username, display_name, email, office, role, auth_type
      FROM resolved_users

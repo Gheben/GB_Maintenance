@@ -42,6 +42,28 @@ function fmt(dt, f = 'MM/dd/yyyy HH:mm') {
   try { return format(new Date(dt), f) } catch { return '—' }
 }
 
+function AffectedAssets({ assets = [] }) {
+  if (assets.length === 0) return null
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+        <Server size={11} />
+        Affected assets:
+      </span>
+      {assets.map(asset => (
+        <span
+          key={asset.id}
+          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${asset.is_direct ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
+          title={asset.is_direct ? 'Selected asset' : 'Related asset'}
+        >
+          {asset.part_is_relevant && <ShieldCheck size={11} className="text-amber-600" />}
+          {asset.name}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function MaintenanceCard({ m, colorClass }) {
   const [showUsersModal, setShowUsersModal] = useState(false)
   const [usersSearch, setUsersSearch] = useState('')
@@ -125,24 +147,7 @@ function MaintenanceCard({ m, colorClass }) {
       {m.notes && <p className="text-xs text-gray-400 mt-1 italic">{m.notes}</p>}
       {isLoggedIn && m.reopen_reason && <p className="text-xs text-amber-700 mt-1"><strong>Reopen reason:</strong> {m.reopen_reason}</p>}
 
-      {affectedAssets.length > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-            <Server size={11} />
-            Affected assets:
-          </span>
-          {affectedAssets.map(asset => (
-            <span
-              key={asset.id}
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${asset.is_direct ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
-              title={asset.is_direct ? 'Selected asset' : 'Related asset'}
-            >
-              {asset.part_is_relevant && <ShieldCheck size={11} className="text-amber-600" />}
-              {asset.name}
-            </span>
-          ))}
-        </div>
-      )}
+      <AffectedAssets assets={affectedAssets} />
 
       <div className="mt-2 flex flex-wrap gap-3">
         {hasHistory && (
@@ -529,6 +534,7 @@ function IncidentCard({ incident }) {
         )}
       </div>
       {incident.description && <p className="text-xs text-gray-400 mt-1">{incident.description}</p>}
+      <AffectedAssets assets={incident.affected_assets || []} />
 
       {updates.length > 0 && (
         <button
@@ -655,6 +661,7 @@ export default function StatusPage() {
               <p className="text-sm text-red-200 mt-1">
                 {fmt(b.start_date, 'MMM dd, yyyy')} → {fmt(b.end_date, 'MMM dd, yyyy')}
               </p>
+              <AffectedAssets assets={b.affected_assets || []} />
               <p className="text-xs text-red-200 mt-1">No changes or maintenance windows are permitted during this period.</p>
             </div>
           </div>
@@ -670,6 +677,7 @@ export default function StatusPage() {
               <p className="text-sm text-amber-600 dark:text-amber-500 mt-1">
                 {fmt(b.start_date, 'MMM dd, yyyy')} → {fmt(b.end_date, 'MMM dd, yyyy')}
               </p>
+              <AffectedAssets assets={b.affected_assets || []} />
             </div>
           </div>
         ))}
@@ -766,6 +774,7 @@ export default function StatusPage() {
                   <p className="font-medium text-sm">{b.name}</p>
                   <span className="text-xs badge bg-red-100 text-red-800 shrink-0">blackout</span>
                 </div>
+                <AffectedAssets assets={b.affected_assets || []} />
                 <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-1">
                   <span>{fmt(b.start_date, 'MM/dd/yyyy')}</span>
                   <span>to</span>

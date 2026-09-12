@@ -59,7 +59,9 @@ const NOTIFY_TPL_VARS = {
   maintenance_owner_approval_requested: ['title','owner_source_type','owner_source_name','scheduled_start','scheduled_end','created_by_name','approval_url','app_url'],
   maintenance_owner_reschedule_proposed: ['title','owner_name','proposed_start','proposed_end','response_note','app_url','id'],
   maintenance_owner_reschedule_countered: ['title','creator_proposed_start','creator_proposed_end','creator_response_note','approval_url','app_url'],
-  blackout_scheduled: ['name','start_date','end_date','description','id','app_url'],
+  incident_created: ['title','severity','status','description','started_at','primary_assets','affected_assets','id','app_url'],
+  incident_resolved: ['title','resolved_at','primary_assets','affected_assets','id','app_url'],
+  blackout_scheduled: ['name','start_date','end_date','description','primary_assets','affected_assets','id','app_url'],
 }
 
 function renderNotifyPreview(html, vars) {

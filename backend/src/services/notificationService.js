@@ -2,7 +2,12 @@ const { query, getOne, getMany } = require('../db/database');
 const { sendMail, renderTemplate } = require('../utils/mailer');
 const logger = require('../utils/logger');
 const axios = require('axios');
-const { getMaintenanceAffectedAssets, getMaintenanceAffectedServices } = require('../utils/maintenanceScope');
+const {
+  getAffectedAssets,
+  getAffectedServices,
+  getMaintenanceAffectedAssets,
+  getMaintenanceAffectedServices,
+} = require('../utils/maintenanceScope');
 
 function htmlToPlainText(html) {
   return String(html || '')
@@ -370,20 +375,19 @@ async function notifyIncident(incidentId, eventType) {
     const incident = await getOne(`SELECT * FROM incidents WHERE id=$1`, [incidentId]);
     if (!incident) return;
 
-    // Get assets linked to incident → services → subscribers
-    const assets = await getMany(`SELECT asset_id FROM incident_assets WHERE incident_id=$1`, [incidentId]);
-    const assetIds = assets.map(a => a.asset_id);
+    const directAssets = await getMany(`SELECT asset_id FROM incident_assets WHERE incident_id=$1`, [incidentId]);
+    const directServices = await getMany(`SELECT service_id FROM incident_services WHERE incident_id=$1`, [incidentId]);
+    const [affectedAssets, affectedServices] = await Promise.all([
+      getAffectedAssets(directAssets.map((asset) => asset.asset_id), directServices.map((service) => service.service_id)),
+      getAffectedServices(directAssets.map((asset) => asset.asset_id), directServices.map((service) => service.service_id)),
+    ]);
+    const assetIds = affectedAssets.map((asset) => asset.id);
+    const serviceIds = affectedServices.map((service) => service.service_id);
 
     let emails = new Set();
     let userIds = new Set();
 
-    if (assetIds.length > 0) {
-      const services = await getMany(
-        `SELECT DISTINCT service_id FROM service_assets WHERE asset_id = ANY($1::uuid[])`,
-        [assetIds]
-      );
-      const serviceIds = services.map(s => s.service_id);
-      if (serviceIds.length > 0) {
+    if (serviceIds.length > 0) {
         const subs = await getMany(
           `SELECT ss.email, u.email as user_email, u.id as user_id
            FROM service_subscribers ss LEFT JOIN users u ON u.id=ss.user_id
@@ -429,8 +433,9 @@ async function notifyIncident(incidentId, eventType) {
           if (o.user_email) emails.add(o.user_email);
           if (o.user_id) userIds.add(o.user_id);
         });
-      }
+    }
 
+    if (assetIds.length > 0 || serviceIds.length > 0) {
       const targetAssetOwners = await getMany(
         `SELECT DISTINCT u.id AS user_id, u.email AS user_email
          FROM assets a
@@ -453,6 +458,66 @@ async function notifyIncident(incidentId, eventType) {
         if (o.user_email) emails.add(o.user_email);
         if (o.user_id) userIds.add(o.user_id);
       });
+
+      const targetLdapAssetUsers = await getMany(
+        `WITH scope_targets AS (
+           SELECT ot
+           FROM assets a
+           JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
+           WHERE a.id = ANY($1::uuid[])
+           UNION ALL
+           SELECT ot
+           FROM services s
+           JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
+           WHERE s.id = ANY($2::uuid[])
+         )
+         SELECT DISTINCT lc.email AS user_email
+         FROM scope_targets target
+         JOIN ldap_users_cache lc ON (
+           target.ot->>'type' = 'ldap_user'
+           AND (
+             LOWER(COALESCE(lc.dn, '')) = LOWER(NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), ''))
+             OR LOWER(COALESCE(lc.username, '')) = LOWER(NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), ''))
+             OR LOWER(COALESCE(lc.upn, '')) = LOWER(NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), ''))
+           )
+         )
+         WHERE lc.email IS NOT NULL
+         UNION
+         SELECT DISTINCT NULLIF(BTRIM(target.ot->>'email'), '') AS user_email
+         FROM scope_targets target
+         WHERE target.ot->>'type' = 'ldap_user'
+           AND NULLIF(BTRIM(target.ot->>'email'), '') IS NOT NULL
+         UNION
+         SELECT DISTINCT lc.email AS user_email
+         FROM scope_targets target
+         JOIN ldap_users_cache lc ON target.ot->>'type' = 'ldap_group'
+         WHERE lc.email IS NOT NULL
+           AND EXISTS (
+             SELECT 1
+             FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) member(dn)
+             WHERE LOWER(member.dn) = LOWER(NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), ''))
+                OR SPLIT_PART(LOWER(member.dn), ',', 1) = SPLIT_PART(LOWER(NULLIF(BTRIM(COALESCE(target.ot->>'dn', target.ot->>'id', '')), '')), ',', 1)
+           )
+         UNION
+         SELECT DISTINCT lc.email AS user_email
+         FROM scope_targets target
+         JOIN ldap_group_mappings lgm ON (
+           target.ot->>'type' = 'local_group'
+           AND (target.ot->>'id') ~* '^[0-9a-f-]{36}$'
+           AND lgm.local_group_id=(target.ot->>'id')::uuid
+         )
+         JOIN ldap_users_cache lc ON EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements_text(COALESCE(lc.source_payload->'memberOf', lc.source_payload->'memberof', '[]'::jsonb)) member(dn)
+           WHERE LOWER(member.dn) = LOWER(lgm.ldap_group_dn)
+              OR SPLIT_PART(LOWER(member.dn), ',', 1) = SPLIT_PART(LOWER(lgm.ldap_group_dn), ',', 1)
+         )
+         WHERE lc.email IS NOT NULL`,
+        [assetIds, serviceIds]
+      ).catch(() => []);
+      targetLdapAssetUsers.forEach((user) => {
+        if (user.user_email) emails.add(user.user_email);
+      });
     }
 
     const vars = {
@@ -463,6 +528,8 @@ async function notifyIncident(incidentId, eventType) {
       description: incident.description || '-',
       started_at: new Date(incident.started_at).toLocaleString('it-IT'),
       resolved_at: incident.resolved_at ? new Date(incident.resolved_at).toLocaleString('it-IT') : '-',
+      primary_assets: affectedAssets.filter((asset) => asset.is_direct).map((asset) => asset.name).join(', ') || '-',
+      affected_assets: affectedAssets.map((asset) => asset.name).join(', ') || '-',
     };
 
     const tasks = [];

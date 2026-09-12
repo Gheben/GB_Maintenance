@@ -2193,6 +2193,21 @@ const MIGRATIONS = [
       );
     }
   },
+  {
+    version: 48,
+    name: 'incident_blackout_affected_assets_templates',
+    up: async (client) => {
+      await client.query(
+        `UPDATE notification_templates
+         SET body_html_template = body_html_template ||
+               E'\n<p style="margin:14px 0 0;color:#334155"><strong>Selected assets:</strong> {{primary_assets}}</p>' ||
+               E'\n<p style="margin:6px 0 0;color:#334155"><strong>All affected assets:</strong> {{affected_assets}}</p>',
+             updated_at = NOW()
+         WHERE event_type IN ('incident_created', 'incident_resolved', 'blackout_scheduled')
+           AND body_html_template NOT LIKE '%{{affected_assets}}%'`
+      );
+    }
+  },
 ];
 
 async function runMigrations(pool) {

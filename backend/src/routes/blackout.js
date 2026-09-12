@@ -4,26 +4,26 @@ const { requireAuth, requireChangeManager, requireAdmin } = require('../middlewa
 const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
 const { sendEmailNotification } = require('../services/notificationService');
+const { getAffectedAssets, getAffectedServices } = require('../utils/maintenanceScope');
 
 const router = Router();
 router.use(requireAuth);
 
 async function getImpactedUsersAndOffices(serviceIds = [], assetIds = []) {
-  const sids = Array.isArray(serviceIds) ? serviceIds : [];
-  const aids = Array.isArray(assetIds) ? assetIds : [];
+  const directServiceIds = Array.isArray(serviceIds) ? serviceIds : [];
+  const directAssetIds = Array.isArray(assetIds) ? assetIds : [];
+  const [affectedAssets, affectedServices] = await Promise.all([
+    getAffectedAssets(directAssetIds, directServiceIds),
+    getAffectedServices(directAssetIds, directServiceIds),
+  ]);
+  const sids = affectedServices.map((service) => service.service_id);
+  const aids = affectedAssets.map((asset) => asset.id);
   const users = await getMany(
     `WITH resolved_users AS (
        SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
        FROM service_subscribers ss
        LEFT JOIN users u ON u.id = ss.user_id
        WHERE ss.service_id = ANY($1::uuid[]) AND u.id IS NOT NULL
-       UNION
-       SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
-       FROM service_subscribers ss
-       JOIN service_assets sa ON sa.service_id = ss.service_id
-       LEFT JOIN users u ON u.id = ss.user_id
-       WHERE (sa.service_id = ANY($1::uuid[]) OR sa.asset_id = ANY($2::uuid[]))
-         AND u.id IS NOT NULL
        UNION
        SELECT DISTINCT u.id::text AS id, u.username, u.display_name, u.email, u.office, u.role, u.auth_type
        FROM assets a
@@ -193,6 +193,7 @@ async function getImpactedUsersAndOffices(serviceIds = [], assetIds = []) {
   const officesImpacted = [...new Set(users.map((u) => String(u.office || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   return {
     users,
+    affected_assets: affectedAssets,
     impacted_users_count: users.length,
     offices_impacted: officesImpacted,
     offices_impacted_count: officesImpacted.length,
@@ -211,6 +212,7 @@ router.get('/', async (req, res) => {
     row.services = sids.length ? await getMany(`SELECT id, name FROM services WHERE id = ANY($1::uuid[])`, [sids]) : [];
     row.assets   = aids.length ? await getMany(`SELECT id, name, part_is_relevant FROM assets   WHERE id = ANY($1::uuid[])`, [aids]) : [];
     const impacted = await getImpactedUsersAndOffices(sids, aids);
+    row.affected_assets = impacted.affected_assets;
     row.impacted_users_count = impacted.impacted_users_count;
     row.offices_impacted = impacted.offices_impacted;
     row.offices_impacted_count = impacted.offices_impacted_count;
@@ -238,6 +240,9 @@ router.get('/:id', async (req, res) => {
   );
   if (!row) return res.status(404).json({ error: 'Periodo non trovato' });
   const impacted = await getImpactedUsersAndOffices(row.service_ids || [], row.asset_ids || []);
+  row.services = row.service_ids?.length ? await getMany(`SELECT id, name FROM services WHERE id = ANY($1::uuid[])`, [row.service_ids]) : [];
+  row.assets = row.asset_ids?.length ? await getMany(`SELECT id, name, part_is_relevant FROM assets WHERE id = ANY($1::uuid[])`, [row.asset_ids]) : [];
+  row.affected_assets = impacted.affected_assets;
   row.impacted_users_count = impacted.impacted_users_count;
   row.offices_impacted = impacted.offices_impacted;
   row.offices_impacted_count = impacted.offices_impacted_count;
@@ -272,14 +277,26 @@ router.post('/', requireChangeManager, [
   (async () => {
     try {
       const impacted = await getImpactedUsersAndOffices(sids, aids);
-      const emails = [...new Set(impacted.users.map((u) => String(u.email || '').trim()).filter(Boolean))];
+      const affectedServiceIds = (await getAffectedServices(aids, sids)).map((service) => service.service_id);
+      const emailSubscribers = affectedServiceIds.length > 0 ? await getMany(
+        `SELECT email FROM service_subscribers
+         WHERE service_id = ANY($1::uuid[]) AND NULLIF(BTRIM(email), '') IS NOT NULL`,
+        [affectedServiceIds]
+      ) : [];
+      const emails = [...new Set([
+        ...impacted.users.map((user) => String(user.email || '').trim()),
+        ...emailSubscribers.map((subscriber) => String(subscriber.email || '').trim()),
+      ].filter(Boolean))];
       if (emails.length > 0) {
+        const primaryAssets = impacted.affected_assets.filter((asset) => asset.is_direct);
         await sendEmailNotification('blackout_scheduled', emails, {
           id: result.rows[0].id,
           name: req.body.name,
           description: req.body.description || '-',
           start_date: new Date(req.body.start_date).toLocaleDateString('it-IT'),
           end_date: new Date(req.body.end_date).toLocaleDateString('it-IT'),
+          primary_assets: primaryAssets.map((asset) => asset.name).join(', ') || '-',
+          affected_assets: impacted.affected_assets.map((asset) => asset.name).join(', ') || '-',
         }, 'blackout_period', result.rows[0].id);
         await query(`UPDATE blackout_periods SET notified_at=NOW() WHERE id=$1`, [result.rows[0].id]);
       }

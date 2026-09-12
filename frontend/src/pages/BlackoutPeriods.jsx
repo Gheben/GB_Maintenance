@@ -173,6 +173,18 @@ export default function BlackoutPeriods() {
                       ))}
                     </div>
                   )}
+                  {p.affected_assets?.some((asset) => !asset.is_direct) && (
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <span className="text-xs text-gray-400">Related assets:</span>
+                      {p.affected_assets.filter((asset) => !asset.is_direct).map((asset) => (
+                        <span key={asset.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                          <Server size={10} />
+                          {asset.part_is_relevant && <ShieldCheck size={11} className="text-amber-600" title="Part-IS Relevant" />}
+                          {asset.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="mt-2">
                     <p className="text-xs text-gray-500">Offices impacted: <strong>{p.offices_impacted_count || 0}</strong></p>
                     {Array.isArray(p.offices_impacted) && p.offices_impacted.length > 0 && (
