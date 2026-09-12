@@ -2150,6 +2150,49 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_photo_data_url TEXT`);
     }
   },
+  {
+    version: 47,
+    name: 'partis_asset_owner_approval_public_tokens',
+    up: async (client) => {
+      await client.query(`ALTER TABLE assets ADD COLUMN IF NOT EXISTS part_is_relevant BOOLEAN NOT NULL DEFAULT FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_assets_part_is_relevant ON assets(part_is_relevant) WHERE part_is_relevant = true`);
+
+      await client.query(`ALTER TABLE maintenance_owner_approvals ADD COLUMN IF NOT EXISTS approval_token_hash VARCHAR(128)`);
+      await client.query(`ALTER TABLE maintenance_owner_approvals ADD COLUMN IF NOT EXISTS approval_token_expires_at TIMESTAMPTZ`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_moa_approval_token_hash ON maintenance_owner_approvals(approval_token_hash)`);
+
+      await client.query(`ALTER TABLE blackout_periods ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ`);
+
+      await client.query(
+        `INSERT INTO notification_templates (name, event_type, subject_template, body_html_template, is_active)
+         VALUES ($1, $2, $3, $4, true)
+         ON CONFLICT (event_type) DO NOTHING`,
+        [
+          'Blackout Period Scheduled',
+          'blackout_scheduled',
+          '[BLACKOUT] {{name}}',
+          `<h2 style="margin:0 0 12px;color:#b91c1c">Blackout Period Scheduled</h2>
+<p style="margin:0 0 14px;color:#334155">A change freeze (blackout period) has been scheduled and may affect one or more services/assets you use.</p>
+<table style="border-collapse:collapse;width:100%;margin:0 0 14px">
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Name</td><td style="padding:8px;border:1px solid #e2e8f0">{{name}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Start</td><td style="padding:8px;border:1px solid #e2e8f0">{{start_date}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">End</td><td style="padding:8px;border:1px solid #e2e8f0">{{end_date}}</td></tr>
+  <tr><td style="padding:8px;border:1px solid #e2e8f0;font-weight:600">Description</td><td style="padding:8px;border:1px solid #e2e8f0">{{description}}</td></tr>
+</table>
+<p style="margin:16px 0 0"><a href="{{app_url}}/blackout" style="background:#b91c1c;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Open Blackout Periods</a></p>`
+        ]
+      );
+
+      // Owner-facing approval emails now link to a public, token-based page (no login required),
+      // mirroring the license approval flow.
+      await client.query(
+        `UPDATE notification_templates
+         SET body_html_template = replace(body_html_template, '{{app_url}}/maintenance/{{id}}', '{{approval_url}}'),
+             updated_at = NOW()
+         WHERE event_type IN ('maintenance_owner_approval_requested', 'maintenance_owner_reschedule_countered')`
+      );
+    }
+  },
 ];
 
 async function runMigrations(pool) {

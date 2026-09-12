@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const { body, validationResult } = require('express-validator');
+const crypto = require('crypto');
 const { requireAuth, requireOperator, requireAdmin, requireChangeManager } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
@@ -7,7 +8,12 @@ const { notifyMaintenance, sendEmailNotification, sendInApp } = require('../serv
 const wsService = require('../services/wsService');
 
 const router = Router();
-router.use(requireAuth);
+
+const OWNER_APPROVAL_TOKEN_TTL_HOURS = 168;
+
+function hashOwnerApprovalToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
 
 const TYPES = ['planned','emergency','upgrade','security_patch','infrastructure','other'];
 const STATUSES = ['draft','pending_approval','scheduled','in_progress','completed','cancelled','extended'];
@@ -100,6 +106,16 @@ async function userCanAccessMaintenance(user, maintenanceId) {
   return !!accessible;
 }
 
+async function assetsIncludePartIsRelevant(assetIds = []) {
+  const ids = (Array.isArray(assetIds) ? assetIds : []).filter(Boolean);
+  if (ids.length === 0) return false;
+  const row = await getOne(
+    `SELECT 1 FROM assets WHERE id = ANY($1::uuid[]) AND part_is_relevant = true LIMIT 1`,
+    [ids]
+  );
+  return !!row;
+}
+
 async function expandMaintenanceLinks(assetIds = [], serviceIds = []) {
   const assetSet = new Set((Array.isArray(assetIds) ? assetIds : []).filter(Boolean));
   const serviceSet = new Set((Array.isArray(serviceIds) ? serviceIds : []).filter(Boolean));
@@ -171,6 +187,16 @@ async function resolveMaintenanceOwnerApprovalTargets(maintenanceId) {
        JOIN user_group_members ugm ON ugm.group_id=a.owner_group_id
        JOIN users u ON u.id=ugm.user_id
        WHERE ma.maintenance_id=$1 AND a.owner_type='local_group' AND a.owner_group_id IS NOT NULL AND u.is_active=true
+
+       UNION
+
+       SELECT u.id AS owner_user_id, u.email AS owner_email, COALESCE(u.display_name, u.username) AS owner_name,
+              'asset'::text AS owner_source_type, a.id AS owner_source_id, a.name AS owner_source_name
+       FROM maintenance_assets ma
+       JOIN assets a ON a.id=ma.asset_id
+       JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
+       JOIN users u ON (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
+       WHERE ma.maintenance_id=$1 AND u.is_active=true
 
        UNION
 
@@ -253,18 +279,26 @@ async function recomputeOwnerApprovalStatus(maintenanceId) {
   return status;
 }
 
-async function notifyOwnerApprovalRequested(maintenance, targets, actorName) {
-  if (!Array.isArray(targets) || targets.length === 0) return;
+async function notifyOwnerApprovalRequested(maintenance, approvalRows, actorName) {
+  if (!Array.isArray(approvalRows) || approvalRows.length === 0) return;
   const appUrl = await getAppBaseUrl();
-  for (const t of targets) {
-    const msg = `Approval required for maintenance "${maintenance.title}" (${t.owner_source_type}: ${t.owner_source_name})`;
+  for (const row of approvalRows) {
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashOwnerApprovalToken(token);
+    const expiresAt = new Date(Date.now() + OWNER_APPROVAL_TOKEN_TTL_HOURS * 60 * 60 * 1000);
+    await query(
+      `UPDATE maintenance_owner_approvals SET approval_token_hash=$1, approval_token_expires_at=$2, updated_at=NOW() WHERE id=$3`,
+      [tokenHash, expiresAt.toISOString(), row.id]
+    );
+    const approvalUrl = `${appUrl}/maintenance/approval?token=${token}`;
+    const msg = `Approval required for maintenance "${maintenance.title}" (${row.owner_source_type}: ${row.owner_source_name})`;
     const jobs = [
-      sendInApp(t.owner_user_id, 'maintenance_owner_approval_requested', 'Maintenance approval requested', msg, 'maintenance', maintenance.id),
+      sendInApp(row.owner_user_id, 'maintenance_owner_approval_requested', 'Maintenance approval requested', msg, 'maintenance', maintenance.id),
     ];
-    if (t.owner_email) {
+    if (row.owner_email) {
       jobs.push(sendEmailNotification(
         'maintenance_owner_approval_requested',
-        [t.owner_email],
+        [row.owner_email],
         {
           id: maintenance.id,
           title: maintenance.title,
@@ -274,8 +308,9 @@ async function notifyOwnerApprovalRequested(maintenance, targets, actorName) {
           scheduled_start: formatItDate(maintenance.scheduled_start),
           scheduled_end: formatItDate(maintenance.scheduled_end),
           created_by_name: actorName || '-',
-          owner_source_type: t.owner_source_type,
-          owner_source_name: t.owner_source_name || '-',
+          owner_source_type: row.owner_source_type,
+          owner_source_name: row.owner_source_name || '-',
+          approval_url: approvalUrl,
           app_url: appUrl,
         },
         'maintenance',
@@ -305,6 +340,136 @@ async function getOwnerApprovalsForMaintenance(maintenanceId, user, creatorId) {
     can_creator_decide: canCreatorDecide && r.status === 'reschedule_proposed',
   }));
 }
+
+async function findOwnerApprovalByToken(token) {
+  const tokenHash = hashOwnerApprovalToken(token);
+  const row = await getOne(
+    `SELECT moa.*, mw.title, mw.type, mw.impact_level, mw.description, mw.scheduled_start, mw.scheduled_end, mw.status AS maintenance_status
+     FROM maintenance_owner_approvals moa
+     JOIN maintenance_windows mw ON mw.id = moa.maintenance_id
+     WHERE moa.approval_token_hash=$1`,
+    [tokenHash]
+  );
+  if (!row) return { error: 'Approval link not found', status: 404 };
+  if (!row.approval_token_expires_at || new Date(row.approval_token_expires_at).getTime() < Date.now()) {
+    return { error: 'Approval link expired', status: 410 };
+  }
+  return { row };
+}
+
+// ─── Shared owner-response logic (used by both the authenticated and public token routes) ───
+async function recordOwnerResponse({ approval, action, note, proposedStart, proposedEnd, actorName }) {
+  if (!['pending', 'counter_proposed'].includes(approval.status)) {
+    return { error: 'This request is not awaiting owner response', status: 400 };
+  }
+  if (action === 'reschedule') {
+    if (!proposedStart || !proposedEnd) return { error: 'Proposed start/end are required', status: 400 };
+    if (new Date(proposedEnd) <= new Date(proposedStart)) return { error: 'Proposed end must be after proposed start', status: 400 };
+  }
+
+  const nextStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'reschedule_proposed';
+
+  await query(
+    `UPDATE maintenance_owner_approvals
+     SET status=$1, response_note=$2, proposed_start=$3, proposed_end=$4, responded_at=NOW(), updated_at=NOW()
+     WHERE id=$5`,
+    [nextStatus, note, action === 'reschedule' ? proposedStart : null, action === 'reschedule' ? proposedEnd : null, approval.id]
+  );
+
+  const newOwnerStatus = await recomputeOwnerApprovalStatus(approval.maintenance_id);
+  const maintenance = await getOne('SELECT * FROM maintenance_windows WHERE id=$1', [approval.maintenance_id]);
+  const creator = maintenance?.created_by ? await getOne('SELECT id, email FROM users WHERE id=$1', [maintenance.created_by]) : null;
+
+  if (creator?.id) {
+    const inAppTitle = action === 'approve'
+      ? `Owner approved maintenance: ${maintenance.title}`
+      : action === 'reject'
+        ? `Owner rejected maintenance: ${maintenance.title}`
+        : `Owner proposed a new date: ${maintenance.title}`;
+    const inAppMsg = action === 'reschedule'
+      ? `${actorName} proposed ${formatItDate(proposedStart)} - ${formatItDate(proposedEnd)}`
+      : (note || '');
+    const jobs = [
+      sendInApp(creator.id, `maintenance_owner_${action}`, inAppTitle, inAppMsg, 'maintenance', maintenance.id),
+    ];
+    if (action === 'reschedule' && creator.email) {
+      jobs.push(sendEmailNotification(
+        'maintenance_owner_reschedule_proposed',
+        [creator.email],
+        {
+          id: maintenance.id,
+          title: maintenance.title,
+          owner_name: actorName,
+          proposed_start: formatItDate(proposedStart),
+          proposed_end: formatItDate(proposedEnd),
+          response_note: note || '-',
+        },
+        'maintenance',
+        maintenance.id
+      ).catch(() => {}));
+    }
+    await Promise.allSettled(jobs);
+  }
+
+  return { newOwnerStatus };
+}
+
+// ─── PUBLIC (no login) owner approval routes — reached from the email link, mirrors licenses ───
+router.get('/public/owner-approval', async (req, res) => {
+  const token = String(req.query.token || '').trim();
+  if (!token) return res.status(400).json({ error: 'Missing token' });
+  const result = await findOwnerApprovalByToken(token);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  const row = result.row;
+  res.json({
+    id: row.id,
+    maintenance_id: row.maintenance_id,
+    title: row.title,
+    type: row.type,
+    impact_level: row.impact_level,
+    description: row.description,
+    scheduled_start: row.scheduled_start,
+    scheduled_end: row.scheduled_end,
+    owner_name: row.owner_name,
+    owner_source_type: row.owner_source_type,
+    owner_source_name: row.owner_source_name,
+    status: row.status,
+    proposed_start: row.proposed_start,
+    proposed_end: row.proposed_end,
+    creator_proposed_start: row.creator_proposed_start,
+    creator_proposed_end: row.creator_proposed_end,
+  });
+});
+
+router.post('/public/owner-approval/respond', [
+  body('token').isString().trim().isLength({ min: 10 }),
+  body('action').isIn(OWNER_APPROVAL_OWNER_ACTIONS),
+  body('note').optional().isString().isLength({ max: 3000 }),
+  body('proposed_start').optional().isISO8601(),
+  body('proposed_end').optional().isISO8601(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const result = await findOwnerApprovalByToken(req.body.token);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  const approval = result.row;
+
+  const outcome = await recordOwnerResponse({
+    approval,
+    action: req.body.action,
+    note: req.body.note || null,
+    proposedStart: req.body.proposed_start,
+    proposedEnd: req.body.proposed_end,
+    actorName: approval.owner_name || 'Owner',
+  });
+  if (outcome.error) return res.status(outcome.status).json({ error: outcome.error });
+
+  await auditService.log(null, approval.owner_email || approval.owner_name || 'owner', `maintenance:owner_approval:${req.body.action}:public_token`, 'maintenance', approval.maintenance_id, req.body.note || null, req.ip);
+  res.json({ message: 'Owner response recorded', owner_approval_status: outcome.newOwnerStatus });
+});
+
+router.use(requireAuth);
 
 // ─── GET /api/maintenance ─────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
@@ -599,7 +764,11 @@ router.post('/', requireOperator, [
   // Auto-set status: if high/critical impact or emergency → pending_approval, else → scheduled
   const needsApproval = ['critical','high'].includes(req.body.impact_level) || req.body.type === 'emergency';
   const status = needsApproval ? 'pending_approval' : 'scheduled';
-  const ownerApprovalRequired = req.body.owner_approval_required === true;
+
+  // Any Part-IS relevant asset in scope forces the owner approval flow, regardless of the request flag.
+  const expandedLinks = await expandMaintenanceLinks(req.body.asset_ids || [], req.body.service_ids || []);
+  const partIsInvolved = await assetsIncludePartIsRelevant(expandedLinks.asset_ids);
+  const ownerApprovalRequired = req.body.owner_approval_required === true || partIsInvolved;
   const ownerApprovalStatus = ownerApprovalRequired ? 'pending' : 'not_required';
 
   const result = await query(
@@ -624,7 +793,6 @@ router.post('/', requireOperator, [
   const id = result.rows[0].id;
 
   // Auto-include correlated entities through service_assets mapping.
-  const expandedLinks = await expandMaintenanceLinks(req.body.asset_ids || [], req.body.service_ids || []);
   for (const aid of expandedLinks.asset_ids) {
     await query(`INSERT INTO maintenance_assets (maintenance_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, aid]);
   }
@@ -638,9 +806,10 @@ router.post('/', requireOperator, [
 
   if (ownerApprovalRequired) {
     const maintenanceRow = await getOne('SELECT * FROM maintenance_windows WHERE id=$1', [id]);
-    const targets = await createOwnerApprovalRequests(id);
+    await createOwnerApprovalRequests(id);
     await recomputeOwnerApprovalStatus(id);
-    await notifyOwnerApprovalRequested(maintenanceRow, targets, req.user.display_name || req.user.username || 'User').catch(() => {});
+    const approvalRows = await getMany(`SELECT * FROM maintenance_owner_approvals WHERE maintenance_id=$1`, [id]);
+    await notifyOwnerApprovalRequested(maintenanceRow, approvalRows, req.user.display_name || req.user.username || 'User').catch(() => {});
   }
 
   // Notify if scheduled
@@ -675,86 +844,18 @@ router.post('/:id/owner-approvals/:approvalId/respond', [
     return res.status(403).json({ error: 'Only the owner can respond to this request' });
   }
 
-  if (!['pending', 'counter_proposed'].includes(approval.status)) {
-    return res.status(400).json({ error: 'This request is not awaiting owner response' });
-  }
+  const outcome = await recordOwnerResponse({
+    approval,
+    action: req.body.action,
+    note: req.body.note || null,
+    proposedStart: req.body.proposed_start,
+    proposedEnd: req.body.proposed_end,
+    actorName: req.user.display_name || req.user.username || 'Owner',
+  });
+  if (outcome.error) return res.status(outcome.status).json({ error: outcome.error });
 
-  const action = req.body.action;
-  const note = req.body.note || null;
-
-  if (action === 'reschedule') {
-    if (!req.body.proposed_start || !req.body.proposed_end) {
-      return res.status(400).json({ error: 'Proposed start/end are required' });
-    }
-    if (new Date(req.body.proposed_end) <= new Date(req.body.proposed_start)) {
-      return res.status(400).json({ error: 'Proposed end must be after proposed start' });
-    }
-  }
-
-  const nextStatus = action === 'approve'
-    ? 'approved'
-    : action === 'reject'
-      ? 'rejected'
-      : 'reschedule_proposed';
-
-  await query(
-    `UPDATE maintenance_owner_approvals
-     SET status=$1,
-         response_note=$2,
-         proposed_start=$3,
-         proposed_end=$4,
-         responded_at=NOW(),
-         updated_at=NOW()
-     WHERE id=$5`,
-    [
-      nextStatus,
-      note,
-      action === 'reschedule' ? req.body.proposed_start : null,
-      action === 'reschedule' ? req.body.proposed_end : null,
-      approval.id,
-    ]
-  );
-
-  const newOwnerStatus = await recomputeOwnerApprovalStatus(req.params.id);
-
-  const creator = maintenance.created_by ? await getOne('SELECT id, email, display_name, username FROM users WHERE id=$1', [maintenance.created_by]) : null;
-  const actorName = req.user.display_name || req.user.username || 'Owner';
-
-  if (creator?.id) {
-    const inAppTitle = action === 'approve'
-      ? `Owner approved maintenance: ${maintenance.title}`
-      : action === 'reject'
-        ? `Owner rejected maintenance: ${maintenance.title}`
-        : `Owner proposed a new date: ${maintenance.title}`;
-    const inAppMsg = action === 'reschedule'
-      ? `${actorName} proposed ${formatItDate(req.body.proposed_start)} - ${formatItDate(req.body.proposed_end)}`
-      : (note || '');
-    const jobs = [
-      sendInApp(creator.id, `maintenance_owner_${action}`, inAppTitle, inAppMsg, 'maintenance', maintenance.id),
-    ];
-    if (creator.email) {
-      if (action === 'reschedule') {
-        jobs.push(sendEmailNotification(
-          'maintenance_owner_reschedule_proposed',
-          [creator.email],
-          {
-            id: maintenance.id,
-            title: maintenance.title,
-            owner_name: actorName,
-            proposed_start: formatItDate(req.body.proposed_start),
-            proposed_end: formatItDate(req.body.proposed_end),
-            response_note: note || '-',
-          },
-          'maintenance',
-          maintenance.id
-        ).catch(() => {}));
-      }
-    }
-    await Promise.allSettled(jobs);
-  }
-
-  await auditService.log(req.user.id, req.user.username, `maintenance:owner_approval:${action}`, 'maintenance', req.params.id, note, req.ip);
-  res.json({ message: 'Owner response recorded', owner_approval_status: newOwnerStatus });
+  await auditService.log(req.user.id, req.user.username, `maintenance:owner_approval:${req.body.action}`, 'maintenance', req.params.id, req.body.note || null, req.ip);
+  res.json({ message: 'Owner response recorded', owner_approval_status: outcome.newOwnerStatus });
 });
 
 // ─── POST /api/maintenance/:id/owner-approvals/:approvalId/creator-decision ─
@@ -825,20 +926,45 @@ router.post('/:id/owner-approvals/:approvalId/creator-decision', [
        WHERE id=$3`,
       [approval.proposed_start, approval.proposed_end, req.params.id]
     );
+
+    // A new date was agreed: every owner must sign off again, so reset all approval rows.
+    await query(
+      `UPDATE maintenance_owner_approvals
+       SET status='pending', response_note=NULL, proposed_start=NULL, proposed_end=NULL,
+           creator_response_note=NULL, creator_proposed_start=NULL, creator_proposed_end=NULL,
+           responded_at=NULL, creator_responded_at=NULL, requested_at=NOW(), updated_at=NOW()
+       WHERE maintenance_id=$1`,
+      [req.params.id]
+    );
   }
 
   const newOwnerStatus = await recomputeOwnerApprovalStatus(req.params.id);
   const owner = await getOne('SELECT id, email FROM users WHERE id=$1', [approval.owner_user_id]);
+
+  if (action === 'accept') {
+    const refreshedMaintenance = await getOne('SELECT * FROM maintenance_windows WHERE id=$1', [req.params.id]);
+    const allApprovalRows = await getMany('SELECT * FROM maintenance_owner_approvals WHERE maintenance_id=$1', [req.params.id]);
+    await notifyOwnerApprovalRequested(refreshedMaintenance, allApprovalRows, req.user.display_name || req.user.username || 'Creator').catch(() => {});
+    await auditService.log(req.user.id, req.user.username, `maintenance:creator_decision:${action}`, 'maintenance', req.params.id, note, req.ip);
+    return res.json({ message: 'Creator decision saved, all owners re-notified for the new date', owner_approval_status: newOwnerStatus });
+  }
+
   if (owner?.id) {
-    const title = action === 'accept'
-      ? `Reschedule approved by creator: ${maintenance.title}`
-      : action === 'reject'
-        ? `Reschedule rejected by creator: ${maintenance.title}`
-        : `Creator sent a counter proposal: ${maintenance.title}`;
+    const title = action === 'reject'
+      ? `Reschedule rejected by creator: ${maintenance.title}`
+      : `Creator sent a counter proposal: ${maintenance.title}`;
     const jobs = [
       sendInApp(owner.id, `maintenance_creator_${action}`, title, note || '', 'maintenance', maintenance.id),
     ];
     if (action === 'counter_propose' && owner.email) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenHash = hashOwnerApprovalToken(token);
+      const expiresAt = new Date(Date.now() + OWNER_APPROVAL_TOKEN_TTL_HOURS * 60 * 60 * 1000);
+      await query(
+        `UPDATE maintenance_owner_approvals SET approval_token_hash=$1, approval_token_expires_at=$2, updated_at=NOW() WHERE id=$3`,
+        [tokenHash, expiresAt.toISOString(), approval.id]
+      );
+      const appUrl = await getAppBaseUrl();
       jobs.push(sendEmailNotification(
         'maintenance_owner_reschedule_countered',
         [owner.email],
@@ -848,6 +974,7 @@ router.post('/:id/owner-approvals/:approvalId/creator-decision', [
           creator_proposed_start: formatItDate(req.body.counter_start),
           creator_proposed_end: formatItDate(req.body.counter_end),
           creator_response_note: note || '-',
+          approval_url: `${appUrl}/maintenance/approval?token=${token}`,
         },
         'maintenance',
         maintenance.id
@@ -876,6 +1003,7 @@ router.put('/:id', requireOperator, async (req, res) => {
   }
 
   // Update linked assets/services with bidirectional correlation expansion.
+  let partIsNewlyRequired = false;
   if (Array.isArray(req.body.asset_ids) || Array.isArray(req.body.service_ids)) {
     const currentAssetRows = await getMany('SELECT asset_id FROM maintenance_assets WHERE maintenance_id=$1', [req.params.id]);
     const currentServiceRows = await getMany('SELECT service_id FROM maintenance_services WHERE maintenance_id=$1', [req.params.id]);
@@ -892,12 +1020,29 @@ router.put('/:id', requireOperator, async (req, res) => {
     for (const sid of expandedLinks.service_ids) {
       await query(`INSERT INTO maintenance_services (maintenance_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, sid]);
     }
+
+    // Adding a Part-IS relevant asset always forces the owner approval flow (never auto-disabled).
+    if (!maint.owner_approval_required && await assetsIncludePartIsRelevant(expandedLinks.asset_ids)) {
+      partIsNewlyRequired = true;
+      sets.push(`owner_approval_required=$${i++}`); vals.push(true);
+      sets.push(`owner_approval_status=$${i++}`); vals.push('pending');
+      sets.push(`owner_approval_updated_at=$${i++}`); vals.push(new Date());
+    }
   }
 
   if (sets.length > 0) {
     sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
     await query(`UPDATE maintenance_windows SET ${sets.join(',')} WHERE id=$${i}`, vals);
   }
+
+  if (partIsNewlyRequired) {
+    const maintenanceRow = await getOne('SELECT * FROM maintenance_windows WHERE id=$1', [req.params.id]);
+    await createOwnerApprovalRequests(req.params.id);
+    await recomputeOwnerApprovalStatus(req.params.id);
+    const approvalRows = await getMany(`SELECT * FROM maintenance_owner_approvals WHERE maintenance_id=$1`, [req.params.id]);
+    await notifyOwnerApprovalRequested(maintenanceRow, approvalRows, req.user.display_name || req.user.username || 'User').catch(() => {});
+  }
+
   await auditService.log(req.user.id, req.user.username, 'maintenance:update', 'maintenance', req.params.id, null, req.ip, req.get('user-agent'));
   res.json({ message: 'Manutenzione aggiornata' });
 });

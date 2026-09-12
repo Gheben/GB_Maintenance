@@ -32,6 +32,7 @@ const ServiceDetail = lazy(() => import('./pages/ServiceDetail'))
 const LocalGroups = lazy(() => import('./pages/LocalGroups'))
 const LicenseApproval = lazy(() => import('./pages/LicenseApproval'))
 const LicenseApprovalStatus = lazy(() => import('./pages/LicenseApprovalStatus'))
+const MaintenanceOwnerApproval = lazy(() => import('./pages/MaintenanceOwnerApproval'))
 const MaintenanceTypes = lazy(() => import('./pages/MaintenanceTypes'))
 const AssetCategories = lazy(() => import('./pages/AssetCategories'))
 const IncidentSeverities = lazy(() => import('./pages/IncidentSeverities'))
@@ -196,6 +197,7 @@ export default function App() {
                 <Route path="/status" element={<StatusPage />} />
                 <Route path="/licenses/approval" element={<LicenseApproval />} />
                 <Route path="/licenses/approval-status" element={<LicenseApprovalStatus />} />
+                <Route path="/maintenance/approval" element={<MaintenanceOwnerApproval />} />
                 <Route path="/" element={<P><Dashboard /></P>} />
                 <Route path="/assets" element={<P perm="assets"><Assets /></P>} />
                 <Route path="/assets/categories" element={<P perm="assets"><AssetCategories /></P>} />

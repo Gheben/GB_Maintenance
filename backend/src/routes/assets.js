@@ -858,6 +858,7 @@ router.post('/', requireOperator, [
   body('ssl_expiry_warning_days').optional().isInt({ min: 1, max: 365 }),
   body('tags').optional().isArray(),
   body('metadata').optional().isObject(),
+  body('part_is_relevant').optional().isBoolean(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -883,8 +884,8 @@ router.post('/', requireOperator, [
       `INSERT INTO assets (name, slug, category, criticality, description, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name,
          owner_targets, user_targets, probe_enabled, probe_type, probe_url, probe_interval_seconds, probe_timeout_seconds,
          expected_status_code, failure_threshold, recovery_threshold, pause_during_maintenance,
-         dns_record_type, dns_expected_value, ssl_expiry_warning_days, tags, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING id`,
+         dns_record_type, dns_expected_value, ssl_expiry_warning_days, tags, metadata, part_is_relevant)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27) RETURNING id`,
       [
         req.body.name, slug,
         req.body.category, req.body.criticality || 'medium',
@@ -899,7 +900,8 @@ router.post('/', requireOperator, [
         req.body.pause_during_maintenance !== undefined ? req.body.pause_during_maintenance : true,
         req.body.dns_record_type || 'A', req.body.dns_expected_value || null,
         req.body.ssl_expiry_warning_days || 30,
-        JSON.stringify(req.body.tags || []), JSON.stringify(req.body.metadata || {})
+        JSON.stringify(req.body.tags || []), JSON.stringify(req.body.metadata || {}),
+        req.body.part_is_relevant === true
       ]
     );
     const id = result.rows[0].id;
@@ -930,7 +932,7 @@ router.put('/:id', requireOperator, async (req, res) => {
     'owner_targets','user_targets','probe_type','probe_url','probe_interval_seconds','probe_timeout_seconds',
     'expected_status_code','failure_threshold','recovery_threshold','pause_during_maintenance',
     'dns_record_type','dns_expected_value','ssl_expiry_warning_days',
-    'tags','metadata','is_active'];
+    'tags','metadata','is_active','part_is_relevant'];
   const sets = []; const vals = []; let i = 1;
   const ownerManagedFields = new Set(['owner_id', 'owner_type', 'owner_group_id', 'owner_ldap_dn', 'owner_ldap_name']);
   for (const field of allowed) {

@@ -257,6 +257,7 @@ export default function AssetDetail() {
       owner_group_id: asset.owner_group_id || '',
       owner_ldap_dn: asset.owner_ldap_dn || '',
       owner_ldap_name: asset.owner_ldap_name || '',
+      part_is_relevant: asset.part_is_relevant === true,
     })
     setEditMode(true)
   }
@@ -392,6 +393,7 @@ export default function AssetDetail() {
         owner_group_id: firstOwner?.type === 'local_group' ? (firstOwner.id || null) : null,
         owner_ldap_dn: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? (firstOwner.dn || null) : null,
         owner_ldap_name: ['ldap_user', 'ldap_group'].includes(firstOwner?.type) ? (firstOwner.name || firstOwner.dn || null) : null,
+        part_is_relevant: editForm.part_is_relevant === true,
       })
       toast.success('Asset updated')
       setEditMode(false)
@@ -551,6 +553,20 @@ export default function AssetDetail() {
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={editForm.description} onChange={e => setEditForm(f => ({...f, description: e.target.value}))} />
             </div>
+            <label className="flex items-start gap-2 text-sm p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={editForm.part_is_relevant === true}
+                onChange={e => setEditForm(f => ({ ...f, part_is_relevant: e.target.checked }))}
+              />
+              <span>
+                <span className="font-medium text-amber-800 dark:text-amber-300">Part-IS Relevant</span>
+                <span className="block text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  Any planned maintenance on this asset will require every owner to approve the schedule via a dedicated email link before it can start.
+                </span>
+              </span>
+            </label>
             {ownerFieldsJsx}
             {usersFieldsJsx}
           </div>
@@ -560,6 +576,7 @@ export default function AssetDetail() {
               <StatusBadge status={asset.status} />
               <CriticalityBadge criticality={asset.criticality} />
               <span className="badge bg-gray-100 text-gray-700">{asset.category}</span>
+              {asset.part_is_relevant && <span className="badge bg-amber-100 text-amber-800">Part-IS Relevant</span>}
             </div>
             <p className="text-gray-600 dark:text-gray-300">{asset.description || 'No description'}</p>
             {(asset.owner_label || asset.owner_name) && (

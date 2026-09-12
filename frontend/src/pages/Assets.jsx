@@ -124,7 +124,7 @@ export default function Assets() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
-  const [form, setForm] = useState({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [], probe_enabled: false, probe_type: 'https', probe_url: '', probe_interval_seconds: 300, probe_timeout_seconds: 10, expected_status_code: 200, failure_threshold: 2, recovery_threshold: 2, pause_during_maintenance: true, dns_record_type: 'A', dns_expected_value: '', ssl_expiry_warning_days: 30 })
+  const [form, setForm] = useState({ name: '', category: 'application', criticality: 'medium', description: '', part_is_relevant: false, owner_targets: [], user_targets: [], probe_enabled: false, probe_type: 'https', probe_url: '', probe_interval_seconds: 300, probe_timeout_seconds: 10, expected_status_code: 200, failure_threshold: 2, recovery_threshold: 2, pause_during_maintenance: true, dns_record_type: 'A', dns_expected_value: '', ssl_expiry_warning_days: 30 })
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
   const [pickerTarget, setPickerTarget] = useState('owner')
   const [users, setUsers] = useState([])
@@ -199,7 +199,7 @@ export default function Assets() {
       }
       toast.success('Asset created')
       setShowCreate(false)
-      setForm({ name: '', category: 'application', criticality: 'medium', description: '', owner_targets: [], user_targets: [], probe_enabled: false, probe_type: 'https', probe_url: '', probe_interval_seconds: 300, probe_timeout_seconds: 10, expected_status_code: 200, failure_threshold: 2, recovery_threshold: 2, pause_during_maintenance: true, dns_record_type: 'A', dns_expected_value: '', ssl_expiry_warning_days: 30 })
+      setForm({ name: '', category: 'application', criticality: 'medium', description: '', part_is_relevant: false, owner_targets: [], user_targets: [], probe_enabled: false, probe_type: 'https', probe_url: '', probe_interval_seconds: 300, probe_timeout_seconds: 10, expected_status_code: 200, failure_threshold: 2, recovery_threshold: 2, pause_during_maintenance: true, dns_record_type: 'A', dns_expected_value: '', ssl_expiry_warning_days: 30 })
       setCreateDepIds([])
       setCreateLicenseIds([])
       load()
@@ -218,6 +218,7 @@ export default function Assets() {
       })()
     setForm({
       name: a.name, category: a.category, criticality: a.criticality, description: a.description || '',
+      part_is_relevant: a.part_is_relevant === true,
       owner_targets: ownerTargets,
       user_targets: Array.isArray(a.user_targets) ? a.user_targets : [],
       probe_enabled: a.probe_enabled || false,
@@ -486,6 +487,13 @@ export default function Assets() {
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
+            <label className="flex items-start gap-2 text-sm p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">
+              <input type="checkbox" className="mt-0.5" checked={form.part_is_relevant === true} onChange={e => setForm(f => ({ ...f, part_is_relevant: e.target.checked }))} />
+              <span>
+                <span className="font-medium text-amber-800 dark:text-amber-300">Part-IS Relevant</span>
+                <span className="block text-xs text-amber-700 dark:text-amber-400 mt-0.5">Maintenance on this asset will require every owner's email approval before it can start.</span>
+              </span>
+            </label>
             {ownerFieldsJsx}
             {usersFieldsJsx}
 
@@ -543,6 +551,13 @@ export default function Assets() {
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
             </div>
+            <label className="flex items-start gap-2 text-sm p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">
+              <input type="checkbox" className="mt-0.5" checked={form.part_is_relevant === true} onChange={e => setForm(f => ({ ...f, part_is_relevant: e.target.checked }))} />
+              <span>
+                <span className="font-medium text-amber-800 dark:text-amber-300">Part-IS Relevant</span>
+                <span className="block text-xs text-amber-700 dark:text-amber-400 mt-0.5">Maintenance on this asset will require every owner's email approval before it can start.</span>
+              </span>
+            </label>
             {ownerFieldsJsx}
             {usersFieldsJsx}
 

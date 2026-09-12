@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const { requireAuth, requireChangeManager, requireAdmin } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
+const { sendEmailNotification } = require('../services/notificationService');
 
 const router = Router();
 router.use(requireAuth);
@@ -266,6 +267,25 @@ router.post('/', requireChangeManager, [
     [req.body.name, req.body.description||null, req.body.ticket_ref||null, req.body.start_date, req.body.end_date, req.user.id, sids, aids]
   );
   await auditService.log(req.user.id, req.user.username, 'blackout:create', 'blackout_period', result.rows[0].id, req.body.name, req.ip);
+
+  // Notify affected users (owners/subscribers of the impacted assets/services), non-blocking.
+  (async () => {
+    try {
+      const impacted = await getImpactedUsersAndOffices(sids, aids);
+      const emails = [...new Set(impacted.users.map((u) => String(u.email || '').trim()).filter(Boolean))];
+      if (emails.length > 0) {
+        await sendEmailNotification('blackout_scheduled', emails, {
+          id: result.rows[0].id,
+          name: req.body.name,
+          description: req.body.description || '-',
+          start_date: new Date(req.body.start_date).toLocaleDateString('it-IT'),
+          end_date: new Date(req.body.end_date).toLocaleDateString('it-IT'),
+        }, 'blackout_period', result.rows[0].id);
+        await query(`UPDATE blackout_periods SET notified_at=NOW() WHERE id=$1`, [result.rows[0].id]);
+      }
+    } catch { /* notification failures should not affect the API response */ }
+  })();
+
   res.status(201).json({ id: result.rows[0].id });
 });
 

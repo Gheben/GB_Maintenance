@@ -140,6 +140,8 @@ export const maintenanceApi = {
   reopen: (id, reason) => api.post(`/maintenance/${id}/reopen`, { reason }),
   cancel: (id, reason) => api.post(`/maintenance/${id}/cancel`, { reason }),
   users: (id) => api.get(`/maintenance/${id}/users`),
+  publicOwnerApproval: (token) => api.get('/maintenance/public/owner-approval', { params: { token } }),
+  publicOwnerApprovalRespond: (data) => api.post('/maintenance/public/owner-approval/respond', data),
 }
 
 // ─── Maintenance Types ────────────────────────────────────────────────────────
