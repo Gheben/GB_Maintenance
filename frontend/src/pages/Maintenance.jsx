@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
-import { ConfirmDialog, Modal } from '../components/Modal'
+import { Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { ItemPicker } from '../components/ItemPicker'
 import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
@@ -30,6 +30,7 @@ export default function Maintenance() {
   const [selectedMaintenanceIds, setSelectedMaintenanceIds] = useState([])
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
   const [mTypes, setMTypes] = useState([])
   const [blackouts, setBlackouts] = useState([])
   const [allAssets, setAllAssets] = useState([])
@@ -107,15 +108,27 @@ export default function Maintenance() {
 
   const handleBulkDelete = async () => {
     if (!canBulkDelete || selectedMaintenanceIds.length === 0) return
+    const requiresReason = items.some(m => selectedMaintenanceIds.includes(m.id) && ['scheduled', 'in_progress'].includes(m.status))
+    if (requiresReason && !deleteReason.trim()) {
+      toast.error('Cancellation reason is required for scheduled or in-progress maintenance')
+      return
+    }
     setBulkDeleting(true)
     try {
-      const results = await Promise.allSettled(selectedMaintenanceIds.map((id) => maintenanceApi.delete(id)))
+      const selectedIds = [...selectedMaintenanceIds]
+      const results = await Promise.allSettled(selectedIds.map((id) => maintenanceApi.delete(id, deleteReason.trim())))
       const ok = results.filter(r => r.status === 'fulfilled').length
-      const ko = results.length - ok
+      const failedIds = selectedIds.filter((_, index) => results[index].status === 'rejected')
       if (ok > 0) toast.success(`${ok} maintenance item(s) deleted`)
-      if (ko > 0) toast.error(`${ko} maintenance item(s) not deleted`)
-      setSelectedMaintenanceIds([])
-      setConfirmBulkDelete(false)
+      if (failedIds.length > 0) {
+        const firstFailure = results.find(r => r.status === 'rejected')
+        toast.error(firstFailure.reason?.response?.data?.error || `${failedIds.length} maintenance item(s) not deleted`)
+        setSelectedMaintenanceIds(failedIds)
+      } else {
+        setSelectedMaintenanceIds([])
+        setConfirmBulkDelete(false)
+        setDeleteReason('')
+      }
       load()
     } finally {
       setBulkDeleting(false)
@@ -123,6 +136,7 @@ export default function Maintenance() {
   }
 
   const allVisibleSelected = items.length > 0 && items.every(m => selectedMaintenanceIds.includes(m.id))
+  const deletionRequiresReason = items.some(m => selectedMaintenanceIds.includes(m.id) && ['scheduled', 'in_progress'].includes(m.status))
   const now = new Date()
   const activeBlackouts = blackouts.filter(b => {
     const start = new Date(b.start_date)
@@ -172,7 +186,7 @@ export default function Maintenance() {
               <button
                 className="btn-danger"
                 disabled={selectedMaintenanceIds.length === 0 || bulkDeleting}
-                onClick={() => setConfirmBulkDelete(true)}
+                onClick={() => { setDeleteReason(''); setConfirmBulkDelete(true) }}
               >
                 <Trash2 size={15} />Delete selected ({selectedMaintenanceIds.length})
               </button>
@@ -359,14 +373,32 @@ export default function Maintenance() {
       )}
 
       {confirmBulkDelete && (
-        <ConfirmDialog
-          title="Delete selected maintenance"
-          message={`Delete ${selectedMaintenanceIds.length} selected maintenance item(s)? This action cannot be undone.`}
-          danger
-          confirmLabel={bulkDeleting ? 'Deleting...' : 'Delete'}
-          onConfirm={handleBulkDelete}
-          onCancel={() => !bulkDeleting && setConfirmBulkDelete(false)}
-        />
+        <Modal title="Delete selected maintenance" onClose={() => !bulkDeleting && setConfirmBulkDelete(false)} size="sm">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Delete {selectedMaintenanceIds.length} selected maintenance item(s)? This action cannot be undone.
+            </p>
+            {deletionRequiresReason && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Cancellation reason *</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  required
+                  value={deleteReason}
+                  onChange={e => setDeleteReason(e.target.value)}
+                  placeholder="Explain why the maintenance is being deleted"
+                />
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button type="button" className="btn-secondary" disabled={bulkDeleting} onClick={() => setConfirmBulkDelete(false)}>Cancel</button>
+              <button type="button" className="btn-danger" disabled={bulkDeleting || (deletionRequiresReason && !deleteReason.trim())} onClick={handleBulkDelete}>
+                {bulkDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </Layout>
   )

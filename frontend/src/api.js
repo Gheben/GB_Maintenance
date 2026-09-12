@@ -130,7 +130,9 @@ export const maintenanceApi = {
   approvalStatus: (id) => api.get(`/maintenance/${id}/approval-status`),
   create: (data) => api.post('/maintenance', data),
   update: (id, data) => api.put(`/maintenance/${id}`, data),
-  delete: (id) => api.delete(`/maintenance/${id}`),
+  delete: (id, cancellationReason) => api.delete(`/maintenance/${id}`, {
+    data: cancellationReason ? { cancellation_reason: cancellationReason } : undefined,
+  }),
   approve: (id) => api.post(`/maintenance/${id}/approve`),
   reject: (id, reason) => api.post(`/maintenance/${id}/reject`, { reason }),
   ownerRespond: (id, approvalId, data) => api.post(`/maintenance/${id}/owner-approvals/${approvalId}/respond`, data),
