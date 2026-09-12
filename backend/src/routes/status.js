@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { getMany, getOne, query } = require('../db/database');
-const { requireAuth } = require('../middleware/authMiddleware');
+const { requireAuth, optionalAuth } = require('../middleware/authMiddleware');
+const { getVisibleAffectedScope } = require('../utils/entityVisibility');
 
 const router = Router();
 
@@ -103,7 +104,7 @@ async function computeInvolvedUsersRows(maintenanceIds) {
 }
 
 // ─── GET /api/status ── Public status page ────────────────────────────────────
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   // Always expose only public services on status endpoints.
   const services = await getMany(
     `SELECT s.id, s.name, s.slug, s.status, s.description, s.criticality
@@ -121,12 +122,12 @@ router.get('/', async (req, res) => {
   if (incidentIds.length > 0) {
     const updRows = await getMany(
       `SELECT iu.incident_id, iu.id, iu.status, iu.message, iu.created_at,
-              COALESCE(u.display_name, u.username) AS author
+              CASE WHEN $2::boolean THEN COALESCE(u.display_name, u.username) ELSE NULL END AS author
        FROM incident_updates iu
        LEFT JOIN users u ON u.id = iu.created_by
        WHERE iu.incident_id = ANY($1::uuid[])
        ORDER BY iu.created_at DESC`,
-      [incidentIds]
+            [incidentIds, ['superadmin', 'admin', 'change_manager'].includes(req.user?.role)]
     );
     for (const u of updRows) {
       if (!incidentUpdatesMap[u.incident_id]) incidentUpdatesMap[u.incident_id] = [];
@@ -205,7 +206,7 @@ router.get('/', async (req, res) => {
 
   const allIncidentIds = [...new Set([...incidentRows, ...incident_history].map((incident) => incident.id))];
   const allBlackoutIds = [...new Set([...blackout_periods, ...blackout_history].map((blackout) => blackout.id))];
-  const [incidentAssetRows, blackoutAssetRows] = await Promise.all([
+  const [incidentAssetRows, blackoutAssetRows, incidentServiceRows, blackoutServiceRows] = await Promise.all([
     allIncidentIds.length > 0 ? getMany(
       `WITH related_services AS (
          SELECT incident_id, service_id FROM incident_services WHERE incident_id = ANY($1::uuid[])
@@ -256,6 +257,43 @@ router.get('/', async (req, res) => {
        ORDER BY BOOL_OR(scope_assets.is_direct) DESC, a.name`,
       [allBlackoutIds]
     ).catch(() => []) : [],
+    allIncidentIds.length > 0 ? getMany(
+      `WITH scoped_services AS (
+         SELECT incident_id AS event_id, service_id, TRUE AS is_direct
+         FROM incident_services WHERE incident_id = ANY($1::uuid[])
+         UNION ALL
+         SELECT ia.incident_id, sa.service_id, FALSE
+         FROM incident_assets ia
+         JOIN service_assets sa ON sa.asset_id=ia.asset_id
+         WHERE ia.incident_id = ANY($1::uuid[])
+       )
+       SELECT scoped_services.event_id, s.id, s.name, s.status, s.criticality, s.is_public,
+              BOOL_OR(scoped_services.is_direct) AS is_direct
+       FROM scoped_services JOIN services s ON s.id=scoped_services.service_id
+       GROUP BY scoped_services.event_id, s.id, s.name, s.status, s.criticality, s.is_public
+       ORDER BY BOOL_OR(scoped_services.is_direct) DESC, s.name`,
+      [allIncidentIds]
+    ).catch(() => []) : [],
+    allBlackoutIds.length > 0 ? getMany(
+      `WITH scoped_services AS (
+         SELECT bp.id AS event_id, direct_service.service_id, TRUE AS is_direct
+         FROM blackout_periods bp
+         CROSS JOIN LATERAL UNNEST(COALESCE(bp.service_ids, '{}'::uuid[])) direct_service(service_id)
+         WHERE bp.id = ANY($1::uuid[])
+         UNION ALL
+         SELECT bp.id, sa.service_id, FALSE
+         FROM blackout_periods bp
+         CROSS JOIN LATERAL UNNEST(COALESCE(bp.asset_ids, '{}'::uuid[])) direct_asset(asset_id)
+         JOIN service_assets sa ON sa.asset_id=direct_asset.asset_id
+         WHERE bp.id = ANY($1::uuid[])
+       )
+       SELECT scoped_services.event_id, s.id, s.name, s.status, s.criticality, s.is_public,
+              BOOL_OR(scoped_services.is_direct) AS is_direct
+       FROM scoped_services JOIN services s ON s.id=scoped_services.service_id
+       GROUP BY scoped_services.event_id, s.id, s.name, s.status, s.criticality, s.is_public
+       ORDER BY BOOL_OR(scoped_services.is_direct) DESC, s.name`,
+      [allBlackoutIds]
+    ).catch(() => []) : [],
   ]);
 
   function buildAffectedAssetsMap(rows) {
@@ -273,9 +311,24 @@ router.get('/', async (req, res) => {
 
   const incidentAffectedAssets = buildAffectedAssetsMap(incidentAssetRows);
   const blackoutAffectedAssets = buildAffectedAssetsMap(blackoutAssetRows);
-  const attachAffectedAssets = (items, affectedMap) => items.map((item) => ({
+  const buildAffectedServicesMap = (rows) => rows.reduce((map, service) => {
+    if (!map[service.event_id]) map[service.event_id] = [];
+    map[service.event_id].push(service);
+    return map;
+  }, {});
+  const incidentAffectedServices = buildAffectedServicesMap(incidentServiceRows);
+  const blackoutAffectedServices = buildAffectedServicesMap(blackoutServiceRows);
+  const eventVisibility = await getVisibleAffectedScope(
+    { userId: req.user?.id, email: req.user?.email, role: req.user?.role },
+    [...incidentAssetRows, ...blackoutAssetRows],
+    [...incidentServiceRows, ...blackoutServiceRows]
+  );
+  const visibleEventAssetIds = new Set(eventVisibility.assets.map((asset) => String(asset.id)));
+  const visibleEventServiceIds = new Set(eventVisibility.services.map((service) => String(service.id)));
+  const attachAffectedScope = (items, affectedAssetMap, affectedServiceMap) => items.map((item) => ({
     ...item,
-    affected_assets: affectedMap[item.id] || [],
+    affected_assets: (affectedAssetMap[item.id] || []).filter((asset) => visibleEventAssetIds.has(String(asset.id))),
+    affected_services: (affectedServiceMap[item.id] || []).filter((service) => visibleEventServiceIds.has(String(service.id))),
   }));
 
   // For each maintenance (in_progress + upcoming + recent), get involved users count
@@ -288,6 +341,7 @@ router.get('/', async (req, res) => {
 
   let involvedMap = {};
   let affectedAssetsMap = {};
+  let affectedServicesMap = {};
   if (allMaintIds.length > 0) {
     const involvedRows = await computeInvolvedUsersRows(allMaintIds);
 
@@ -333,14 +387,48 @@ router.get('/', async (req, res) => {
         is_direct: asset.is_direct,
       });
     }
+
+    const affectedServiceRows = await getMany(
+      `WITH scoped_services AS (
+         SELECT maintenance_id, service_id, TRUE AS is_direct
+         FROM maintenance_services WHERE maintenance_id = ANY($1::uuid[])
+         UNION ALL
+         SELECT ma.maintenance_id, sa.service_id, FALSE
+         FROM maintenance_assets ma
+         JOIN service_assets sa ON sa.asset_id=ma.asset_id
+         WHERE ma.maintenance_id = ANY($1::uuid[])
+       )
+       SELECT scoped_services.maintenance_id, s.id, s.name, s.status, s.criticality, s.is_public,
+              BOOL_OR(scoped_services.is_direct) AS is_direct
+       FROM scoped_services JOIN services s ON s.id=scoped_services.service_id
+       GROUP BY scoped_services.maintenance_id, s.id, s.name, s.status, s.criticality, s.is_public
+       ORDER BY BOOL_OR(scoped_services.is_direct) DESC, s.name`,
+      [allMaintIds]
+    ).catch(() => []);
+    for (const service of affectedServiceRows) {
+      if (!affectedServicesMap[service.maintenance_id]) affectedServicesMap[service.maintenance_id] = [];
+      affectedServicesMap[service.maintenance_id].push(service);
+    }
   }
 
+  const maintenanceVisibility = await getVisibleAffectedScope(
+    { userId: req.user?.id, email: req.user?.email, role: req.user?.role },
+    Object.values(affectedAssetsMap).flat(),
+    Object.values(affectedServicesMap).flat()
+  );
+  const visibleMaintenanceAssetIds = new Set(maintenanceVisibility.assets.map((asset) => String(asset.id)));
+  const visibleMaintenanceServiceIds = new Set(maintenanceVisibility.services.map((service) => String(service.id)));
+
   // Attach involved users to each maintenance item
+  const canViewAllInvolvedUsers = ['superadmin', 'admin', 'change_manager'].includes(req.user?.role);
   function attachUsers(list) {
     return list.map(m => ({
       ...m,
-      involved_users: involvedMap[m.id] || [],
-      affected_assets: affectedAssetsMap[m.id] || [],
+      involved_users: canViewAllInvolvedUsers
+        ? (involvedMap[m.id] || [])
+        : (involvedMap[m.id] || []).filter((involved) => req.user && String(involved.user_id) === String(req.user.id)),
+      affected_assets: (affectedAssetsMap[m.id] || []).filter((asset) => visibleMaintenanceAssetIds.has(String(asset.id))),
+      affected_services: (affectedServicesMap[m.id] || []).filter((service) => visibleMaintenanceServiceIds.has(String(service.id))),
     }));
   }
 
@@ -357,19 +445,13 @@ router.get('/', async (req, res) => {
 
   // Check if current user is subscribed (if authenticated)
   let userSubSet = new Set();
-  const authHeader = req.headers['authorization'];
-  if (authHeader && allMaintIds.length > 0) {
-    try {
-      const jwt = require('jsonwebtoken');
-      const token = authHeader.replace('Bearer ', '');
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'changeme-insecure-default');
-      const myRows = await getMany(
-        `SELECT maintenance_id FROM maintenance_status_subscribers
-         WHERE user_id=$1 AND maintenance_id = ANY($2::uuid[])`,
-        [decoded.sub || decoded.id, allMaintIds]
-      ).catch(() => []);
-      for (const r of myRows) userSubSet.add(r.maintenance_id);
-    } catch { /* token invalid or expired — ignore */ }
+  if (req.user && allMaintIds.length > 0) {
+    const myRows = await getMany(
+      `SELECT maintenance_id FROM maintenance_status_subscribers
+       WHERE user_id=$1 AND maintenance_id = ANY($2::uuid[])`,
+      [req.user.id, allMaintIds]
+    ).catch(() => []);
+    for (const r of myRows) userSubSet.add(r.maintenance_id);
   }
 
   function attachMeta(list) {
@@ -407,15 +489,15 @@ router.get('/', async (req, res) => {
     app_name: general.app_name || 'GB Maintenance',
     app_brand_image_url: general.app_brand_image_url || '',
     overall_status: overallStatus,
-    blackout_periods: attachAffectedAssets(blackout_periods, blackoutAffectedAssets),
+    blackout_periods: attachAffectedScope(blackout_periods, blackoutAffectedAssets, blackoutAffectedServices),
     services,
-    active_incidents: attachAffectedAssets(incidents, incidentAffectedAssets),
-    incident_history: attachAffectedAssets(incident_history, incidentAffectedAssets),
+    active_incidents: attachAffectedScope(incidents, incidentAffectedAssets, incidentAffectedServices),
+    incident_history: attachAffectedScope(incident_history, incidentAffectedAssets, incidentAffectedServices),
     in_progress_maintenance: attachMeta(in_progress_maintenance),
     upcoming_maintenance: attachMeta(upcoming_maintenance),
     recent_maintenance: attachMeta(recent_maintenance),
     maintenance_history: attachMeta(maintenance_history),
-    blackout_history: attachAffectedAssets(blackout_history, blackoutAffectedAssets),
+    blackout_history: attachAffectedScope(blackout_history, blackoutAffectedAssets, blackoutAffectedServices),
     // Legacy field kept for backward compat
     maintenance_summary: maintenance,
     last_updated: new Date().toISOString(),

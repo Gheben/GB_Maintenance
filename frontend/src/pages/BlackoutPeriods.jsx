@@ -162,6 +162,16 @@ export default function BlackoutPeriods() {
                       ))}
                     </div>
                   )}
+                  {p.affected_services?.some((service) => !service.is_direct) && (
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <span className="text-xs text-gray-400">Related services:</span>
+                      {p.affected_services.filter((service) => !service.is_direct).map((service) => (
+                        <span key={service.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                          <Cog size={10} />{service.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {p.assets?.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
                       {p.assets.map(a => (

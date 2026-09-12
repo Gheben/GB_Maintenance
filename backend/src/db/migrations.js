@@ -2208,6 +2208,25 @@ const MIGRATIONS = [
       );
     }
   },
+  {
+    version: 49,
+    name: 'affected_services_email_templates',
+    up: async (client) => {
+      await client.query(
+        `UPDATE notification_templates
+         SET body_html_template = body_html_template ||
+               E'\n<p style="margin:6px 0 0;color:#334155"><strong>Selected services:</strong> {{primary_services}}</p>' ||
+               E'\n<p style="margin:6px 0 0;color:#334155"><strong>All affected services:</strong> {{affected_services}}</p>',
+             updated_at = NOW()
+         WHERE event_type IN (
+           'maintenance_scheduled', 'maintenance_reminder', 'maintenance_started',
+           'maintenance_completed', 'maintenance_reopened', 'maintenance_cancelled',
+           'maintenance_rejected', 'incident_created', 'incident_resolved', 'blackout_scheduled'
+         )
+           AND body_html_template NOT LIKE '%{{affected_services}}%'`
+      );
+    }
+  },
 ];
 
 async function runMigrations(pool) {

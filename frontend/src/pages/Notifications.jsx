@@ -7,7 +7,7 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { format } from 'date-fns'
 import { toast } from '../components/Toast'
 import { Modal } from '../components/Modal'
-import { Server, ShieldCheck } from 'lucide-react'
+import { Cog, Server, ShieldCheck } from 'lucide-react'
 
 const TYPE_BADGE = {
   planned: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -340,6 +340,23 @@ export default function Notifications() {
                         <Server size={11} />
                         {asset.part_is_relevant && <ShieldCheck size={11} className="text-amber-600" />}
                         {asset.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(detailData.affectedServices || detailData.affected_services || []).length > 0 && (
+                <div>
+                  <p className="text-gray-500 mb-1">Affected services</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(detailData.affectedServices || detailData.affected_services || []).map((service) => (
+                      <span
+                        key={service.id}
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${service.is_direct ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
+                        title={service.is_direct ? 'Selected service' : 'Related service'}
+                      >
+                        <Cog size={11} />{service.name}
                       </span>
                     ))}
                   </div>

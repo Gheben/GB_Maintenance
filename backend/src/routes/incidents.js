@@ -5,7 +5,8 @@ const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
 const { notifyIncident } = require('../services/notificationService');
 const wsService = require('../services/wsService');
-const { getAffectedAssets } = require('../utils/maintenanceScope');
+const { getAffectedAssets, getAffectedServices } = require('../utils/maintenanceScope');
+const { getVisibleAffectedScope } = require('../utils/entityVisibility');
 
 const router = Router();
 router.use(requireAuth);
@@ -78,16 +79,28 @@ router.get('/:id', async (req, res) => {
      FROM services s JOIN incident_services is2 ON is2.service_id=s.id WHERE is2.incident_id=$1`,
     [req.params.id]
   );
-  const affectedAssets = await getAffectedAssets(
-    assets.map((asset) => asset.id),
-    services.map((service) => service.id)
+  const [affectedAssets, affectedServices] = await Promise.all([
+    getAffectedAssets(assets.map((asset) => asset.id), services.map((service) => service.id)),
+    getAffectedServices(assets.map((asset) => asset.id), services.map((service) => service.id)),
+  ]);
+  const visibleScope = await getVisibleAffectedScope(
+    { userId: req.user.id, email: req.user.email, role: req.user.role },
+    affectedAssets,
+    affectedServices
   );
   const updates = await getMany(
     `SELECT iu.*, u.display_name as author FROM incident_updates iu
      LEFT JOIN users u ON u.id=iu.created_by WHERE iu.incident_id=$1 ORDER BY iu.created_at ASC`,
     [req.params.id]
   );
-  res.json({ ...incident, assets, affectedAssets, services, updates });
+  res.json({
+    ...incident,
+    assets: visibleScope.assets.filter((asset) => asset.is_direct),
+    affectedAssets: visibleScope.assets.filter((asset) => !asset.is_direct),
+    services: visibleScope.services.filter((service) => service.is_direct),
+    affectedServices: visibleScope.services.filter((service) => !service.is_direct),
+    updates,
+  });
 });
 
 // ─── POST /api/incidents ──────────────────────────────────────────────────────

@@ -8,6 +8,16 @@ const {
   getMaintenanceAffectedAssets,
   getMaintenanceAffectedServices,
 } = require('../utils/maintenanceScope');
+const { getVisibleAffectedScope } = require('../utils/entityVisibility');
+
+function affectedScopeTemplateVars(scope) {
+  return {
+    primary_assets: scope.assets.filter((asset) => asset.is_direct).map((asset) => asset.name).join(', ') || '-',
+    affected_assets: scope.assets.map((asset) => asset.name).join(', ') || '-',
+    primary_services: scope.services.filter((service) => service.is_direct).map((service) => service.name).join(', ') || '-',
+    affected_services: scope.services.map((service) => service.name).join(', ') || '-',
+  };
+}
 
 function htmlToPlainText(html) {
   return String(html || '')
@@ -109,7 +119,7 @@ async function logNotification(eventType, channel, recipient, refType, refId, su
 }
 
 // ─── Send email notification ──────────────────────────────────────────────────
-async function sendEmailNotification(eventType, toEmails, vars, refType, refId) {
+async function sendEmailNotification(eventType, toEmails, vars, refType, refId, options = {}) {
   let tpl = await getTemplate(eventType);
   if (!tpl && eventType === 'maintenance_reopened') {
     tpl = await getTemplate('maintenance_started');
@@ -123,19 +133,17 @@ async function sendEmailNotification(eventType, toEmails, vars, refType, refId) 
   const general = row?.value ? JSON.parse(row.value || '{}') : {};
   const appUrl = String(general?.app_url || process.env.APP_URL || 'http://localhost:4681').replace(/\/$/, '');
   const appName = String(general?.app_name || 'GB Maintenance');
-  const allVars = { ...vars, app_url: appUrl };
-  const subject = renderTemplate(tpl.subject_template, allVars);
-  const htmlFragment = renderTemplate(tpl.body_html_template, allVars);
-  const html = buildEmailHtmlDocument({
-    appName,
-    appUrl,
-    subject,
-    bodyHtml: htmlFragment,
-  });
-  const text = [subject, '', htmlToPlainText(htmlFragment), '', appUrl].filter(Boolean).join('\n');
-
   for (const email of toEmails) {
+    let subject = eventType;
     try {
+      const recipientVars = options.varsForRecipient
+        ? await options.varsForRecipient(email)
+        : {};
+      const allVars = { ...vars, ...recipientVars, app_url: appUrl };
+      subject = renderTemplate(tpl.subject_template, allVars);
+      const htmlFragment = renderTemplate(tpl.body_html_template, allVars);
+      const html = buildEmailHtmlDocument({ appName, appUrl, subject, bodyHtml: htmlFragment });
+      const text = [subject, '', htmlToPlainText(htmlFragment), '', appUrl].filter(Boolean).join('\n');
       await sendMail({ to: email, subject, html, text });
       await logNotification(eventType, 'email', email, refType, refId, subject, 'sent');
     } catch (err) {
@@ -323,7 +331,10 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
     if (!maint) return;
 
     const { emails, userIds } = await getMaintenanceSubscribers(maintenanceId);
-    const affectedAssets = await getMaintenanceAffectedAssets(maintenanceId);
+    const [affectedAssets, affectedServices] = await Promise.all([
+      getMaintenanceAffectedAssets(maintenanceId),
+      getMaintenanceAffectedServices(maintenanceId),
+    ]);
 
     const vars = {
       id: maint.id,
@@ -336,8 +347,7 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
       actual_end: maint.actual_end ? new Date(maint.actual_end).toLocaleString('it-IT') : '-',
       description: maint.description || '-',
       notes: maint.notes || '-',
-      affected_assets: affectedAssets.map(asset => asset.name).join(', ') || '-',
-      primary_assets: affectedAssets.filter(asset => asset.is_direct).map(asset => asset.name).join(', ') || '-',
+      ...affectedScopeTemplateVars({ assets: affectedAssets, services: affectedServices }),
       ...extraVars
     };
 
@@ -354,7 +364,11 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
     // Dispatch all channels in parallel so in-app bell notifications are not blocked by email delivery.
     const tasks = [];
     if (emails.length > 0) {
-      tasks.push(sendEmailNotification(eventType, emails, vars, 'maintenance', maintenanceId));
+      tasks.push(sendEmailNotification(eventType, emails, vars, 'maintenance', maintenanceId, {
+        varsForRecipient: async (email) => affectedScopeTemplateVars(
+          await getVisibleAffectedScope({ email }, affectedAssets, affectedServices)
+        ),
+      }));
     }
     if (userIds.length > 0) {
       tasks.push(Promise.all(userIds.map((uid) =>
@@ -528,13 +542,16 @@ async function notifyIncident(incidentId, eventType) {
       description: incident.description || '-',
       started_at: new Date(incident.started_at).toLocaleString('it-IT'),
       resolved_at: incident.resolved_at ? new Date(incident.resolved_at).toLocaleString('it-IT') : '-',
-      primary_assets: affectedAssets.filter((asset) => asset.is_direct).map((asset) => asset.name).join(', ') || '-',
-      affected_assets: affectedAssets.map((asset) => asset.name).join(', ') || '-',
+      ...affectedScopeTemplateVars({ assets: affectedAssets, services: affectedServices }),
     };
 
     const tasks = [];
     if (emails.size > 0) {
-      tasks.push(sendEmailNotification(eventType, [...emails], vars, 'incident', incidentId));
+      tasks.push(sendEmailNotification(eventType, [...emails], vars, 'incident', incidentId, {
+        varsForRecipient: async (email) => affectedScopeTemplateVars(
+          await getVisibleAffectedScope({ email }, affectedAssets, affectedServices)
+        ),
+      }));
     }
     if (userIds.size > 0) {
       tasks.push(Promise.all([...userIds].map((uid) =>

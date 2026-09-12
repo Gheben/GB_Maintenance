@@ -6,7 +6,8 @@ const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
 const { notifyMaintenance, sendEmailNotification, sendInApp } = require('../services/notificationService');
 const wsService = require('../services/wsService');
-const { getMaintenanceAffectedAssets } = require('../utils/maintenanceScope');
+const { getMaintenanceAffectedAssets, getMaintenanceAffectedServices } = require('../utils/maintenanceScope');
+const { getVisibleAffectedScope } = require('../utils/entityVisibility');
 
 const router = Router();
 
@@ -55,99 +56,40 @@ async function appendMaintenanceStatusHistory(maintenanceId, status, changedBy, 
 
 async function userCanAccessMaintenance(user, maintenanceId) {
   if (isPrivilegedRole(user.role)) return true;
-  const accessible = await getOne(
-    `SELECT 1 FROM maintenance_windows mw WHERE mw.id=$1 AND (
-      EXISTS(SELECT 1 FROM maintenance_assets ma JOIN assets a ON a.id=ma.asset_id WHERE ma.maintenance_id=mw.id AND a.owner_id=$2)
-      OR EXISTS(SELECT 1 FROM maintenance_assets ma JOIN assets a ON a.id=ma.asset_id JOIN user_group_members ugm ON ugm.group_id=a.owner_group_id WHERE ma.maintenance_id=mw.id AND ugm.user_id=$2)
-      OR EXISTS(
-        SELECT 1
-        FROM maintenance_assets ma
-        JOIN assets a ON a.id=ma.asset_id
-        JOIN LATERAL jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) ot ON true
-        WHERE ma.maintenance_id=mw.id
-          AND (
-            (ot->>'type'='user' AND ot->>'id'=$2::text)
-            OR (
-              ot->>'type'='local_group'
-              AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
-              AND EXISTS (
-                SELECT 1
-                FROM user_group_members ugm
-                WHERE ugm.group_id=(ot->>'id')::uuid AND ugm.user_id=$2
-              )
-            )
-          )
-      )
-      OR EXISTS(SELECT 1 FROM maintenance_services ms JOIN services s ON s.id=ms.service_id WHERE ms.maintenance_id=mw.id AND s.owner_id=$2)
-      OR EXISTS(SELECT 1 FROM maintenance_services ms JOIN services s ON s.id=ms.service_id JOIN user_group_members ugm ON ugm.group_id=s.owner_group_id WHERE ms.maintenance_id=mw.id AND ugm.user_id=$2)
-      OR EXISTS(
-        SELECT 1
-        FROM maintenance_services ms
-        JOIN services s ON s.id=ms.service_id
-        JOIN LATERAL jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) ot ON true
-        WHERE ms.maintenance_id=mw.id
-          AND (
-            (ot->>'type'='user' AND ot->>'id'=$2::text)
-            OR (
-              ot->>'type'='local_group'
-              AND (ot->>'id') ~* '^[0-9a-f-]{36}$'
-              AND EXISTS (
-                SELECT 1
-                FROM user_group_members ugm
-                WHERE ugm.group_id=(ot->>'id')::uuid AND ugm.user_id=$2
-              )
-            )
-          )
-      )
-      OR EXISTS(SELECT 1 FROM maintenance_services ms JOIN service_subscribers ss ON ss.service_id=ms.service_id WHERE ms.maintenance_id=mw.id AND ss.user_id=$2)
-      OR EXISTS(SELECT 1 FROM maintenance_owner_approvals moa WHERE moa.maintenance_id=mw.id AND moa.owner_user_id=$2)
-    )`,
-    [maintenanceId, user.id]
-  );
-  if (accessible) return true;
-
-  const relatedAccess = await getOne(
-    `WITH related_services AS (
-       SELECT service_id FROM maintenance_services WHERE maintenance_id=$1
-       UNION
-       SELECT sa.service_id
-       FROM maintenance_assets ma
-       JOIN service_assets sa ON sa.asset_id=ma.asset_id
-       WHERE ma.maintenance_id=$1
-     ), scope_assets AS (
-       SELECT asset_id FROM maintenance_assets WHERE maintenance_id=$1
-       UNION
-       SELECT sa.asset_id FROM service_assets sa
-       WHERE sa.service_id IN (SELECT service_id FROM related_services)
-     )
-     SELECT 1
-     WHERE EXISTS (
-       SELECT 1 FROM scope_assets scope
-       JOIN assets a ON a.id=scope.asset_id
-       WHERE a.owner_id=$2
-          OR EXISTS (SELECT 1 FROM user_group_members ugm WHERE ugm.group_id=a.owner_group_id AND ugm.user_id=$2)
-          OR EXISTS (
-            SELECT 1 FROM jsonb_array_elements(COALESCE(a.user_targets, '[]'::jsonb)) target
-            WHERE (target->>'type'='user' AND target->>'id'=$2::text)
-               OR (target->>'type'='local_group' AND (target->>'id') ~* '^[0-9a-f-]{36}$'
-                   AND EXISTS (SELECT 1 FROM user_group_members ugm WHERE ugm.group_id=(target->>'id')::uuid AND ugm.user_id=$2))
-          )
-     ) OR EXISTS (
-       SELECT 1 FROM related_services scope
-       JOIN services s ON s.id=scope.service_id
-       WHERE s.owner_id=$2
-          OR EXISTS (SELECT 1 FROM user_group_members ugm WHERE ugm.group_id=s.owner_group_id AND ugm.user_id=$2)
-          OR EXISTS (SELECT 1 FROM service_subscribers ss WHERE ss.service_id=s.id AND ss.user_id=$2)
-          OR EXISTS (
-            SELECT 1 FROM jsonb_array_elements(COALESCE(s.user_targets, '[]'::jsonb)) target
-            WHERE (target->>'type'='user' AND target->>'id'=$2::text)
-               OR (target->>'type'='local_group' AND (target->>'id') ~* '^[0-9a-f-]{36}$'
-                   AND EXISTS (SELECT 1 FROM user_group_members ugm WHERE ugm.group_id=(target->>'id')::uuid AND ugm.user_id=$2))
-          )
+  const directAccess = await getOne(
+    `SELECT 1
+     FROM maintenance_windows mw
+     WHERE mw.id=$1 AND (
+       mw.created_by=$2
+       OR EXISTS (SELECT 1 FROM maintenance_status_subscribers mss WHERE mss.maintenance_id=mw.id AND mss.user_id=$2)
+       OR EXISTS (SELECT 1 FROM maintenance_owner_approvals moa WHERE moa.maintenance_id=mw.id AND moa.owner_user_id=$2)
      )`,
     [maintenanceId, user.id]
   );
-  return !!relatedAccess;
+  if (directAccess) return true;
+
+  const [affectedAssets, affectedServices] = await Promise.all([
+    getMaintenanceAffectedAssets(maintenanceId),
+    getMaintenanceAffectedServices(maintenanceId),
+  ]);
+  const visibleScope = await getVisibleAffectedScope(
+    { userId: user.id, email: user.email, role: user.role },
+    affectedAssets,
+    affectedServices
+  );
+  const hasPrivateEntityAccess = visibleScope.assets.length > 0
+    || visibleScope.services.some((service) => !service.is_public);
+  if (hasPrivateEntityAccess) return true;
+
+  const subscribedPublicService = await getOne(
+    `SELECT 1
+     FROM service_subscribers ss
+     WHERE ss.user_id=$2
+       AND ss.service_id=ANY($1::uuid[])
+     LIMIT 1`,
+    [visibleScope.services.map((service) => service.id), user.id]
+  );
+  return !!subscribedPublicService;
 }
 
 async function assetsIncludePartIsRelevant(assetIds = []) {
@@ -631,34 +573,19 @@ router.get('/:id', async (req, res) => {
     return res.status(403).json({ error: 'Access denied' });
   }
 
-  const assets = await getMany(
-    `SELECT a.id, a.name, a.category, a.status, a.criticality, a.part_is_relevant
-     FROM assets a JOIN maintenance_assets ma ON ma.asset_id=a.id WHERE ma.maintenance_id=$1`,
-    [req.params.id]
+  const [allAffectedAssets, allAffectedServices] = await Promise.all([
+    getMaintenanceAffectedAssets(req.params.id),
+    getMaintenanceAffectedServices(req.params.id),
+  ]);
+  const visibleScope = await getVisibleAffectedScope(
+    { userId: req.user.id, email: req.user.email, role: req.user.role },
+    allAffectedAssets,
+    allAffectedServices
   );
-
-  // Directly linked services
-  const directServices = await getMany(
-    `SELECT s.id, s.name, s.status, s.criticality
-     FROM services s JOIN maintenance_services ms ON ms.service_id=s.id WHERE ms.maintenance_id=$1`,
-    [req.params.id]
-  );
-
-  // Also derive affected services via asset links
-  const assetIds = assets.map(a => a.id);
-  let assetDerivedServices = [];
-  if (assetIds.length > 0) {
-    assetDerivedServices = await getMany(
-      `SELECT DISTINCT s.id, s.name, s.status, s.criticality
-       FROM services s JOIN service_assets sa ON sa.service_id=s.id
-       WHERE sa.asset_id=ANY($1::uuid[])
-         AND s.id NOT IN (SELECT service_id FROM maintenance_services WHERE maintenance_id=$2)`,
-      [assetIds, req.params.id]
-    );
-  }
-
-  // Derive related assets through explicitly selected services and services linked to selected assets.
-  const affectedAssets = (await getMaintenanceAffectedAssets(req.params.id)).filter(a => !a.is_direct);
+  const assets = visibleScope.assets.filter((asset) => asset.is_direct);
+  const affectedAssets = visibleScope.assets.filter((asset) => !asset.is_direct);
+  const directServices = visibleScope.services.filter((service) => service.is_direct);
+  const assetDerivedServices = visibleScope.services.filter((service) => !service.is_direct);
 
   const statusHistory = await getMany(
     `SELECT sh.id, sh.status, sh.changed_by, sh.reason, sh.created_at

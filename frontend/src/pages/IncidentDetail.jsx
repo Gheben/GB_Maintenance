@@ -5,7 +5,7 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toast'
 import { incidentsApi, incidentSeveritiesApi } from '../api'
 import { format } from 'date-fns'
-import { ArrowLeft, Pencil, Save, X, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Pencil, Save, X, ShieldCheck, Cog } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const STATUSES = ['investigating','identified','monitoring','resolved']
@@ -98,6 +98,7 @@ export default function IncidentDetail() {
 
   const canEdit = hasRole('superadmin','admin')
   const relatedAssets = (incident.affectedAssets || []).filter((asset) => !asset.is_direct)
+  const relatedServices = incident.affectedServices || []
 
   const q = userSearch.toLowerCase()
   const filteredUsers = incidentUsers.filter((u) => {
@@ -195,6 +196,26 @@ export default function IncidentDetail() {
                       {asset.part_is_relevant && <ShieldCheck size={14} className="text-amber-600" title="Part-IS Relevant" />}
                       {asset.name}
                     </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+            {incident.services?.length > 0 && (
+              <div>
+                <h3 className="font-medium mb-3 text-sm">Selected services</h3>
+                <div className="flex flex-wrap gap-2">
+                  {incident.services.map((service) => (
+                    <span key={service.id} className="inline-flex items-center gap-1 text-sm text-brand-600"><Cog size={14} />{service.name}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {relatedServices.length > 0 && (
+              <div>
+                <h3 className="font-medium mb-3 text-sm">Related affected services</h3>
+                <div className="flex flex-wrap gap-2">
+                  {relatedServices.map((service) => (
+                    <span key={service.id} className="inline-flex items-center gap-1 text-sm text-gray-600 dark:text-gray-300"><Cog size={14} />{service.name}</span>
                   ))}
                 </div>
               </div>

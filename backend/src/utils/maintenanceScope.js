@@ -27,14 +27,19 @@ async function getAffectedAssets(assetIds = [], serviceIds = []) {
 
 async function getAffectedServices(assetIds = [], serviceIds = []) {
   return getMany(
-    `SELECT DISTINCT service_id
-     FROM (
-       SELECT UNNEST($2::uuid[]) AS service_id
-       UNION
-       SELECT sa.service_id
+    `WITH scoped_services AS (
+       SELECT UNNEST($2::uuid[]) AS service_id, TRUE AS is_direct
+       UNION ALL
+       SELECT sa.service_id, FALSE AS is_direct
        FROM service_assets sa
        WHERE sa.asset_id = ANY($1::uuid[])
-     ) related_services`,
+     )
+     SELECT s.id, s.id AS service_id, s.name, s.status, s.criticality, s.is_public,
+            BOOL_OR(scoped_services.is_direct) AS is_direct
+     FROM scoped_services
+     JOIN services s ON s.id=scoped_services.service_id
+     GROUP BY s.id, s.name, s.status, s.criticality, s.is_public
+     ORDER BY BOOL_OR(scoped_services.is_direct) DESC, s.name`,
     [Array.isArray(assetIds) ? assetIds : [], Array.isArray(serviceIds) ? serviceIds : []]
   );
 }
@@ -71,17 +76,22 @@ async function getMaintenanceAffectedAssets(maintenanceId) {
 
 async function getMaintenanceAffectedServices(maintenanceId) {
   return getMany(
-    `SELECT DISTINCT service_id
-     FROM (
-       SELECT service_id
+    `WITH scoped_services AS (
+       SELECT service_id, TRUE AS is_direct
        FROM maintenance_services
        WHERE maintenance_id=$1
-       UNION
-       SELECT sa.service_id
+       UNION ALL
+       SELECT sa.service_id, FALSE AS is_direct
        FROM maintenance_assets ma
        JOIN service_assets sa ON sa.asset_id=ma.asset_id
        WHERE ma.maintenance_id=$1
-     ) related_services`,
+     )
+     SELECT s.id, s.id AS service_id, s.name, s.status, s.criticality, s.is_public,
+            BOOL_OR(scoped_services.is_direct) AS is_direct
+     FROM scoped_services
+     JOIN services s ON s.id=scoped_services.service_id
+     GROUP BY s.id, s.name, s.status, s.criticality, s.is_public
+     ORDER BY BOOL_OR(scoped_services.is_direct) DESC, s.name`,
     [maintenanceId]
   );
 }

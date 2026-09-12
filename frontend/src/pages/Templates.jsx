@@ -26,6 +26,8 @@ const NOTIFY_SAMPLE_VARS = {
   notes: 'Completato senza anomalie.',
   primary_assets: 'Core Database Server',
   affected_assets: 'Core Database Server, Customer Portal, Reporting API',
+  primary_services: 'Customer Portal',
+  affected_services: 'Customer Portal, Reporting',
   time_before: '2 ore',
   reason: 'Slot riprogrammato su richiesta del fornitore.',
   reopened_at: '13/05/2026 09:00',
@@ -49,19 +51,19 @@ const NOTIFY_SAMPLE_VARS = {
 }
 
 const NOTIFY_TPL_VARS = {
-  maintenance_scheduled: ['title','type','impact_level','scheduled_start','scheduled_end','description','primary_assets','affected_assets','id','app_url'],
-  maintenance_reminder: ['title','time_before','scheduled_start','scheduled_end','primary_assets','affected_assets','id','app_url'],
-  maintenance_started: ['title','actual_start','scheduled_end','primary_assets','affected_assets','id','app_url'],
-  maintenance_completed: ['title','actual_end','notes','primary_assets','affected_assets','id','app_url'],
-  maintenance_reopened: ['title','impact_level','reopened_at','reopen_reason','primary_assets','affected_assets','id','app_url'],
-  maintenance_cancelled: ['title','reason','primary_assets','affected_assets','id','app_url'],
-  maintenance_rejected: ['title','reason','primary_assets','affected_assets','id','app_url'],
+  maintenance_scheduled: ['title','type','impact_level','scheduled_start','scheduled_end','description','primary_assets','affected_assets','primary_services','affected_services','id','app_url'],
+  maintenance_reminder: ['title','time_before','scheduled_start','scheduled_end','primary_assets','affected_assets','primary_services','affected_services','id','app_url'],
+  maintenance_started: ['title','actual_start','scheduled_end','primary_assets','affected_assets','primary_services','affected_services','id','app_url'],
+  maintenance_completed: ['title','actual_end','notes','primary_assets','affected_assets','primary_services','affected_services','id','app_url'],
+  maintenance_reopened: ['title','impact_level','reopened_at','reopen_reason','primary_assets','affected_assets','primary_services','affected_services','id','app_url'],
+  maintenance_cancelled: ['title','reason','primary_assets','affected_assets','primary_services','affected_services','id','app_url'],
+  maintenance_rejected: ['title','reason','primary_assets','affected_assets','primary_services','affected_services','id','app_url'],
   maintenance_owner_approval_requested: ['title','owner_source_type','owner_source_name','scheduled_start','scheduled_end','created_by_name','approval_url','app_url'],
   maintenance_owner_reschedule_proposed: ['title','owner_name','proposed_start','proposed_end','response_note','app_url','id'],
   maintenance_owner_reschedule_countered: ['title','creator_proposed_start','creator_proposed_end','creator_response_note','approval_url','app_url'],
-  incident_created: ['title','severity','status','description','started_at','primary_assets','affected_assets','id','app_url'],
-  incident_resolved: ['title','resolved_at','primary_assets','affected_assets','id','app_url'],
-  blackout_scheduled: ['name','start_date','end_date','description','primary_assets','affected_assets','id','app_url'],
+  incident_created: ['title','severity','status','description','started_at','primary_assets','affected_assets','primary_services','affected_services','id','app_url'],
+  incident_resolved: ['title','resolved_at','primary_assets','affected_assets','primary_services','affected_services','id','app_url'],
+  blackout_scheduled: ['name','start_date','end_date','description','primary_assets','affected_assets','primary_services','affected_services','id','app_url'],
 }
 
 function renderNotifyPreview(html, vars) {

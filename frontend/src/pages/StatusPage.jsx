@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { statusApi } from '../api'
 import { format } from 'date-fns'
-import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Building2, Server, ShieldCheck } from 'lucide-react'
+import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Building2, Server, ShieldCheck, Cog } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { Modal } from '../components/Modal'
 
@@ -58,6 +58,27 @@ function AffectedAssets({ assets = [] }) {
         >
           {asset.part_is_relevant && <ShieldCheck size={11} className="text-amber-600" />}
           {asset.name}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function AffectedServices({ services = [] }) {
+  if (services.length === 0) return null
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+        <Cog size={11} />
+        Affected services:
+      </span>
+      {services.map(service => (
+        <span
+          key={service.id}
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${service.is_direct ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
+          title={service.is_direct ? 'Selected service' : 'Related service'}
+        >
+          {service.name}
         </span>
       ))}
     </div>
@@ -148,6 +169,7 @@ function MaintenanceCard({ m, colorClass }) {
       {isLoggedIn && m.reopen_reason && <p className="text-xs text-amber-700 mt-1"><strong>Reopen reason:</strong> {m.reopen_reason}</p>}
 
       <AffectedAssets assets={affectedAssets} />
+      <AffectedServices services={m.affected_services || []} />
 
       <div className="mt-2 flex flex-wrap gap-3">
         {hasHistory && (
@@ -535,6 +557,7 @@ function IncidentCard({ incident }) {
       </div>
       {incident.description && <p className="text-xs text-gray-400 mt-1">{incident.description}</p>}
       <AffectedAssets assets={incident.affected_assets || []} />
+      <AffectedServices services={incident.affected_services || []} />
 
       {updates.length > 0 && (
         <button
@@ -662,6 +685,7 @@ export default function StatusPage() {
                 {fmt(b.start_date, 'MMM dd, yyyy')} → {fmt(b.end_date, 'MMM dd, yyyy')}
               </p>
               <AffectedAssets assets={b.affected_assets || []} />
+              <AffectedServices services={b.affected_services || []} />
               <p className="text-xs text-red-200 mt-1">No changes or maintenance windows are permitted during this period.</p>
             </div>
           </div>
@@ -678,6 +702,7 @@ export default function StatusPage() {
                 {fmt(b.start_date, 'MMM dd, yyyy')} → {fmt(b.end_date, 'MMM dd, yyyy')}
               </p>
               <AffectedAssets assets={b.affected_assets || []} />
+              <AffectedServices services={b.affected_services || []} />
             </div>
           </div>
         ))}
@@ -775,6 +800,7 @@ export default function StatusPage() {
                   <span className="text-xs badge bg-red-100 text-red-800 shrink-0">blackout</span>
                 </div>
                 <AffectedAssets assets={b.affected_assets || []} />
+                <AffectedServices services={b.affected_services || []} />
                 <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-x-3 gap-y-1">
                   <span>{fmt(b.start_date, 'MM/dd/yyyy')}</span>
                   <span>to</span>

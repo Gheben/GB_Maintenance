@@ -5,9 +5,27 @@ const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
 const { sendEmailNotification } = require('../services/notificationService');
 const { getAffectedAssets, getAffectedServices } = require('../utils/maintenanceScope');
+const { getVisibleAffectedScope, PRIVILEGED_ROLES } = require('../utils/entityVisibility');
 
 const router = Router();
 router.use(requireAuth);
+
+function affectedScopeTemplateVars(scope) {
+  return {
+    primary_assets: scope.assets.filter((asset) => asset.is_direct).map((asset) => asset.name).join(', ') || '-',
+    affected_assets: scope.assets.map((asset) => asset.name).join(', ') || '-',
+    primary_services: scope.services.filter((service) => service.is_direct).map((service) => service.name).join(', ') || '-',
+    affected_services: scope.services.map((service) => service.name).join(', ') || '-',
+  };
+}
+
+function visibleImpactedUsers(users, viewer) {
+  if (PRIVILEGED_ROLES.has(viewer?.role)) return users;
+  return users.filter((user) =>
+    String(user.id || '') === String(viewer?.id || '')
+    || (viewer?.email && String(user.email || '').toLowerCase() === String(viewer.email).toLowerCase())
+  );
+}
 
 async function getImpactedUsersAndOffices(serviceIds = [], assetIds = []) {
   const directServiceIds = Array.isArray(serviceIds) ? serviceIds : [];
@@ -212,10 +230,22 @@ router.get('/', async (req, res) => {
     row.services = sids.length ? await getMany(`SELECT id, name FROM services WHERE id = ANY($1::uuid[])`, [sids]) : [];
     row.assets   = aids.length ? await getMany(`SELECT id, name, part_is_relevant FROM assets   WHERE id = ANY($1::uuid[])`, [aids]) : [];
     const impacted = await getImpactedUsersAndOffices(sids, aids);
-    row.affected_assets = impacted.affected_assets;
-    row.impacted_users_count = impacted.impacted_users_count;
-    row.offices_impacted = impacted.offices_impacted;
-    row.offices_impacted_count = impacted.offices_impacted_count;
+    const affectedServices = await getAffectedServices(aids, sids);
+    const visibleScope = await getVisibleAffectedScope(
+      { userId: req.user.id, email: req.user.email, role: req.user.role },
+      impacted.affected_assets,
+      affectedServices
+    );
+    row.services = visibleScope.services.filter((service) => service.is_direct);
+    row.assets = visibleScope.assets.filter((asset) => asset.is_direct);
+    row.service_ids = row.services.map((service) => service.id);
+    row.asset_ids = row.assets.map((asset) => asset.id);
+    row.affected_assets = visibleScope.assets;
+    row.affected_services = visibleScope.services;
+    const visibleUsers = visibleImpactedUsers(impacted.users, req.user);
+    row.impacted_users_count = visibleUsers.length;
+    row.offices_impacted = [...new Set(visibleUsers.map((user) => String(user.office || '').trim()).filter(Boolean))];
+    row.offices_impacted_count = row.offices_impacted.length;
   }
   res.json(rows);
 });
@@ -240,12 +270,22 @@ router.get('/:id', async (req, res) => {
   );
   if (!row) return res.status(404).json({ error: 'Periodo non trovato' });
   const impacted = await getImpactedUsersAndOffices(row.service_ids || [], row.asset_ids || []);
-  row.services = row.service_ids?.length ? await getMany(`SELECT id, name FROM services WHERE id = ANY($1::uuid[])`, [row.service_ids]) : [];
-  row.assets = row.asset_ids?.length ? await getMany(`SELECT id, name, part_is_relevant FROM assets WHERE id = ANY($1::uuid[])`, [row.asset_ids]) : [];
-  row.affected_assets = impacted.affected_assets;
-  row.impacted_users_count = impacted.impacted_users_count;
-  row.offices_impacted = impacted.offices_impacted;
-  row.offices_impacted_count = impacted.offices_impacted_count;
+  const affectedServices = await getAffectedServices(row.asset_ids || [], row.service_ids || []);
+  const visibleScope = await getVisibleAffectedScope(
+    { userId: req.user.id, email: req.user.email, role: req.user.role },
+    impacted.affected_assets,
+    affectedServices
+  );
+  row.services = visibleScope.services.filter((service) => service.is_direct);
+  row.assets = visibleScope.assets.filter((asset) => asset.is_direct);
+  row.service_ids = row.services.map((service) => service.id);
+  row.asset_ids = row.assets.map((asset) => asset.id);
+  row.affected_assets = visibleScope.assets;
+  row.affected_services = visibleScope.services;
+  const visibleUsers = visibleImpactedUsers(impacted.users, req.user);
+  row.impacted_users_count = visibleUsers.length;
+  row.offices_impacted = [...new Set(visibleUsers.map((user) => String(user.office || '').trim()).filter(Boolean))];
+  row.offices_impacted_count = row.offices_impacted.length;
   res.json(row);
 });
 
@@ -288,16 +328,20 @@ router.post('/', requireChangeManager, [
         ...emailSubscribers.map((subscriber) => String(subscriber.email || '').trim()),
       ].filter(Boolean))];
       if (emails.length > 0) {
-        const primaryAssets = impacted.affected_assets.filter((asset) => asset.is_direct);
+        const affectedServices = await getAffectedServices(aids, sids);
+        const scope = { assets: impacted.affected_assets, services: affectedServices };
         await sendEmailNotification('blackout_scheduled', emails, {
           id: result.rows[0].id,
           name: req.body.name,
           description: req.body.description || '-',
           start_date: new Date(req.body.start_date).toLocaleDateString('it-IT'),
           end_date: new Date(req.body.end_date).toLocaleDateString('it-IT'),
-          primary_assets: primaryAssets.map((asset) => asset.name).join(', ') || '-',
-          affected_assets: impacted.affected_assets.map((asset) => asset.name).join(', ') || '-',
-        }, 'blackout_period', result.rows[0].id);
+          ...affectedScopeTemplateVars(scope),
+        }, 'blackout_period', result.rows[0].id, {
+          varsForRecipient: async (email) => affectedScopeTemplateVars(
+            await getVisibleAffectedScope({ email }, scope.assets, scope.services)
+          ),
+        });
         await query(`UPDATE blackout_periods SET notified_at=NOW() WHERE id=$1`, [result.rows[0].id]);
       }
     } catch { /* notification failures should not affect the API response */ }
