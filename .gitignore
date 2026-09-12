@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+package-lock.json
 
 # Build output
 dist/
@@ -14,13 +15,16 @@ build/
 logs/
 *.log
 
-# Uploads (runtime user content)
-uploads/*
-!uploads/.gitkeep
+# Uploads (runtime user content, contains real user files)
+**/uploads/*
+!**/uploads/.gitkeep
 
 # Database data (runtime, not part of source)
 data/postgres/
 data/postgres-dev/
+
+# Local-only demo data scripts (not for publication)
+data/local-seed/
 
 # OS / editor
 .DS_Store
