@@ -776,7 +776,7 @@ router.post('/', requireOperator, [
        (title, description, ticket_ref, type, status, impact_level, scheduled_start, scheduled_end,
         recurrence_type, recurrence_cron, recurrence_end_date, created_by,
         owner_approval_required, owner_approval_status, owner_approval_updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
     [
       req.body.title, req.body.description || null, req.body.ticket_ref || null,
       req.body.type, status, req.body.impact_level || 'medium',
