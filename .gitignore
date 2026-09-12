@@ -1,29 +1,29 @@
 # Dependencies
 node_modules/
-.vite/
 
-# Environment
-.env
-
-# Build outputs
+# Build output
 dist/
 build/
 
+# Environment variables
+.env
+.env.*
+!.env.example
+
 # Logs
-*.log
 logs/
+*.log
 
-# Database / data
-data/
+# Uploads (runtime user content)
+uploads/*
+!uploads/.gitkeep
 
-# OS
+# Database data (runtime, not part of source)
+data/postgres/
+data/postgres-dev/
+
+# OS / editor
 .DS_Store
 Thumbs.db
-
-# Editor
-.vscode/
-*.swp
-*.swo
-
-# Test
-coverage/
+.vscode/*
+!.vscode/extensions.json
