@@ -4,10 +4,11 @@ import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Modal } from '../components/Modal'
 import { ItemPicker } from '../components/ItemPicker'
+import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
 import { toast } from '../components/Toast'
 import { maintenanceApi, assetsApi, servicesApi, maintenanceTypesApi } from '../api'
 import { format } from 'date-fns'
-import { ArrowLeft, CheckCircle, XCircle, Play, Square, Ban, Pencil, Save, X, ClipboardCheck, RotateCcw, Users, Building2, Search, Boxes, Server, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, Play, Square, Ban, Pencil, Save, X, ClipboardCheck, RotateCcw, Users, Building2, Search, Boxes, Server, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const IMPACTS = ['critical','high','medium','low']
@@ -292,6 +293,7 @@ export default function MaintenanceDetail() {
         {/* ── EDIT MODE ──────────────────────────────────────────── */}
         {editMode && editForm ? (
           <div className="card p-6 space-y-5">
+            <PartIsAssetNotice assets={allAssets} selectedIds={editForm.asset_ids} />
             <div>
               <label className="block text-sm font-medium mb-1">Title *</label>
               <input className="input" value={editForm.title} onChange={e => setEditForm(f => ({...f, title: e.target.value}))} />
@@ -405,7 +407,10 @@ export default function MaintenanceDetail() {
               {mw.assets?.length === 0 && <p className="text-gray-500 text-sm">No assets</p>}
               {mw.assets?.map(a => (
                 <Link key={a.id} to={`/assets/${a.id}`} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <span className="text-sm">{a.name}</span>
+                  <span className="flex items-center gap-1.5 text-sm">
+                    {a.part_is_relevant && <ShieldCheck size={15} className="text-amber-600" title="Part-IS Relevant" />}
+                    {a.name}
+                  </span>
                   <div className="flex gap-2">
                     <CriticalityBadge criticality={a.criticality} />
                     <StatusBadge status={a.status} />
@@ -419,7 +424,10 @@ export default function MaintenanceDetail() {
                 <div className="space-y-2">
                   {mw.affectedAssets.map(a => (
                     <Link key={a.id} to={`/assets/${a.id}`} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                      <span className="text-sm">{a.name}</span>
+                      <span className="flex items-center gap-1.5 text-sm">
+                        {a.part_is_relevant && <ShieldCheck size={15} className="text-amber-600" title="Part-IS Relevant" />}
+                        {a.name}
+                      </span>
                       <div className="flex gap-2">
                         <CriticalityBadge criticality={a.criticality} />
                         <StatusBadge status={a.status} />

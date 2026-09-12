@@ -5,7 +5,7 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toast'
 import { incidentsApi, incidentSeveritiesApi } from '../api'
 import { format } from 'date-fns'
-import { ArrowLeft, Pencil, Save, X } from 'lucide-react'
+import { ArrowLeft, Pencil, Save, X, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const STATUSES = ['investigating','identified','monitoring','resolved']
@@ -173,7 +173,12 @@ export default function IncidentDetail() {
             <h3 className="font-medium mb-3 text-sm">Affected assets</h3>
             {incident.assets?.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {incident.assets.map(a => <Link key={a.id} to={`/assets/${a.id}`} className="text-sm text-brand-600 hover:underline">{a.name}</Link>)}
+                {incident.assets.map(a => (
+                  <Link key={a.id} to={`/assets/${a.id}`} className="inline-flex items-center gap-1 text-sm text-brand-600 hover:underline">
+                    {a.part_is_relevant && <ShieldCheck size={14} className="text-amber-600" title="Part-IS Relevant" />}
+                    {a.name}
+                  </Link>
+                ))}
               </div>
             ) : (
               <p className="text-gray-500 text-sm">No affected assets</p>

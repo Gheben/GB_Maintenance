@@ -632,7 +632,7 @@ router.get('/:id', async (req, res) => {
   }
 
   const assets = await getMany(
-    `SELECT a.id, a.name, a.category, a.status, a.criticality
+    `SELECT a.id, a.name, a.category, a.status, a.criticality, a.part_is_relevant
      FROM assets a JOIN maintenance_assets ma ON ma.asset_id=a.id WHERE ma.maintenance_id=$1`,
     [req.params.id]
   );
@@ -662,7 +662,7 @@ router.get('/:id', async (req, res) => {
   let serviceDerivedAssets = [];
   if (serviceIds.length > 0) {
     serviceDerivedAssets = await getMany(
-      `SELECT DISTINCT a.id, a.name, a.category, a.status, a.criticality
+      `SELECT DISTINCT a.id, a.name, a.category, a.status, a.criticality, a.part_is_relevant
        FROM assets a
        JOIN service_assets sa ON sa.asset_id=a.id
        WHERE sa.service_id=ANY($1::uuid[])

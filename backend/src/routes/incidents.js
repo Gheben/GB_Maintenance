@@ -68,7 +68,7 @@ router.get('/:id', async (req, res) => {
   if (!incident) return res.status(404).json({ error: 'Incidente non trovato' });
 
   const assets = await getMany(
-    `SELECT a.id, a.name, a.category, a.status, a.criticality
+    `SELECT a.id, a.name, a.category, a.status, a.criticality, a.part_is_relevant
      FROM assets a JOIN incident_assets ia ON ia.asset_id=a.id WHERE ia.incident_id=$1`,
     [req.params.id]
   );

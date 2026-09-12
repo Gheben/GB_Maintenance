@@ -209,7 +209,7 @@ router.get('/', async (req, res) => {
     const sids = row.service_ids || [];
     const aids = row.asset_ids   || [];
     row.services = sids.length ? await getMany(`SELECT id, name FROM services WHERE id = ANY($1::uuid[])`, [sids]) : [];
-    row.assets   = aids.length ? await getMany(`SELECT id, name FROM assets   WHERE id = ANY($1::uuid[])`, [aids]) : [];
+    row.assets   = aids.length ? await getMany(`SELECT id, name, part_is_relevant FROM assets   WHERE id = ANY($1::uuid[])`, [aids]) : [];
     const impacted = await getImpactedUsersAndOffices(sids, aids);
     row.impacted_users_count = impacted.impacted_users_count;
     row.offices_impacted = impacted.offices_impacted;

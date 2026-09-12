@@ -8,7 +8,7 @@ import { ItemPicker } from '../components/ItemPicker'
 import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { assetsApi, assetCategoriesApi, usersApi, groupsApi, settingsApi, licensesApi } from '../api'
-import { Plus, Search, RefreshCw, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Search, RefreshCw, Pencil, Trash2, ShieldAlert } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CATEGORIES = ['application','infrastructure','database','network','hardware','api','other']
@@ -430,7 +430,10 @@ export default function Assets() {
                       </td>
                     )}
                     <td className="px-4 py-3 font-medium">
-                      <Link to={`/assets/${a.id}`} className="text-brand-600 hover:underline">{a.name}</Link>
+                      <Link to={`/assets/${a.id}`} className="text-brand-600 hover:underline inline-flex items-center gap-1.5">
+                        {a.part_is_relevant && <ShieldAlert size={14} className="text-amber-500 shrink-0" title="Part-IS Relevant" />}
+                        {a.name}
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-gray-500">
                       <span className="flex items-center gap-1.5">

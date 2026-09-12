@@ -6,6 +6,7 @@ import { Pagination } from '../components/Pagination'
 import { ConfirmDialog, Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { ItemPicker } from '../components/ItemPicker'
+import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
 import { maintenanceApi, maintenanceTypesApi, assetsApi, servicesApi, blackoutApi } from '../api'
 import { Plus, RefreshCw, Pencil, ChevronDown, ChevronRight as ChevronRight2, CheckCircle2, Ban, AlertTriangle, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
@@ -122,7 +123,6 @@ export default function Maintenance() {
   }
 
   const allVisibleSelected = items.length > 0 && items.every(m => selectedMaintenanceIds.includes(m.id))
-
   const now = new Date()
   const activeBlackouts = blackouts.filter(b => {
     const start = new Date(b.start_date)
@@ -289,6 +289,7 @@ export default function Maintenance() {
       {showCreate && (
         <Modal title="New Maintenance" onClose={() => setShowCreate(false)} size="lg">
           <form onSubmit={handleCreate} className="space-y-4">
+            <PartIsAssetNotice assets={allAssets} selectedIds={form.asset_ids} />
             <div>
               <label className="block text-sm font-medium mb-1">Title *</label>
               <input className="input" required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
