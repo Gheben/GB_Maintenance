@@ -137,7 +137,7 @@ export default function Dashboard() {
                   <Pie data={assetStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70}>
                     {assetStatusData.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
-                  <Tooltip content={<ChartTip />} />
+                  <Tooltip content={<ChartTip />} cursor={false} />
                   <Legend iconType="circle" iconSize={9} formatter={v => <span className="text-xs capitalize">{v}</span>} />
                 </PieChart>
               </ResponsiveContainer>
@@ -152,7 +152,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
-                  <Tooltip content={<ChartTip />} />
+                  <Tooltip content={<ChartTip />} cursor={false} />
                   <Bar dataKey="value" radius={[4,4,0,0]}>
                     {assetCritData.map((e, i) => <Cell key={i} fill={e.fill} />)}
                   </Bar>
@@ -169,7 +169,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
-                  <Tooltip content={<ChartTip />} />
+                  <Tooltip content={<ChartTip />} cursor={false} />
                   <Bar dataKey="value" radius={[4,4,0,0]}>
                     {mTypeData.map((e, i) => <Cell key={i} fill={e.fill} />)}
                   </Bar>
@@ -186,7 +186,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
-                  <Tooltip content={<ChartTip />} />
+                  <Tooltip content={<ChartTip />} cursor={false} />
                   <Bar dataKey="value" radius={[4,4,0,0]}>
                     {mStatusData.map((e, i) => <Cell key={i} fill={e.fill} />)}
                   </Bar>
