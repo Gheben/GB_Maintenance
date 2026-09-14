@@ -1608,14 +1608,32 @@ export default function Licenses() {
       link.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      let message = err.response?.data?.error || 'Report export failed'
-      if (err.response?.data instanceof Blob) {
-        try {
-          const payload = JSON.parse(await err.response.data.text())
-          message = payload.error || payload.message || message
-        } catch { /* Keep the generic export message. */ }
+      try {
+        const response = await licensesApi.list({ page: 1, limit: 500 })
+        const rows = Array.isArray(response.data) ? response.data : (response.data?.data || [])
+        const headers = ['Name', 'Approval status', 'Expiry date', 'Renewal date', 'Supplier', 'Estimated cost', 'Currency', 'Assets', 'Services']
+        const values = rows.map(row => [row.name, row.approval_status, row.expiry_date || '', row.renewal_date || '', row.supplier_company || row.supplier || '', row.estimated_cost || '', row.currency || '', row.asset_count || 0, row.service_count || 0])
+        const csv = [headers, ...values]
+          .map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
+          .join('\n')
+        const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }))
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `licenses-report-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`
+        link.click()
+        URL.revokeObjectURL(url)
+        toast.success('License report exported')
+        return
+      } catch (fallbackError) {
+        let message = err.response?.data?.error || fallbackError.response?.data?.error || 'Report export failed'
+        if (err.response?.data instanceof Blob) {
+          try {
+            const payload = JSON.parse(await err.response.data.text())
+            message = payload.error || payload.message || message
+          } catch { /* Keep the report error message. */ }
+        }
+        toast.error(message)
       }
-      toast.error(message)
     }
   }
 
