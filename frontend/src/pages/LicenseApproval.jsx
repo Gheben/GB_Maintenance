@@ -276,9 +276,8 @@ export default function LicenseApproval() {
   const logoUrl = String(branding.app_brand_image_url || branding.approval_page_logo_url || '').trim()
   const title = branding.approval_page_title || DEFAULT_BRANDING.approval_page_title
   const subtitle = branding.approval_page_subtitle || DEFAULT_BRANDING.approval_page_subtitle
-  const appName = branding.app_name || DEFAULT_BRANDING.app_name
-  const footerTextTemplate = branding.approval_page_footer_text || DEFAULT_BRANDING.approval_page_footer_text
-  const footerText = String(footerTextTemplate).replaceAll('{app_name}', appName)
+  const appName = branding.approval_page_app_name || branding.app_name || DEFAULT_BRANDING.app_name
+  const footerText = 'Powered by GB Maintenance'
   const docs = normalizeApprovalDocuments(info?.documents)
   const initials = appName
     .split(/\s+/)

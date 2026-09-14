@@ -20,6 +20,7 @@ function Section({ title, children }) {
 function PortalPreview({ general, type }) {
   const maintenance = type === 'maintenance'
   const accent = maintenance ? (general.maintenance_approval_page_primary_color || '#2563eb') : (general.approval_page_primary_color || '#2563eb')
+  const appName = maintenance ? (general.maintenance_approval_page_app_name || 'GB Maintenance') : (general.approval_page_app_name || 'GB Maintenance')
   const title = maintenance ? (general.maintenance_approval_page_title || 'Maintenance Approval') : (general.approval_page_title || 'License Approval')
   const subtitle = maintenance ? (general.maintenance_approval_page_subtitle || 'Review the scheduled maintenance.') : (general.approval_page_subtitle || 'Review the request and confirm.')
   const approve = maintenance ? (general.maintenance_approval_page_approve_label || 'Approve') : (general.approval_page_approve_button_label || 'Approve')
@@ -30,7 +31,7 @@ function PortalPreview({ general, type }) {
     <div className="rounded-2xl p-4 sm:p-6" style={{ background: `radial-gradient(circle at top left, ${accent}22, transparent 35%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)` }}>
       <section className="max-w-2xl mx-auto rounded-2xl border border-white/70 bg-white/90 shadow-md overflow-hidden">
         <div className="p-5 border-b border-gray-100" style={{ background: `linear-gradient(135deg, ${accent}18, transparent 70%)` }}>
-          <div className="text-xs uppercase tracking-[0.2em] text-gray-500 font-semibold">{general.app_name || 'GB Maintenance'}</div>
+          <div className="text-xs uppercase tracking-[0.2em] text-gray-500 font-semibold">{appName}</div>
           <h3 className="mt-2 text-2xl font-bold text-gray-900">{title}</h3>
           <p className="mt-2 text-sm text-gray-600">{subtitle}</p>
         </div>
@@ -41,6 +42,7 @@ function PortalPreview({ general, type }) {
             ))}
           </div>
           <div className="flex flex-wrap gap-2"><span className="px-3 py-2 rounded-lg text-white text-sm" style={{ backgroundColor: accent }}>{approve}</span><span className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm">{reject}</span>{propose && <span className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm">{propose}</span>}</div>
+          <div className="pt-3 text-xs text-gray-400">Powered by GB Maintenance</div>
         </div>
       </section>
     </div>
@@ -1389,6 +1391,7 @@ export default function Settings() {
                   {portalLicenseOpen && (
                     <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-5">
                       <div className="space-y-3">
+                        <input className="input" placeholder="Portal display name" value={general.approval_page_app_name || ''} onChange={e => setGeneral(f => ({ ...f, approval_page_app_name: e.target.value }))} />
                         <input className="input" placeholder="Page title" value={general.approval_page_title || ''} onChange={e => setGeneral(f => ({ ...f, approval_page_title: e.target.value }))} />
                         <textarea className="input min-h-[80px]" placeholder="Page subtitle" value={general.approval_page_subtitle || ''} onChange={e => setGeneral(f => ({ ...f, approval_page_subtitle: e.target.value }))} />
                         <div className="flex items-center gap-2"><input type="color" className="w-10 h-9" value={general.approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, approval_page_primary_color: e.target.value }))} /><input className="input font-mono" value={general.approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, approval_page_primary_color: e.target.value }))} /></div>
@@ -1408,6 +1411,7 @@ export default function Settings() {
                   {portalMaintenanceOpen && (
                     <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-5">
                       <div className="space-y-3">
+                        <input className="input" placeholder="Portal display name" value={general.maintenance_approval_page_app_name || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_app_name: e.target.value }))} />
                         <input className="input" placeholder="Page title" value={general.maintenance_approval_page_title || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_title: e.target.value }))} />
                         <textarea className="input min-h-[80px]" placeholder="Page subtitle" value={general.maintenance_approval_page_subtitle || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_subtitle: e.target.value }))} />
                         <div className="flex items-center gap-2"><input type="color" className="w-10 h-9" value={general.maintenance_approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_primary_color: e.target.value }))} /><input className="input font-mono" value={general.maintenance_approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_primary_color: e.target.value }))} /></div>

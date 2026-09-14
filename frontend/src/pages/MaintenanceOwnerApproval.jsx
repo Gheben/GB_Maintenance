@@ -134,10 +134,9 @@ export default function MaintenanceOwnerApproval() {
   }
 
   const accent = branding.maintenance_approval_page_primary_color || DEFAULT_BRANDING.maintenance_approval_page_primary_color
-  const appName = branding.app_name || DEFAULT_BRANDING.app_name
+  const appName = branding.maintenance_approval_page_app_name || branding.app_name || DEFAULT_BRANDING.app_name
   const logoUrl = String(branding.app_brand_image_url || branding.approval_page_logo_url || '').trim()
-  const footerTextTemplate = branding.maintenance_approval_page_footer_text || DEFAULT_BRANDING.maintenance_approval_page_footer_text
-  const footerText = String(footerTextTemplate).replaceAll('{app_name}', appName)
+  const footerText = 'Powered by GB Maintenance'
   const initials = appName.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase()).join('') || 'GB'
   const status = String(info?.status || '').toLowerCase()
   const canAct = ['pending', 'counter_proposed'].includes(status)
