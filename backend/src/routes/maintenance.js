@@ -121,11 +121,24 @@ function normalizeMaintenanceLinks(assetIds = [], serviceIds = []) {
 
 async function resolveMaintenanceOwnerApprovalTargets(maintenanceId) {
   return getMany(
-    `SELECT DISTINCT t.owner_user_id, t.owner_email, t.owner_name, t.owner_source_type, t.owner_source_id, t.owner_source_name
+    `WITH RECURSIVE scope_assets(maintenance_id, asset_id) AS (
+       SELECT maintenance_id, asset_id FROM maintenance_assets WHERE maintenance_id=$1
+       UNION
+       SELECT sa.maintenance_id, ad.depends_on_id
+       FROM scope_assets sa
+       JOIN asset_dependencies ad ON ad.asset_id=sa.asset_id
+     ), scope_services(maintenance_id, service_id) AS (
+       SELECT maintenance_id, service_id FROM maintenance_services WHERE maintenance_id=$1
+       UNION
+       SELECT ss.maintenance_id, sd.depends_on_id
+       FROM scope_services ss
+       JOIN service_dependencies sd ON sd.service_id=ss.service_id
+     )
+     SELECT DISTINCT t.owner_user_id, t.owner_email, t.owner_name, t.owner_source_type, t.owner_source_id, t.owner_source_name
      FROM (
        SELECT u.id AS owner_user_id, u.email AS owner_email, COALESCE(u.display_name, u.username) AS owner_name,
               'asset'::text AS owner_source_type, a.id AS owner_source_id, a.name AS owner_source_name
-       FROM maintenance_assets ma
+      FROM scope_assets ma
        JOIN assets a ON a.id=ma.asset_id
        JOIN users u ON u.id=a.owner_id
        WHERE ma.maintenance_id=$1 AND a.owner_type='user' AND a.owner_id IS NOT NULL AND u.is_active=true
@@ -134,7 +147,7 @@ async function resolveMaintenanceOwnerApprovalTargets(maintenanceId) {
 
        SELECT u.id AS owner_user_id, u.email AS owner_email, COALESCE(u.display_name, u.username) AS owner_name,
               'asset'::text AS owner_source_type, a.id AS owner_source_id, a.name AS owner_source_name
-       FROM maintenance_assets ma
+      FROM scope_assets ma
        JOIN assets a ON a.id=ma.asset_id
        JOIN user_group_members ugm ON ugm.group_id=a.owner_group_id
        JOIN users u ON u.id=ugm.user_id
@@ -144,17 +157,17 @@ async function resolveMaintenanceOwnerApprovalTargets(maintenanceId) {
 
        SELECT u.id AS owner_user_id, u.email AS owner_email, COALESCE(u.display_name, u.username) AS owner_name,
               'asset'::text AS owner_source_type, a.id AS owner_source_id, a.name AS owner_source_name
-       FROM maintenance_assets ma
+      FROM scope_assets ma
        JOIN assets a ON a.id=ma.asset_id
        JOIN LATERAL jsonb_array_elements(COALESCE(a.owner_targets, '[]'::jsonb)) ot ON true
        JOIN users u ON (ot->>'type'='user' AND (ot->>'id') ~* '^[0-9a-f-]{36}$' AND u.id=(ot->>'id')::uuid)
-       WHERE ma.maintenance_id=$1 AND u.is_active=true
+      WHERE ma.maintenance_id=$1 AND u.is_active=true
 
        UNION
 
        SELECT u.id AS owner_user_id, u.email AS owner_email, COALESCE(u.display_name, u.username) AS owner_name,
               'service'::text AS owner_source_type, s.id AS owner_source_id, s.name AS owner_source_name
-       FROM maintenance_services ms
+      FROM scope_services ms
        JOIN services s ON s.id=ms.service_id
        JOIN users u ON u.id=s.owner_id
        WHERE ms.maintenance_id=$1 AND s.owner_type='user' AND s.owner_id IS NOT NULL AND u.is_active=true
@@ -163,14 +176,14 @@ async function resolveMaintenanceOwnerApprovalTargets(maintenanceId) {
 
        SELECT u.id AS owner_user_id, u.email AS owner_email, COALESCE(u.display_name, u.username) AS owner_name,
               'service'::text AS owner_source_type, s.id AS owner_source_id, s.name AS owner_source_name
-       FROM maintenance_services ms
+      FROM scope_services ms
        JOIN services s ON s.id=ms.service_id
        JOIN user_group_members ugm ON ugm.group_id=s.owner_group_id
        JOIN users u ON u.id=ugm.user_id
        WHERE ms.maintenance_id=$1 AND s.owner_type='local_group' AND s.owner_group_id IS NOT NULL AND u.is_active=true
 
      ) t
-     ORDER BY t.owner_name, t.owner_source_type, t.owner_source_name`,
+    ORDER BY t.owner_name, t.owner_source_type, t.owner_source_name`,
     [maintenanceId]
   );
 }

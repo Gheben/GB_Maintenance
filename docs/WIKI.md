@@ -153,6 +153,8 @@ A maintenance window can define:
 
 Selecting a Part-IS asset or Part-IS service automatically forces the owner approval flow.
 
+Owner approval targets include the selected assets/services and their recursive direct dependencies. A maintenance can start only after every required owner approval is approved. The approval-status modal lists each subject, source entity, current state, owner action, creator action, request time, response time, and any proposed or counter-proposed dates.
+
 When owner approval is required, the backend resolves owners from selected assets/services and creates approval rows. Owners can approve, reject, or propose a new schedule. Creators and change managers can accept, reject, or counter-propose.
 
 Approval links are token-based and can be used from the public maintenance approval page. Approval tokens expire automatically.
@@ -197,6 +199,12 @@ Probe features include:
 - Manual probe execution.
 
 The scheduler runs due probes using the configured tick interval.
+
+## PWA Installation
+
+The frontend is installable on supported Chrome, Edge, Android, macOS, Windows, and Linux browsers. When the browser exposes the install prompt, GB Maintenance shows an install suggestion with an Install app button. On iPhone and iPad, use the browser Share menu and choose Add to Home Screen.
+
+The application registers a service worker and uses the public web app manifest. The install hint can be dismissed locally and the application can still be installed later from the browser menu.
 
 ## Dashboard and Reports
 
