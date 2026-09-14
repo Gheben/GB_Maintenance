@@ -1617,7 +1617,7 @@ export default function Licenses() {
       <div className="space-y-4">
         <div className="py-2 -mx-4 sm:mx-0 px-4 sm:px-0 border-b border-gray-200 dark:border-gray-700">
           <nav className="flex flex-wrap gap-1.5">
-            {[['licenses', 'Licenses', FileIconFallback], ['suppliers', 'Suppliers', Building2], ['template', 'Template', Palette]].map(([k, l, Icon]) => (
+            {[['licenses', 'Licenses', FileIconFallback], ['suppliers', 'Suppliers', Building2]].map(([k, l, Icon]) => (
               <button
                 key={k}
                 onClick={() => setTab(k)}
@@ -1808,46 +1808,7 @@ export default function Licenses() {
           </div>
         )}
 
-        {tab === 'template' && (
-          <div className="space-y-4">
-            <div className="card p-5 sm:p-6">
-              {templateLoading ? (
-                <p className="text-sm text-gray-500">Loading template settings...</p>
-              ) : (
-                <form onSubmit={saveTemplate} className="space-y-6">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <p className="text-sm text-gray-500">Edit texts directly in the same visual position where they appear on the approval page. The logo is inherited from site settings.</p>
-                    <button type="button" className="btn-secondary" onClick={() => setShowTemplatePreview(true)}>
-                      <Eye size={15} />Preview popup
-                    </button>
-                  </div>
-
-                  <TemplateVisualEditor
-                    templateConfig={templateConfig}
-                    setTemplateConfig={setTemplateConfig}
-                  />
-
-                  <div className="flex justify-end">
-                    <button type="submit" className="btn-primary" disabled={templateSaving || templateLoading}>
-                      <Save size={15} />{templateSaving ? 'Saving...' : 'Save Template'}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        )}
       </div>
-
-      {showTemplatePreview && (
-        <Modal title="Template Preview" onClose={() => setShowTemplatePreview(false)} size="xl">
-          <TemplateVisualEditor
-            templateConfig={templateConfig}
-            setTemplateConfig={setTemplateConfig}
-            readOnly
-          />
-        </Modal>
-      )}
 
       {showLicenseForm && (
         <Modal title={editingLicense ? `Edit license: ${editingLicense.name}` : 'New license'} onClose={() => setShowLicenseForm(false)} size="xl">

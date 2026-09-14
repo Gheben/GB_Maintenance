@@ -17,6 +17,36 @@ function Section({ title, children }) {
   )
 }
 
+function PortalPreview({ general, type }) {
+  const maintenance = type === 'maintenance'
+  const accent = maintenance ? (general.maintenance_approval_page_primary_color || '#2563eb') : (general.approval_page_primary_color || '#2563eb')
+  const title = maintenance ? (general.maintenance_approval_page_title || 'Maintenance Approval') : (general.approval_page_title || 'License Approval')
+  const subtitle = maintenance ? (general.maintenance_approval_page_subtitle || 'Review the scheduled maintenance.') : (general.approval_page_subtitle || 'Review the request and confirm.')
+  const approve = maintenance ? (general.maintenance_approval_page_approve_label || 'Approve') : (general.approval_page_approve_button_label || 'Approve')
+  const reject = maintenance ? (general.maintenance_approval_page_reject_label || 'Reject') : (general.approval_page_reject_button_label || 'Reject')
+  const propose = maintenance ? (general.maintenance_approval_page_propose_label || 'Propose new date') : null
+
+  return (
+    <div className="rounded-2xl p-4 sm:p-6" style={{ background: `radial-gradient(circle at top left, ${accent}22, transparent 35%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)` }}>
+      <section className="max-w-2xl mx-auto rounded-2xl border border-white/70 bg-white/90 shadow-md overflow-hidden">
+        <div className="p-5 border-b border-gray-100" style={{ background: `linear-gradient(135deg, ${accent}18, transparent 70%)` }}>
+          <div className="text-xs uppercase tracking-[0.2em] text-gray-500 font-semibold">{general.app_name || 'GB Maintenance'}</div>
+          <h3 className="mt-2 text-2xl font-bold text-gray-900">{title}</h3>
+          <p className="mt-2 text-sm text-gray-600">{subtitle}</p>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[['Request', maintenance ? 'Database Server Upgrade' : 'Microsoft SQL Server Enterprise'], ['Status', 'Pending'], ['Start / expiry', maintenance ? '12/05/2026 22:00' : '16/05/2027'], ['Scope', maintenance ? 'Core Database Server' : 'Contoso Licensing']].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">{label}</div><div className="mt-1 text-sm font-medium text-gray-900">{value}</div></div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2"><span className="px-3 py-2 rounded-lg text-white text-sm" style={{ backgroundColor: accent }}>{approve}</span><span className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm">{reject}</span>{propose && <span className="px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm">{propose}</span>}</div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export default function Settings() {
   const { user } = useAuth()
   const isSuperAdmin = user?.role === 'superadmin'
@@ -109,6 +139,7 @@ export default function Settings() {
   const [templatePortalOpen, setTemplatePortalOpen] = useState(false)
   const [portalLicenseOpen, setPortalLicenseOpen] = useState(false)
   const [portalMaintenanceOpen, setPortalMaintenanceOpen] = useState(false)
+  const [portalPreviewType, setPortalPreviewType] = useState(null)
 
   // Asset Categories state
   const [aCats, setACats] = useState([])
@@ -1349,6 +1380,7 @@ export default function Settings() {
             </button>
             {templatePortalOpen && (
               <div className="space-y-3 border-t border-gray-100 dark:border-gray-700 pt-4">
+                <p className="text-sm text-gray-500">Portal branding and labels are stored in the Configuration data group and are included in application export/import.</p>
                 <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                   <button type="button" className="w-full px-4 py-3 flex items-center justify-between text-left bg-gray-50 dark:bg-gray-700/50" onClick={() => setPortalLicenseOpen(v => !v)}>
                     <span className="font-medium text-sm">License approval page</span>
@@ -1361,7 +1393,7 @@ export default function Settings() {
                         <textarea className="input min-h-[80px]" placeholder="Page subtitle" value={general.approval_page_subtitle || ''} onChange={e => setGeneral(f => ({ ...f, approval_page_subtitle: e.target.value }))} />
                         <div className="flex items-center gap-2"><input type="color" className="w-10 h-9" value={general.approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, approval_page_primary_color: e.target.value }))} /><input className="input font-mono" value={general.approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, approval_page_primary_color: e.target.value }))} /></div>
                         <div className="grid grid-cols-2 gap-2"><input className="input" placeholder="Approve" value={general.approval_page_approve_button_label || ''} onChange={e => setGeneral(f => ({ ...f, approval_page_approve_button_label: e.target.value }))} /><input className="input" placeholder="Reject" value={general.approval_page_reject_button_label || ''} onChange={e => setGeneral(f => ({ ...f, approval_page_reject_button_label: e.target.value }))} /></div>
-                        <button type="button" className="btn-primary" onClick={saveGeneral}>Save license portal</button>
+                        <div className="flex flex-wrap gap-2"><button type="button" className="btn-secondary" onClick={() => setPortalPreviewType('license')}>Preview</button><button type="button" className="btn-primary" onClick={saveGeneral}>Save license portal</button></div>
                       </div>
                       <div className="rounded-2xl border border-gray-200 bg-slate-50 p-5"><p className="text-xs uppercase tracking-widest text-gray-500">{general.app_name || 'GB Maintenance'}</p><h3 className="mt-2 text-xl font-bold">{general.approval_page_title || 'License Approval'}</h3><p className="mt-2 text-sm text-gray-600">{general.approval_page_subtitle || 'Review the request and confirm.'}</p><div className="mt-5 flex gap-2"><span className="px-3 py-2 rounded-lg text-white text-sm" style={{ backgroundColor: general.approval_page_primary_color || '#2563eb' }}>{general.approval_page_approve_button_label || 'Approve'}</span><span className="px-3 py-2 rounded-lg border bg-white text-sm">{general.approval_page_reject_button_label || 'Reject'}</span></div></div>
                     </div>
@@ -1380,7 +1412,7 @@ export default function Settings() {
                         <textarea className="input min-h-[80px]" placeholder="Page subtitle" value={general.maintenance_approval_page_subtitle || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_subtitle: e.target.value }))} />
                         <div className="flex items-center gap-2"><input type="color" className="w-10 h-9" value={general.maintenance_approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_primary_color: e.target.value }))} /><input className="input font-mono" value={general.maintenance_approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_primary_color: e.target.value }))} /></div>
                         <div className="grid grid-cols-2 gap-2"><input className="input" placeholder="Approve" value={general.maintenance_approval_page_approve_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_approve_label: e.target.value }))} /><input className="input" placeholder="Reject" value={general.maintenance_approval_page_reject_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_reject_label: e.target.value }))} /><input className="input" placeholder="Propose new date" value={general.maintenance_approval_page_propose_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_propose_label: e.target.value }))} /><input className="input" placeholder="Submit proposed date" value={general.maintenance_approval_page_submit_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_submit_label: e.target.value }))} /></div>
-                        <button type="button" className="btn-primary" onClick={saveGeneral}>Save maintenance portal</button>
+                        <div className="flex flex-wrap gap-2"><button type="button" className="btn-secondary" onClick={() => setPortalPreviewType('maintenance')}>Preview</button><button type="button" className="btn-primary" onClick={saveGeneral}>Save maintenance portal</button></div>
                       </div>
                       <div className="rounded-2xl border border-gray-200 bg-slate-50 p-5"><p className="text-xs uppercase tracking-widest text-gray-500">{general.app_name || 'GB Maintenance'}</p><h3 className="mt-2 text-xl font-bold">{general.maintenance_approval_page_title || 'Maintenance Approval'}</h3><p className="mt-2 text-sm text-gray-600">{general.maintenance_approval_page_subtitle || 'Review the scheduled maintenance.'}</p><div className="mt-5 flex flex-wrap gap-2"><span className="px-3 py-2 rounded-lg text-white text-sm" style={{ backgroundColor: general.maintenance_approval_page_primary_color || '#2563eb' }}>{general.maintenance_approval_page_approve_label || 'Approve'}</span><span className="px-3 py-2 rounded-lg border bg-white text-sm">{general.maintenance_approval_page_reject_label || 'Reject'}</span><span className="px-3 py-2 rounded-lg border bg-white text-sm">{general.maintenance_approval_page_propose_label || 'Propose new date'}</span></div></div>
                     </div>
@@ -1389,6 +1421,12 @@ export default function Settings() {
               </div>
             )}
           </div>
+        )}
+
+        {portalPreviewType && (
+          <Modal title={portalPreviewType === 'maintenance' ? 'Maintenance approval preview' : 'License approval preview'} onClose={() => setPortalPreviewType(null)} size="xl">
+            <PortalPreview general={general} type={portalPreviewType} />
+          </Modal>
         )}
 
         {tab === 'assetcat' && (
