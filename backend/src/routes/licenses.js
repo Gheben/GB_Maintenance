@@ -1073,7 +1073,7 @@ router.get('/', [
   });
 });
 
-router.get('/report', requireAdmin, async (req, res) => {
+router.get('/report', requireAuth, async (req, res) => {
   const rows = await getMany(
     `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.estimated_cost, l.currency,
             s.company AS supplier,
