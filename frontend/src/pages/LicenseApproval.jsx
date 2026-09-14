@@ -238,6 +238,10 @@ export default function LicenseApproval() {
     }
   }
 
+  useEffect(() => {
+    if (token) load().catch(() => {})
+  }, [token])
+
   const approve = async () => {
     if (!selectedRequestId) return
     setBusy(true)
@@ -283,6 +287,20 @@ export default function LicenseApproval() {
     .map(part => part[0]?.toUpperCase())
     .join('') || 'GB'
 
+  if (error && !info && !loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+        <div className="max-w-md w-full rounded-2xl border border-gray-200 bg-white shadow-sm p-8 text-center">
+          <div className="mx-auto w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
+            <CircleAlert size={24} />
+          </div>
+          <h1 className="mt-4 text-xl font-semibold text-gray-900">Invalid or expired approval link</h1>
+          <p className="mt-2 text-sm text-gray-500">This approval request is no longer available.</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className="min-h-screen p-4 sm:p-8"
@@ -310,7 +328,7 @@ export default function LicenseApproval() {
           </div>
 
           <div className="p-6 sm:p-8 space-y-5">
-            {!info && !loading && (
+            {!info && !loading && !error && (
               <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-white font-medium shadow-sm transition-transform hover:-translate-y-0.5" style={{ backgroundColor: accent }} onClick={load}>
                 <ShieldCheck size={18} />{branding.approval_page_load_button_label || DEFAULT_BRANDING.approval_page_load_button_label}
               </button>
