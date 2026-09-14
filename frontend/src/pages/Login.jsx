@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Wrench, Eye, EyeOff, Coffee } from 'lucide-react'
+import { Wrench, Eye, EyeOff, Coffee, Download } from 'lucide-react'
 import { toast } from '../components/Toast'
 import { settingsApi, reportsApi, maintenanceApi, assetsApi, servicesApi, notificationsApi } from '../api'
 
@@ -30,6 +30,8 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [branding, setBranding] = useState({ app_name: 'GB Maintenance', app_brand_image_url: '' })
+  const [installPrompt, setInstallPrompt] = useState(null)
+  const [showInstallHint, setShowInstallHint] = useState(false)
 
   useEffect(() => {
     settingsApi.publicBranding()
@@ -42,6 +44,35 @@ export default function Login() {
       })
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+    if (isStandalone) return undefined
+
+    const isAppleMobile = /iphone|ipad|ipod/i.test(window.navigator.userAgent)
+    const dismissed = localStorage.getItem('gb_install_hint_dismissed') === '1'
+    const handleBeforeInstall = (event) => {
+      event.preventDefault()
+      setInstallPrompt(event)
+      if (!dismissed) setShowInstallHint(true)
+    }
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall)
+    if (isAppleMobile && !dismissed) setShowInstallHint(true)
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall)
+  }, [])
+
+  const dismissInstallHint = () => {
+    localStorage.setItem('gb_install_hint_dismissed', '1')
+    setShowInstallHint(false)
+  }
+
+  const installApp = async () => {
+    if (!installPrompt) return
+    installPrompt.prompt()
+    await installPrompt.userChoice
+    setInstallPrompt(null)
+    setShowInstallHint(false)
+  }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -131,6 +162,26 @@ export default function Login() {
               Accedi con SSO / SAML
             </a>
           </div>
+
+          {showInstallHint && (
+            <div className="relative mt-4 rounded-lg border border-brand-400/40 bg-brand-900/30 p-3 text-slate-100">
+              <button type="button" className="absolute right-2 top-1 text-slate-400 hover:text-slate-100" onClick={dismissInstallHint} aria-label="Dismiss install hint">×</button>
+              <div className="flex items-start gap-2 pr-5">
+                <Download size={17} className="mt-0.5 shrink-0 text-brand-300" />
+                <div>
+                  <p className="text-sm font-semibold">Install {branding.app_name || 'GB Maintenance'}</p>
+                  {installPrompt ? (
+                    <>
+                      <p className="mt-1 text-xs text-slate-300">Add the app to your device for faster access.</p>
+                      <button type="button" className="btn-primary mt-2 text-xs" onClick={installApp}>Install app</button>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-300">Use Share, then Add to Home Screen.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer with donation links */}

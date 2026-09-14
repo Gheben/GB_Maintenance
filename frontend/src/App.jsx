@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect, useState, Suspense, lazy } from 'react'
+import { useEffect, Suspense, lazy } from 'react'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { NotificationsProvider } from './contexts/NotificationsContext'
@@ -48,38 +48,6 @@ function PageFallback() {
 }
 
 export default function App() {
-  const [installPrompt, setInstallPrompt] = useState(null)
-  const [showInstallHint, setShowInstallHint] = useState(false)
-
-  useEffect(() => {
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
-    if (isStandalone) return undefined
-
-    const isAppleMobile = /iphone|ipad|ipod/i.test(window.navigator.userAgent)
-    const dismissed = localStorage.getItem('gb_install_hint_dismissed') === '1'
-    const handleBeforeInstall = (event) => {
-      event.preventDefault()
-      setInstallPrompt(event)
-      if (!dismissed) setShowInstallHint(true)
-    }
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall)
-    if (isAppleMobile && !dismissed) setShowInstallHint(true)
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall)
-  }, [])
-
-  const dismissInstallHint = () => {
-    localStorage.setItem('gb_install_hint_dismissed', '1')
-    setShowInstallHint(false)
-  }
-
-  const installApp = async () => {
-    if (!installPrompt) return
-    installPrompt.prompt()
-    await installPrompt.userChoice
-    setInstallPrompt(null)
-    setShowInstallHint(false)
-  }
-
   useEffect(() => {
     let dynamicManifestUrl = null
 
@@ -258,20 +226,6 @@ export default function App() {
               </Routes>
             </Suspense>
             <ToastContainer />
-            {showInstallHint && (
-              <div className="fixed bottom-4 right-4 z-[80] max-w-sm rounded-xl border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-700 dark:bg-gray-800">
-                <button type="button" className="absolute right-2 top-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" onClick={dismissInstallHint} aria-label="Dismiss install hint">×</button>
-                <p className="pr-5 text-sm font-semibold text-gray-900 dark:text-white">Install GB Maintenance</p>
-                {installPrompt ? (
-                  <>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">Add the application to your device for faster access.</p>
-                    <button type="button" className="btn-primary mt-3" onClick={installApp}>Install app</button>
-                  </>
-                ) : (
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">Use your browser share menu and choose “Add to Home Screen”.</p>
-                )}
-              </div>
-            )}
           </BrowserRouter>
         </NotificationsProvider>
       </AuthProvider>
