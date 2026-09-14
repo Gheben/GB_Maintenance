@@ -130,11 +130,20 @@ const ENTITY_REFERENCE_COLUMNS = {
   local_group_id: 'local_groups',
 };
 
+const DEPENDENCY_REFERENCE_TABLES = {
+  asset_dependencies: 'assets',
+  service_dependencies: 'services',
+};
+
 function remapTransferValue(table, column, value, idMaps) {
   if (value === null || value === undefined) return value;
   if (USER_REFERENCE_COLUMNS.has(column) && idMaps.users?.has(value)) return idMaps.users.get(value);
   const referencedTable = ENTITY_REFERENCE_COLUMNS[column];
   if (referencedTable && idMaps[referencedTable]?.has(value)) return idMaps[referencedTable].get(value);
+  if (column === 'depends_on_id') {
+    const dependencyTable = DEPENDENCY_REFERENCE_TABLES[table];
+    if (dependencyTable && idMaps[dependencyTable]?.has(value)) return idMaps[dependencyTable].get(value);
+  }
   return value;
 }
 
@@ -405,8 +414,8 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
           .map(column => `${quoteIdentifier(column)}=EXCLUDED.${quoteIdentifier(column)}`)
           .join(', ');
         conflictClause = updates
-          ? `ON CONFLICT (${conflictColumns.map(quoteIdentifier).join(', ')}) DO UPDATE SET ${updates}`
-          : `ON CONFLICT (${conflictColumns.map(quoteIdentifier).join(', ')}) DO NOTHING`;
+          ? `ON CONFLICT DO UPDATE SET ${updates}`
+          : 'ON CONFLICT DO NOTHING';
       }
 
       for (let offset = 0; offset < rows.length; offset += 200) {

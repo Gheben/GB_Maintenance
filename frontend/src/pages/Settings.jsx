@@ -455,7 +455,9 @@ export default function Settings() {
       setTransferFileData(null)
       setImportGroups([])
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Import failed')
+      const error = err.response?.data?.error || 'Import failed'
+      const details = err.response?.data?.details
+      toast.error(details ? `${error}: ${details}` : error)
     } finally {
       setImportLoading(false)
     }
