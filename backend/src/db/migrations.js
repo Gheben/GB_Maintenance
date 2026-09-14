@@ -2227,6 +2227,25 @@ const MIGRATIONS = [
       );
     }
   },
+  {
+    version: 50,
+    name: 'license_renewal_history',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS license_renewal_history (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          license_id UUID NOT NULL REFERENCES licenses(id) ON DELETE CASCADE,
+          previous_expiry_date DATE,
+          new_expiry_date DATE,
+          renewal_date DATE,
+          notes TEXT,
+          changed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query('CREATE INDEX IF NOT EXISTS idx_license_renewal_history_license ON license_renewal_history(license_id, created_at DESC)');
+    }
+  },
 ];
 
 async function runMigrations(pool) {

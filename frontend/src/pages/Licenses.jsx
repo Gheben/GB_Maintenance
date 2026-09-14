@@ -22,6 +22,7 @@ import {
   Mail,
   Paperclip,
   Clock,
+  Download,
 } from 'lucide-react'
 import { QuickCreateUserModal } from '../components/QuickCreateModals'
 import { useAuth } from '../contexts/AuthContext'
@@ -975,6 +976,7 @@ export default function Licenses() {
   const [editingLicense, setEditingLicense] = useState(null)
   const [licenseActionConfirm, setLicenseActionConfirm] = useState(null)
   const [licenseForm, setLicenseForm] = useState(emptyLicenseForm)
+  const [renewalHistory, setRenewalHistory] = useState([])
   const [selectedLicenseIds, setSelectedLicenseIds] = useState([])
   const [licenseBulkDeleteConfirm, setLicenseBulkDeleteConfirm] = useState(false)
   const [bulkDeletingLicenses, setBulkDeletingLicenses] = useState(false)
@@ -1116,6 +1118,7 @@ export default function Licenses() {
   const openCreateLicense = () => {
     setEditingLicense(null)
     setLicenseForm(emptyLicenseForm)
+    setRenewalHistory([])
     setAssetQ('')
     setServiceQ('')
     setShowLicenseForm(true)
@@ -1123,8 +1126,9 @@ export default function Licenses() {
 
   const openEditLicense = async (row) => {
     try {
-      const r = await licensesApi.get(row.id)
+      const [r, historyResponse] = await Promise.all([licensesApi.get(row.id), licensesApi.history(row.id)])
       const d = r.data || {}
+      setRenewalHistory(Array.isArray(historyResponse.data) ? historyResponse.data : [])
       setEditingLicense(d)
       setLicenses(prev => prev.map(item => item.id === d.id ? {
         ...item,
@@ -1594,6 +1598,20 @@ export default function Licenses() {
 
   const toggleMulti = (arr, id) => arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]
 
+  const downloadLicenseReport = async () => {
+    try {
+      const response = await licensesApi.report()
+      const url = URL.createObjectURL(response.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `licenses-report-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Report export failed')
+    }
+  }
+
   return (
     <Layout title="Licenses">
       <div className="space-y-4">
@@ -1629,6 +1647,7 @@ export default function Licenses() {
                   </button>
                 )}
                 <button className="btn-primary" onClick={openCreateLicense}><Plus size={15} />New License</button>
+                <button className="btn-secondary" onClick={downloadLicenseReport}><Download size={15} />Export report</button>
               </div>
             </div>
 
@@ -1940,6 +1959,17 @@ export default function Licenses() {
                 <label className="block text-sm font-medium mb-1">Reminder days</label>
                 <input className="input" type="number" min="1" max="365" value={licenseForm.reminder_days} onChange={e => setLicenseForm(f => ({ ...f, reminder_days: e.target.value }))} />
               </div>
+              {editingLicense && renewalHistory.length > 0 && (
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+                  <p className="text-sm font-medium">Renewal history</p>
+                  {renewalHistory.map(item => (
+                    <div key={item.id} className="text-xs text-gray-600 dark:text-gray-300 flex flex-wrap justify-between gap-2">
+                      <span>{item.previous_expiry_date || '—'} → {item.new_expiry_date}</span>
+                      <span>{item.changed_by_name || 'System'} · {item.notes || 'Renewed'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="min-w-0">
                 <label className="block text-sm font-medium mb-1">Approval status</label>
                 <div className="input flex items-center">

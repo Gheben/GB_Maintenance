@@ -285,6 +285,9 @@ export const blackoutApi = {
 // ─── Licenses ────────────────────────────────────────────────────────────────
 export const licensesApi = {
   list: (params) => api.get('/licenses', { params }),
+  report: () => api.get('/licenses/report', { responseType: 'blob' }),
+  history: (id) => api.get(`/licenses/${id}/history`),
+  renew: (id, data) => api.post(`/licenses/${id}/renew`, data),
   get: (id) => api.get(`/licenses/${id}`),
   create: (data) => api.post('/licenses', data),
   update: (id, data) => api.put(`/licenses/${id}`, data),

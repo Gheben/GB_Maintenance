@@ -1073,6 +1073,55 @@ router.get('/', [
   });
 });
 
+router.get('/report', requireAdmin, async (req, res) => {
+  const rows = await getMany(
+    `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.estimated_cost, l.currency,
+            s.company AS supplier,
+            (SELECT COUNT(*)::int FROM license_assets la WHERE la.license_id=l.id) AS asset_count,
+            (SELECT COUNT(*)::int FROM license_services ls WHERE ls.license_id=l.id) AS service_count
+     FROM licenses l
+     LEFT JOIN suppliers s ON s.id=l.supplier_id
+     WHERE l.is_active=true
+     ORDER BY l.expiry_date NULLS LAST, l.name`
+  );
+  const headers = ['Name', 'Approval status', 'Expiry date', 'Renewal date', 'Supplier', 'Estimated cost', 'Currency', 'Assets', 'Services'];
+  const values = rows.map(row => [row.name, row.approval_status, row.expiry_date || '', row.renewal_date || '', row.supplier || '', row.estimated_cost || '', row.currency || '', row.asset_count, row.service_count]);
+  const csv = [headers, ...values].map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename=licenses-report.csv');
+  res.send(`\uFEFF${csv}`);
+});
+
+router.get('/:id/history', [param('id').isUUID()], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  const rows = await getMany(
+    `SELECT h.*, u.display_name AS changed_by_name
+     FROM license_renewal_history h
+     LEFT JOIN users u ON u.id=h.changed_by
+     WHERE h.license_id=$1 ORDER BY h.created_at DESC`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+router.post('/:id/renew', requireAdmin, [
+  param('id').isUUID(),
+  body('new_expiry_date').isISO8601(),
+  body('renewal_date').optional({ nullable: true }).isISO8601(),
+  body('notes').optional().isString(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  const license = await getOne('SELECT id, expiry_date FROM licenses WHERE id=$1', [req.params.id]);
+  if (!license) return res.status(404).json({ error: 'License not found' });
+  await transaction(async (client) => {
+    await client.query('UPDATE licenses SET expiry_date=$1, renewal_date=$2, updated_at=NOW() WHERE id=$3', [req.body.new_expiry_date, req.body.renewal_date || null, req.params.id]);
+    await client.query('INSERT INTO license_renewal_history (license_id, previous_expiry_date, new_expiry_date, renewal_date, notes, changed_by) VALUES ($1,$2,$3,$4,$5,$6)', [req.params.id, license.expiry_date, req.body.new_expiry_date, req.body.renewal_date || null, req.body.notes || null, req.user.id]);
+  });
+  res.json({ message: 'License renewed successfully' });
+});
+
 router.get('/:id', [param('id').isUUID()], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
