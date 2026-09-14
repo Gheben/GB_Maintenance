@@ -156,6 +156,7 @@ router.get('/dashboard', async (req, res) => {
 
   const [
     totalAssets, totalServices, activeMaintenance, openIncidents,
+    expiringLicenses, expiredLicenses,
     upcomingMaintenanceCount, upcomingMaintenance, recentCompletedCount, recentCompleted,
     assetsByStatus, assetsByCriticality,
     maintenanceByType, maintenanceByStatus
@@ -164,6 +165,17 @@ router.get('/dashboard', async (req, res) => {
     getOne(`SELECT COUNT(*)::int as count FROM services WHERE is_active=true`),
     getOne(`SELECT COUNT(*)::int as count FROM maintenance_windows WHERE status IN ('in_progress','scheduled')`),
     getOne(`SELECT COUNT(*)::int as count FROM incidents WHERE status != 'resolved'`),
+    getOne(`SELECT COUNT(*)::int as count
+            FROM licenses
+            WHERE is_active = true
+              AND expiry_date IS NOT NULL
+              AND expiry_date >= CURRENT_DATE
+              AND expiry_date <= CURRENT_DATE + (GREATEST(COALESCE(reminder_days, 30), 1) || ' days')::interval`),
+    getOne(`SELECT COUNT(*)::int as count
+            FROM licenses
+            WHERE is_active = true
+              AND expiry_date IS NOT NULL
+              AND expiry_date < CURRENT_DATE`),
     getOne(`SELECT COUNT(*)::int as count
             FROM maintenance_windows
             WHERE status IN ('scheduled','pending_approval') AND scheduled_start > NOW()`),
@@ -193,6 +205,8 @@ router.get('/dashboard', async (req, res) => {
       services: totalServices.count,
       active_maintenance: activeMaintenance.count,
       open_incidents: openIncidents.count,
+      expiring_licenses: expiringLicenses.count,
+      expired_licenses: expiredLicenses.count,
     },
     upcoming_maintenance_page: upcomingPage,
     upcoming_maintenance_limit: upcomingLimit,

@@ -3,7 +3,7 @@ import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { reportsApi } from '../api'
 import { format } from 'date-fns'
-import { AlertTriangle, Package, Server, CalendarClock } from 'lucide-react'
+import { AlertTriangle, Package, Server, CalendarClock, KeyRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
@@ -86,11 +86,13 @@ export default function Dashboard() {
     <Layout title="Dashboard">
       <div className="space-y-6">
         {/* KPI cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
           <StatCard icon={Package} label="Total Assets" value={data?.totals?.assets} color="blue" />
           <StatCard icon={Server} label="Services" value={data?.totals?.services} color="green" />
           <StatCard icon={CalendarClock} label="Active Maintenances" value={data?.totals?.active_maintenance} color="orange" />
           <StatCard icon={AlertTriangle} label="Open Incidents" value={data?.totals?.open_incidents} color="red" />
+          <StatCard icon={KeyRound} label="Licenses Expiring" value={data?.totals?.expiring_licenses} color="orange" />
+          <StatCard icon={KeyRound} label="Licenses Expired" value={data?.totals?.expired_licenses} color="red" />
         </div>
 
         {/* Charts */}
