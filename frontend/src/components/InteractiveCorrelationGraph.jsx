@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, X } from 'lucide-react';
 
 /**
  * InteractiveCorrelationGraph
@@ -80,6 +80,7 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [hoveredNode, setHoveredNode] = useState(null);
   const [selectedNode, setSelectedNode] = useState(null);
+  const [showNodeDetails, setShowNodeDetails] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
 
@@ -143,11 +144,13 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setSelectedNode(null);
+    setShowNodeDetails(false);
     setHoveredNode(null);
   };
 
   const handleNodeClick = (node) => {
-    setSelectedNode(node.id);
+    setSelectedNode(node);
+    setShowNodeDetails(true);
     if (onNodeClick) onNodeClick(node);
   };
 
@@ -161,8 +164,8 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
       const isHighlighted =
         hoveredNode?.id === edge.source ||
         hoveredNode?.id === edge.target ||
-        selectedNode === edge.source ||
-        selectedNode === edge.target;
+        selectedNode?.id === edge.source ||
+        selectedNode?.id === edge.target;
 
       const strokeDasharray = edge.is_direct ? 'none' : '5,5';
       const strokeWidth = isHighlighted ? 2.5 : 1.5;
@@ -180,18 +183,6 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
             strokeDasharray={strokeDasharray}
             strokeLinecap="round"
           />
-          {isHighlighted && (
-            <text
-              x={(sourcePos.x + targetPos.x) / 2}
-              y={(sourcePos.y + targetPos.y) / 2 - 5}
-              fontSize="11"
-              fill="#6B7280"
-              textAnchor="middle"
-              className="pointer-events-none"
-            >
-              {edge.kind}
-            </text>
-          )}
         </g>
       );
     });
@@ -205,7 +196,7 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
 
       const nodeColor = getNodeColor(node);
       const isHovered = hoveredNode?.id === node.id;
-      const isSelected = selectedNode === node.id;
+      const isSelected = selectedNode?.id === node.id;
       const radius = isHovered || isSelected ? 28 : 20;
       const statusColor = getStatusColor(node.status);
 
@@ -412,14 +403,106 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
         </div>
       </div>
 
-      {/* Selected node info */}
-      {selectedNode && hoveredNode && (
-        <div className="px-4 py-3 bg-blue-50 border-t border-blue-200 text-sm">
-          <div className="font-semibold text-slate-900">{hoveredNode.label}</div>
-          <div className="text-slate-600 mt-1">
-            Type: <span className="font-medium">{hoveredNode.type}</span> •
-            Status: <span className="font-medium">{hoveredNode.status || 'unknown'}</span> •
-            Criticality: <span className="font-medium">{hoveredNode.criticality || 'N/A'}</span>
+      {/* Node Details Modal */}
+      {showNodeDetails && selectedNode && (
+        <div 
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => {
+            setShowNodeDetails(false);
+            setSelectedNode(null);
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between p-6 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div 
+                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg"
+                  style={{ backgroundColor: getNodeColor(selectedNode) }}
+                >
+                  {selectedNode.type === 'service' ? 'S' : 'A'}
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">{selectedNode.label}</h2>
+                  <p className="text-sm text-slate-500 mt-0.5 capitalize">{selectedNode.type}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowNodeDetails(false);
+                  setSelectedNode(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Details */}
+            <div className="p-6 space-y-4">
+              {/* Status */}
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase mb-1">Status</p>
+                <div className="flex items-center gap-2">
+                  <div 
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: getStatusColor(selectedNode.status) }}
+                  />
+                  <span className="text-sm font-medium text-slate-700 capitalize">
+                    {selectedNode.status || 'unknown'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Criticality */}
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase mb-1">Criticality</p>
+                <span className="inline-block px-2 py-1 bg-slate-100 text-slate-700 rounded text-sm font-medium capitalize">
+                  {selectedNode.criticality || 'N/A'}
+                </span>
+              </div>
+
+              {/* Category (only for assets) */}
+              {selectedNode.type === 'asset' && selectedNode.category && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase mb-1">Category</p>
+                  <span className="text-sm font-medium text-slate-700 capitalize">
+                    {selectedNode.category}
+                  </span>
+                </div>
+              )}
+
+              {/* Part-IS (only for assets) */}
+              {selectedNode.type === 'asset' && selectedNode.part_is_relevant && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded">
+                  <p className="text-sm font-medium text-amber-900">🏷️ Part-IS Relevant</p>
+                </div>
+              )}
+
+              {/* Depth */}
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase mb-1">Distance from main</p>
+                <span className="text-sm text-slate-700">
+                  {selectedNode.depth === 0 ? 'Main entity' : `${selectedNode.depth} hop${selectedNode.depth > 1 ? 's' : ''}`}
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 rounded-b-lg">
+              <button
+                onClick={() => {
+                  setShowNodeDetails(false);
+                  setSelectedNode(null);
+                }}
+                className="w-full px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded transition"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
