@@ -271,7 +271,7 @@ export default function Settings() {
   }
 
   const saveGeneral = async (e) => {
-    e.preventDefault()
+    e?.preventDefault?.()
     try {
       await settingsApi.saveGeneral(general)
       window.dispatchEvent(new CustomEvent('app-branding-updated', { detail: general }))
