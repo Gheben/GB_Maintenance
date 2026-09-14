@@ -45,19 +45,59 @@ function sendExcel(res, rows, filename, sheetName) {
   res.send(buffer);
 }
 
-function sendSimplePdf(res, title, rows, filename) {
+function drawPdfTable(doc, columns, rows) {
+  const left = doc.page.margins.left;
+  const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const defaultWidth = availableWidth / columns.length;
+  const widths = columns.map(column => column.width || defaultWidth);
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0);
+  const scale = availableWidth / totalWidth;
+  const scaledWidths = widths.map(width => width * scale);
+  const headerHeight = 24;
+  const rowHeight = 24;
+
+  const drawHeader = () => {
+    let x = left;
+    const y = doc.y;
+    doc.rect(left, y, availableWidth, headerHeight).fill('#1e40af');
+    columns.forEach((column, index) => {
+      doc.fontSize(8).fillColor('#ffffff').font('Helvetica-Bold')
+        .text(column.label, x + 4, y + 7, { width: scaledWidths[index] - 8, height: headerHeight - 8, ellipsis: true });
+      x += scaledWidths[index];
+    });
+    doc.y = y + headerHeight;
+  };
+
+  drawHeader();
+  rows.forEach((row, rowIndex) => {
+    if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage({ margin: 40, size: 'A4', layout: 'landscape' });
+      drawHeader();
+    }
+    const y = doc.y;
+    if (rowIndex % 2 === 0) doc.rect(left, y, availableWidth, rowHeight).fill('#eff6ff');
+    let x = left;
+    columns.forEach((column, index) => {
+      doc.fontSize(7.5).fillColor('#1f2937').font('Helvetica')
+        .text(String(row[column.key] ?? '-'), x + 4, y + 7, { width: scaledWidths[index] - 8, height: rowHeight - 8, ellipsis: true });
+      x += scaledWidths[index];
+    });
+    doc.rect(left, y, availableWidth, rowHeight).strokeColor('#cbd5e1').lineWidth(0.4).stroke();
+    doc.y = y + rowHeight;
+  });
+}
+
+function sendSimplePdf(res, title, rows, filename, columns = null) {
   const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
   doc.pipe(res);
   doc.fontSize(18).fillColor('#111827').text(title, { align: 'center' });
   doc.fontSize(10).text(`Generated on ${new Date().toLocaleString('en-GB')}`, { align: 'center' });
-  doc.moveDown();
-  for (const row of rows) {
-    doc.fontSize(10).fillColor('#1e40af').text(String(row.Name || row.Title || '-'));
-    doc.fontSize(8).fillColor('#374151').text(Object.entries(row).filter(([key]) => !['Name', 'Title'].includes(key)).map(([key, value]) => `${key}: ${value ?? '-'}`).join(' | '));
-    doc.moveDown(0.4);
-  }
+  doc.moveDown(1);
+  const tableColumns = columns || Object.keys(rows[0] || {}).map(key => ({ key, label: key }));
+  if (rows.length > 0) drawPdfTable(doc, tableColumns, rows);
+  else doc.fontSize(10).fillColor('#6b7280').text('No data available.', { align: 'center' });
   doc.end();
 }
 
@@ -137,18 +177,22 @@ router.get('/maintenance', async (req, res) => {
     doc.pipe(res);
     doc.fontSize(18).text('Maintenance Report', { align: 'center' });
     doc.fontSize(10).text(`Generated on ${new Date().toLocaleString('en-GB')}`, { align: 'center' });
-    doc.moveDown();
-
-    for (const row of rows) {
-      doc.fontSize(11).fillColor('#1e40af').text(row.title);
-      doc.fontSize(9).fillColor('#374151')
-        .text(`Type: ${row.type} | Status: ${row.status} | Impact: ${row.impact_level}`)
-        .text(`Start: ${new Date(row.scheduled_start).toLocaleString('en-GB')} | End: ${new Date(row.scheduled_end).toLocaleString('en-GB')}`)
-        .text(`Duration: ${Math.round(row.duration_minutes || 0)} min | Created by: ${row.created_by || '-'}`);
-      doc.moveDown(0.5);
-      doc.moveTo(40, doc.y).lineTo(800, doc.y).strokeColor('#e5e7eb').stroke();
-      doc.moveDown(0.3);
-    }
+    doc.moveDown(1);
+    drawPdfTable(doc, [
+      { key: 'title', label: 'Title', width: 2.4 },
+      { key: 'type', label: 'Type', width: 1.2 },
+      { key: 'status', label: 'Status', width: 1.3 },
+      { key: 'impact_level', label: 'Impact', width: 1.2 },
+      { key: 'scheduled_start', label: 'Start', width: 1.8 },
+      { key: 'scheduled_end', label: 'End', width: 1.8 },
+      { key: 'duration_minutes', label: 'Duration (min)', width: 1.3 },
+      { key: 'created_by', label: 'Created by', width: 1.6 },
+    ], rows.map(row => ({
+      ...row,
+      scheduled_start: row.scheduled_start ? new Date(row.scheduled_start).toLocaleString('en-GB') : '-',
+      scheduled_end: row.scheduled_end ? new Date(row.scheduled_end).toLocaleString('en-GB') : '-',
+      duration_minutes: Math.round(row.duration_minutes || 0),
+    })));
     doc.end();
     return;
   }
