@@ -220,10 +220,10 @@ export const settingsApi = {
   createDemoData: () => api.post('/settings/demo/create'),
   clearDemoData: () => api.post('/settings/demo/clear'),
   dataTransferOptions: () => api.get('/settings/data-transfer/options'),
-  exportData: (groups) => api.get('/settings/data-transfer/export', {
-    params: { groups: groups.length ? groups.join(',') : 'all' },
+  exportData: (groups, includeSensitive = false) => api.get('/settings/data-transfer/export', {
+    params: { groups: groups.length ? groups.join(',') : 'all', include_sensitive: includeSensitive },
   }),
-  importData: (data, groups) => api.post('/settings/data-transfer/import', { data, groups }),
+  importData: (data, groups, dryRun = false) => api.post('/settings/data-transfer/import', { data, groups, dry_run: dryRun }),
   deleteData: (groups, all = false) => api.post('/settings/data-transfer/delete', {
     groups,
     all,

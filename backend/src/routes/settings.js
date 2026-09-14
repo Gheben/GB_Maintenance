@@ -1,4 +1,6 @@
 const { Router } = require('express');
+const fs = require('fs');
+const path = require('path');
 const { body, validationResult } = require('express-validator');
 const { requireAuth, requireAdmin, requireSuperAdmin } = require('../middleware/authMiddleware');
 const { query, getOne, getMany, transaction } = require('../db/database');
@@ -163,6 +165,25 @@ function normalizeTransferValue(value, isJsonColumn) {
   return JSON.stringify(value);
 }
 
+function sanitizeTransferRow(table, row, includeSensitive) {
+  if (includeSensitive) return row;
+  const safe = { ...row };
+  if (table === 'users') {
+    delete safe.password_hash;
+    delete safe.totp_secret;
+  }
+  if (table === 'settings' && ['ldap_config', 'saml_config', 'smtp_config'].includes(row.key)) {
+    try {
+      const config = JSON.parse(row.value || '{}');
+      for (const key of ['bind_password', 'ldap_service_password', 'sp_private_key', 'sp_cert', 'idp_cert', 'pass']) delete config[key];
+      safe.value = JSON.stringify(config);
+    } catch {
+      safe.value = '{}';
+    }
+  }
+  return safe;
+}
+
 function getTransferTables(groups) {
   const tableOrder = [
     'users', 'local_groups', 'user_group_members', 'ldap_group_mappings',
@@ -182,6 +203,27 @@ function getDeleteTables(groups) {
   const order = ['monitoring', 'licenses', 'incidents', 'maintenance', 'services', 'assets', 'configuration', 'core'];
   const selected = new Set(groups.flatMap(group => DATA_DELETE_TABLES[group] || []));
   return order.flatMap(group => DATA_DELETE_TABLES[group] || []).filter(table => selected.has(table));
+}
+
+async function createTransferBackup(groups, tables, reason) {
+  const backupDir = path.join(__dirname, '../../uploads/data-transfer-backups');
+  fs.mkdirSync(backupDir, { recursive: true });
+  const data = {};
+  for (const table of tables) {
+    const rows = await getMany(`SELECT * FROM ${quoteIdentifier(table)}`);
+    data[table] = rows.map(row => sanitizeTransferRow(table, row, false));
+  }
+  const fileName = `transfer-backup-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  const filePath = path.join(backupDir, fileName);
+  fs.writeFileSync(filePath, JSON.stringify({
+    format: 'gb-maintenance-data-transfer',
+    version: 1,
+    reason,
+    created_at: new Date().toISOString(),
+    groups,
+    tables: data,
+  }, null, 2), 'utf8');
+  return fileName;
 }
 
 function requireLdapDirectorySearchAccess(req, res, next) {
@@ -350,10 +392,12 @@ router.get('/data-transfer/export', requireAuth, requireSuperAdmin, async (req, 
   const requestedGroups = String(req.query.groups || 'all').split(',').map(group => group.trim()).filter(Boolean);
   const groups = normalizeTransferGroups(requestedGroups);
   const tables = getTransferTables(groups);
+  const includeSensitive = String(req.query.include_sensitive || '').toLowerCase() === 'true';
   const data = {};
 
   for (const table of tables) {
-    data[table] = await getMany(`SELECT * FROM ${quoteIdentifier(table)}`);
+    const rows = await getMany(`SELECT * FROM ${quoteIdentifier(table)}`);
+    data[table] = rows.map(row => sanitizeTransferRow(table, row, includeSensitive));
   }
 
   await auditService.log(req.user.id, req.user.username, 'settings:data_export', 'settings', 'data_transfer', JSON.stringify({ groups }), req.ip);
@@ -361,6 +405,7 @@ router.get('/data-transfer/export', requireAuth, requireSuperAdmin, async (req, 
     format: 'gb-maintenance-data-transfer',
     version: 1,
     exported_at: new Date().toISOString(),
+    includes_sensitive_data: includeSensitive,
     groups,
     tables: data,
   });
@@ -376,6 +421,7 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
   const groups = normalizeTransferGroups(req.body?.groups || payload.groups);
   const tables = getTransferTables(groups).filter(table => Array.isArray(payload.tables[table]));
   if (tables.length === 0) return res.status(400).json({ error: 'No selected data found in the import file' });
+  const backupFile = req.body?.dry_run === true ? null : await createTransferBackup(groups, tables, 'before-import');
 
   const imported = {};
   const idMaps = { users: new Map(), local_groups: new Map(), assets: new Map(), services: new Map() };
@@ -480,8 +526,16 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
       }
       imported[table] = (imported[table] || 0) + rows.length;
       }
+      if (req.body?.dry_run === true) {
+        const previewError = new Error('DRY_RUN');
+        previewError.code = 'DRY_RUN';
+        throw previewError;
+      }
     });
   } catch (error) {
+    if (error.code === 'DRY_RUN') {
+      return res.json({ message: 'Import preview completed', dry_run: true, groups, imported });
+    }
     console.error(`[DataTransfer] Import failed on ${currentTable || 'unknown table'}:`, error);
     return res.status(409).json({
       error: `Import failed on table ${currentTable || 'unknown'}`,
@@ -490,7 +544,7 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
   }
 
   await auditService.log(req.user.id, req.user.username, 'settings:data_import', 'settings', 'data_transfer', JSON.stringify({ groups, tables }), req.ip);
-  res.json({ message: 'Data imported successfully', groups, imported });
+  res.json({ message: 'Data imported successfully', groups, imported, backup_file: backupFile });
 });
 
 // ─── POST /api/settings/data-transfer/delete ─────────────────────────────────
@@ -503,6 +557,7 @@ router.post('/data-transfer/delete', requireAuth, requireSuperAdmin, async (req,
   const groups = normalizeTransferGroups(requestedGroups);
   const tables = getDeleteTables(groups);
   if (tables.length === 0) return res.status(400).json({ error: 'No data group selected for deletion' });
+  const backupFile = await createTransferBackup(groups, tables, 'before-delete');
 
   await transaction(async (client) => {
     for (const table of tables) {
@@ -515,7 +570,7 @@ router.post('/data-transfer/delete', requireAuth, requireSuperAdmin, async (req,
   });
 
   await auditService.log(req.user.id, req.user.username, 'settings:data_delete', 'settings', 'data_transfer', JSON.stringify({ groups, tables }), req.ip);
-  res.json({ message: 'Selected data deleted successfully', groups, deleted_tables: tables });
+  res.json({ message: 'Selected data deleted successfully', groups, deleted_tables: tables, backup_file: backupFile });
 });
 
 // ─── GET /api/settings ────────────────────────────────────────────────────────

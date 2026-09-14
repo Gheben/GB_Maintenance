@@ -174,7 +174,7 @@ router.get('/dashboard', async (req, res) => {
 
   const [
     totalAssets, totalServices, activeMaintenance, openIncidents,
-    expiringLicenses, expiredLicenses,
+    expiringLicenses, expiredLicenses, expiringLicenseList, pendingApprovalMaintenance,
     upcomingMaintenanceCount, upcomingMaintenance, recentCompletedCount, recentCompleted,
     assetsByStatus, assetsByCriticality,
     maintenanceByType, maintenanceByStatus
@@ -194,6 +194,21 @@ router.get('/dashboard', async (req, res) => {
             WHERE is_active = true
               AND expiry_date IS NOT NULL
               AND expiry_date < CURRENT_DATE`),
+    getMany(`SELECT l.id, l.name, l.expiry_date, l.reminder_days
+             FROM licenses l
+             WHERE l.is_active = true
+               AND l.expiry_date IS NOT NULL
+               AND l.expiry_date >= CURRENT_DATE
+               AND l.expiry_date <= CURRENT_DATE + (GREATEST(COALESCE(l.reminder_days, 30), 1) || ' days')::interval
+             ORDER BY l.expiry_date ASC, l.name
+             LIMIT 8`),
+    getMany(`SELECT id, title, impact_level, scheduled_start, scheduled_end, owner_approval_status
+             FROM maintenance_windows
+             WHERE owner_approval_required = true
+               AND owner_approval_status = 'pending'
+               AND status IN ('scheduled', 'pending_approval', 'in_progress')
+             ORDER BY scheduled_start ASC
+             LIMIT 8`),
     getOne(`SELECT COUNT(*)::int as count
             FROM maintenance_windows
             WHERE status IN ('scheduled','pending_approval') AND scheduled_start > NOW()`),
@@ -234,6 +249,8 @@ router.get('/dashboard', async (req, res) => {
     recent_completed_limit: recentLimit,
     recent_completed_total: recentCompletedCount.count,
     recent_completed: recentCompleted,
+    expiring_licenses: expiringLicenseList,
+    pending_approval_maintenance: pendingApprovalMaintenance,
     assets_by_status: assetsByStatus,
     assets_by_criticality: assetsByCriticality,
     maintenance_by_type: maintenanceByType,

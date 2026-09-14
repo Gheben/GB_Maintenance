@@ -63,10 +63,12 @@ export default function Settings() {
   const [transferGroups, setTransferGroups] = useState([])
   const [selectedTransferGroups, setSelectedTransferGroups] = useState([])
   const [transferLoading, setTransferLoading] = useState(false)
+  const [includeSensitiveTransferData, setIncludeSensitiveTransferData] = useState(false)
   const [transferFile, setTransferFile] = useState(null)
   const [transferFileData, setTransferFileData] = useState(null)
   const [importGroups, setImportGroups] = useState([])
   const [importLoading, setImportLoading] = useState(false)
+  const [importPreview, setImportPreview] = useState(null)
   const [systemDeleteOpen, setSystemDeleteOpen] = useState(false)
   const [deleteGroups, setDeleteGroups] = useState([])
   const [deleteAll, setDeleteAll] = useState(false)
@@ -410,7 +412,7 @@ export default function Settings() {
     if (selectedTransferGroups.length === 0) return toast.error('Select at least one data group')
     setTransferLoading(true)
     try {
-      const response = await settingsApi.exportData(selectedTransferGroups)
+      const response = await settingsApi.exportData(selectedTransferGroups, includeSensitiveTransferData)
       const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -430,6 +432,7 @@ export default function Settings() {
     setTransferFile(file || null)
     setTransferFileData(null)
     setImportGroups([])
+    setImportPreview(null)
     if (!file) return
     try {
       const data = JSON.parse(await file.text())
@@ -456,6 +459,22 @@ export default function Settings() {
       setImportGroups([])
     } catch (err) {
       const error = err.response?.data?.error || 'Import failed'
+      const details = err.response?.data?.details
+      toast.error(details ? `${error}: ${details}` : error)
+    } finally {
+      setImportLoading(false)
+    }
+  }
+
+  const previewApplicationData = async () => {
+    if (!transferFileData || importGroups.length === 0) return toast.error('Select at least one data group to preview')
+    setImportLoading(true)
+    try {
+      const response = await settingsApi.importData(transferFileData, importGroups, true)
+      setImportPreview(response.data)
+      toast.success('Import preview completed. No data was changed.')
+    } catch (err) {
+      const error = err.response?.data?.error || 'Preview failed'
       const details = err.response?.data?.details
       toast.error(details ? `${error}: ${details}` : error)
     } finally {
@@ -1437,6 +1456,10 @@ export default function Settings() {
                   <div className="flex flex-wrap gap-2">
                     <button type="button" className="btn-secondary text-xs" onClick={() => setSelectedTransferGroups(transferGroups.map(group => group.id))}>Select all</button>
                     <button type="button" className="btn-secondary text-xs" onClick={() => setSelectedTransferGroups([])}>Clear</button>
+                    <label className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
+                      <input type="checkbox" className="w-4 h-4 accent-amber-600" checked={includeSensitiveTransferData} onChange={e => setIncludeSensitiveTransferData(e.target.checked)} />
+                      Include sensitive data (password hashes and SSO secrets)
+                    </label>
                     <button type="button" className="btn-primary inline-flex items-center gap-2" onClick={exportApplicationData} disabled={transferLoading}>
                       <Download size={14} />{transferLoading ? 'Exporting...' : 'Export JSON'}
                     </button>
@@ -1451,7 +1474,8 @@ export default function Settings() {
                   </label>
                   {transferFileData && (
                     <>
-                      <p className="text-xs text-gray-500 break-all">{transferFile?.name} · Select groups to import:</p>
+                      <p className="text-xs text-gray-500 break-all">{transferFile?.name} · {Object.values(transferFileData.tables).reduce((total, rows) => total + (Array.isArray(rows) ? rows.length : 0), 0)} records · Select groups to import:</p>
+                      {transferFileData.includes_sensitive_data && <p className="text-xs text-red-600">Warning: this file contains sensitive data.</p>}
                       <div className="grid grid-cols-2 gap-2">
                         {transferGroups.map(group => {
                           const available = group.tables.some(table => Array.isArray(transferFileData.tables[table]))
@@ -1472,6 +1496,14 @@ export default function Settings() {
                       <button type="button" className="btn-primary inline-flex items-center gap-2" onClick={importApplicationData} disabled={importLoading}>
                         <Upload size={14} />{importLoading ? 'Importing...' : 'Import selected data'}
                       </button>
+                      <button type="button" className="btn-secondary" onClick={previewApplicationData} disabled={importLoading}>
+                        Preview import
+                      </button>
+                      {importPreview && (
+                        <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg p-2">
+                          Preview ready: {Object.values(importPreview.imported || {}).reduce((total, count) => total + Number(count || 0), 0)} records validated. No data was changed.
+                        </p>
+                      )}
                     </>
                   )}
                 </div>

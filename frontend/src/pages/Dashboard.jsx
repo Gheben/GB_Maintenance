@@ -77,6 +77,8 @@ export default function Dashboard() {
   }))
   const upcomingList = data?.upcoming_maintenance || []
   const recentList = data?.recent_completed || []
+  const expiringLicenses = data?.expiring_licenses || []
+  const pendingApprovalMaintenance = data?.pending_approval_maintenance || []
   const upcomingTotal = Number(data?.upcoming_maintenance_total || 0)
   const recentTotal = Number(data?.recent_completed_total || 0)
   const upcomingTotalPages = Math.max(1, Math.ceil(upcomingTotal / maintenancePageSize))
@@ -97,6 +99,38 @@ export default function Dashboard() {
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {expiringLicenses.length > 0 && (
+            <div className="card p-5">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h2 className="font-semibold">Licenses expiring soon</h2>
+                <Link to="/licenses" className="text-xs text-brand-600 hover:underline">View all</Link>
+              </div>
+              <div className="space-y-2">
+                {expiringLicenses.map(license => (
+                  <Link key={license.id} to={`/licenses?license=${license.id}`} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-100">
+                    <span className="text-sm font-medium truncate">{license.name}</span>
+                    <span className="text-xs text-amber-800 shrink-0">{format(new Date(license.expiry_date), 'dd/MM/yyyy')}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+          {pendingApprovalMaintenance.length > 0 && (
+            <div className="card p-5">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h2 className="font-semibold">Maintenance approvals pending</h2>
+                <Link to="/maintenance?status=pending_approval" className="text-xs text-brand-600 hover:underline">View all</Link>
+              </div>
+              <div className="space-y-2">
+                {pendingApprovalMaintenance.map(maintenance => (
+                  <Link key={maintenance.id} to={`/maintenance/${maintenance.id}`} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-yellow-50 hover:bg-yellow-100 border border-yellow-100">
+                    <span className="text-sm font-medium truncate">{maintenance.title}</span>
+                    <CriticalityBadge criticality={maintenance.impact_level} />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="card p-5">
             <h2 className="font-semibold mb-3 text-sm">Asset Status</h2>
             {assetStatusData.length > 0 ? (
