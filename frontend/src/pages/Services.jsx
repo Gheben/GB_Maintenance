@@ -352,10 +352,12 @@ export default function Services() {
         <input type="checkbox" id="svc-public" checked={form.is_public} onChange={e => setForm(f => ({ ...f, is_public: e.target.checked }))} />
         <label htmlFor="svc-public" className="text-sm">Visible on public status page</label>
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={!!form.part_is_relevant} onChange={e => setForm(f => ({ ...f, part_is_relevant: e.target.checked }))} />
-        <ShieldCheck size={15} className="text-amber-600" />
-        Part-IS relevant service
+      <label className="flex items-start gap-2 text-sm p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">
+        <input type="checkbox" className="mt-0.5" checked={form.part_is_relevant === true} onChange={e => setForm(f => ({ ...f, part_is_relevant: e.target.checked }))} />
+        <span>
+          <span className="font-medium text-amber-800 dark:text-amber-300">Part-IS Relevant</span>
+          <span className="block text-xs text-amber-700 dark:text-amber-400 mt-0.5">Maintenance on this service will require every owner's email approval before it can start.</span>
+        </span>
       </label>
       <ItemPicker
         label="Assigned licenses"

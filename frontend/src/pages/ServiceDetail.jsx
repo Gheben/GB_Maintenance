@@ -536,10 +536,12 @@ export default function ServiceDetail() {
               />
               <label htmlFor="service-public-detail" className="text-sm">Visible on public status page</label>
             </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={!!editForm.part_is_relevant} onChange={e => setEditForm(f => ({ ...f, part_is_relevant: e.target.checked }))} />
-              <ShieldCheck size={15} className="text-amber-600" />
-              Part-IS relevant service
+            <label className="flex items-start gap-2 text-sm p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">
+              <input type="checkbox" className="mt-0.5" checked={editForm.part_is_relevant === true} onChange={e => setEditForm(f => ({ ...f, part_is_relevant: e.target.checked }))} />
+              <span>
+                <span className="font-medium text-amber-800 dark:text-amber-300">Part-IS Relevant</span>
+                <span className="block text-xs text-amber-700 dark:text-amber-400 mt-0.5">Any planned maintenance on this service will require every owner to approve the schedule via a dedicated email link before it can start.</span>
+              </span>
             </label>
             {ownerFieldsJsx}
             {usersFieldsJsx}
@@ -549,7 +551,7 @@ export default function ServiceDetail() {
             <div className="flex flex-wrap items-center gap-3 mb-3">
               <StatusBadge status={service.status || service.current_status} />
               <CriticalityBadge criticality={service.criticality} />
-              {service.part_is_relevant && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800"><ShieldCheck size={13} />Part-IS Relevant</span>}
+              {service.part_is_relevant && <span className="badge bg-amber-100 text-amber-800">Part-IS Relevant</span>}
               {service.system_name && <span className="badge bg-indigo-100 text-indigo-700">{service.system_name}</span>}
             </div>
             {service.description && <p className="text-gray-600 dark:text-gray-300 mb-3">{service.description}</p>}
