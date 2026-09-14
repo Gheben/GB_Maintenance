@@ -511,8 +511,8 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
                 </div>
               )}
 
-              {/* Part-IS (only for assets) */}
-              {selectedNode.type === 'asset' && selectedNode.part_is_relevant && (
+              {/* Part-IS */}
+              {['asset', 'service'].includes(selectedNode.type) && selectedNode.part_is_relevant && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded">
                   <p className="text-sm font-medium text-amber-900">🏷️ Part-IS Relevant</p>
                 </div>
