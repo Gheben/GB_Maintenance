@@ -113,11 +113,28 @@ const USER_REFERENCE_COLUMNS = new Set([
   'approver_user_id', 'rejected_by', 'reopened_by', 'owner_user_id', 'approved_by_user_id',
 ]);
 
+const TRANSFER_NATURAL_KEYS = {
+  local_groups: ['name'],
+  assets: ['slug'],
+  services: ['slug'],
+  maintenance_types: ['slug'],
+  notification_templates: ['event_type'],
+  asset_categories: ['slug'],
+  settings: ['key'],
+};
+
+const ENTITY_REFERENCE_COLUMNS = {
+  asset_id: 'assets',
+  service_id: 'services',
+  group_id: 'local_groups',
+  local_group_id: 'local_groups',
+};
+
 function remapTransferValue(table, column, value, idMaps) {
   if (value === null || value === undefined) return value;
   if (USER_REFERENCE_COLUMNS.has(column) && idMaps.users?.has(value)) return idMaps.users.get(value);
-  if (column === 'group_id' && idMaps.local_groups?.has(value)) return idMaps.local_groups.get(value);
-  if (column === 'local_group_id' && idMaps.local_groups?.has(value)) return idMaps.local_groups.get(value);
+  const referencedTable = ENTITY_REFERENCE_COLUMNS[column];
+  if (referencedTable && idMaps[referencedTable]?.has(value)) return idMaps[referencedTable].get(value);
   return value;
 }
 
@@ -336,7 +353,7 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
   if (tables.length === 0) return res.status(400).json({ error: 'No selected data found in the import file' });
 
   const imported = {};
-  const idMaps = { users: new Map(), local_groups: new Map() };
+  const idMaps = { users: new Map(), local_groups: new Map(), assets: new Map(), services: new Map() };
   let currentTable = null;
   try {
     await transaction(async (client) => {
@@ -349,6 +366,17 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
       }
 
       const metadata = await getTransferTableMetadata(client, table);
+      const naturalKey = TRANSFER_NATURAL_KEYS[table];
+      if (naturalKey && naturalKey.every(column => Object.prototype.hasOwnProperty.call(rows[0], column))) {
+        for (const row of rows) {
+          const conditions = naturalKey.map((column, index) => `${quoteIdentifier(column)}=$${index + 1}`).join(' AND ');
+          const existing = await client.query(
+            `SELECT ${quoteIdentifier(metadata.primaryKey[0] || 'id')} AS id FROM ${quoteIdentifier(table)} WHERE ${conditions} LIMIT 1`,
+            naturalKey.map(column => row[column])
+          );
+          if (existing.rows[0] && row.id && idMaps[table]) idMaps[table].set(row.id, existing.rows[0].id);
+        }
+      }
       if (table === 'users') {
         const rowsToImport = [];
         for (const row of rows) {
@@ -368,14 +396,17 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
       if (columns.length === 0) continue;
       const quotedColumns = columns.map(quoteIdentifier).join(', ');
       let conflictClause = 'ON CONFLICT DO NOTHING';
-      if (metadata.primaryKey.length > 0 && metadata.primaryKey.every(column => columns.includes(column))) {
+      const conflictColumns = naturalKey?.every(column => columns.includes(column))
+        ? naturalKey
+        : metadata.primaryKey;
+      if (conflictColumns.length > 0 && conflictColumns.every(column => columns.includes(column))) {
         const updates = columns
-          .filter(column => !metadata.primaryKey.includes(column))
+          .filter(column => !conflictColumns.includes(column) && column !== 'id')
           .map(column => `${quoteIdentifier(column)}=EXCLUDED.${quoteIdentifier(column)}`)
           .join(', ');
         conflictClause = updates
-          ? `ON CONFLICT (${metadata.primaryKey.map(quoteIdentifier).join(', ')}) DO UPDATE SET ${updates}`
-          : `ON CONFLICT (${metadata.primaryKey.map(quoteIdentifier).join(', ')}) DO NOTHING`;
+          ? `ON CONFLICT (${conflictColumns.map(quoteIdentifier).join(', ')}) DO UPDATE SET ${updates}`
+          : `ON CONFLICT (${conflictColumns.map(quoteIdentifier).join(', ')}) DO NOTHING`;
       }
 
       for (let offset = 0; offset < rows.length; offset += 200) {
