@@ -205,7 +205,7 @@ async function buildAssetGraph(assetId, depth = 1) {
 async function buildServiceGraph(serviceId, depth = 1) {
   // Start with the main service
   const mainService = await getOne(
-    `SELECT id, name, status, criticality, is_public FROM services WHERE id = $1 AND is_active = true`,
+    `SELECT id, name, status, criticality, is_public, part_is_relevant FROM services WHERE id = $1 AND is_active = true`,
     [serviceId]
   );
   if (!mainService) return null;
@@ -218,6 +218,7 @@ async function buildServiceGraph(serviceId, depth = 1) {
       status: mainService.status,
       criticality: mainService.criticality,
       is_public: mainService.is_public,
+      part_is_relevant: mainService.part_is_relevant,
       depth: 0,
       is_main: true,
     },
