@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Layout } from '../components/Layout'
 import { reportsApi } from '../api'
 import { format } from 'date-fns'
-import { Download } from 'lucide-react'
+import { Download, ShieldCheck } from 'lucide-react'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
@@ -24,6 +24,7 @@ const ChartTip = ({ active, payload, label }) => {
 export default function Reports() {
   const { hasPermission } = useAuth()
   const canAssets = hasPermission('assets')
+  const canServices = hasPermission('services')
   const canLicenses = hasPermission('maintenance')
   const [tab, setTab] = useState('maintenance')
   const [exportFormat, setExportFormat] = useState('csv')
@@ -81,7 +82,9 @@ export default function Reports() {
     try {
       const res = entity === 'licenses'
         ? await reportsApi.licensesExport(exportFormat)
-        : await reportsApi.assetsExport(exportFormat)
+        : entity === 'services'
+          ? await reportsApi.servicesExport(exportFormat)
+          : await reportsApi.assetsExport(exportFormat)
       triggerReportDownload(res.data, entity, exportFormat === 'xlsx' ? 'xlsx' : exportFormat)
     } catch (err) { toast.error(err.response?.data?.error || `${entity} report export failed`)
     }
@@ -92,7 +95,7 @@ export default function Reports() {
       <div className="space-y-4">
         <div className="py-2 -mx-4 sm:mx-0 px-4 sm:px-0 border-b border-gray-200 dark:border-gray-700">
           <nav className="flex flex-wrap gap-1.5">
-            {[['maintenance','Maintenance'],['uptime','Service Uptime'],...(canAssets ? [['assets','Assets']] : []),...(canLicenses ? [['licenses','Licenses']] : [])].map(([k,l]) => (
+            {[['maintenance','Maintenance'],['uptime','Service Uptime'],...(canAssets ? [['assets','Assets']] : []),...(canServices ? [['services','Services']] : []),...(canLicenses ? [['licenses','Licenses']] : [])].map(([k,l]) => (
               <button key={k} onClick={() => setTab(k)}
                 className={`px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors ${
                   tab === k ? 'bg-brand-600 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700/50 hover:text-gray-700 dark:hover:text-gray-200'
@@ -216,6 +219,7 @@ export default function Reports() {
         )}
 
         {tab === 'assets' && <AssetReport exportFormat={exportFormat} setExportFormat={setExportFormat} onExport={() => downloadEntityReport('assets')} />}
+        {tab === 'services' && <ServiceReport exportFormat={exportFormat} setExportFormat={setExportFormat} onExport={() => downloadEntityReport('services')} />}
         {tab === 'licenses' && <LicenseReport data={licenseData} exportFormat={exportFormat} setExportFormat={setExportFormat} onExport={() => downloadEntityReport('licenses')} />}
       </div>
     </Layout>
@@ -231,12 +235,13 @@ function AssetReport({ exportFormat, setExportFormat, onExport }) {
       <div className="overflow-auto" style={{ maxHeight: '62.5rem' }}>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
-            <tr>{['Name','Category','Criticality','Status','Maintenances','Incidents','Probe fails (30d)'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+            <tr>{['Name','Part-IS','Category','Criticality','Status','Maintenances','Incidents','Probe fails (30d)'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
             {data.map(a => (
               <tr key={a.id}>
                 <td className="px-4 py-2 font-medium">{a.name}</td>
+                <td className="px-4 py-2">{a.part_is_relevant ? <ShieldCheck size={17} className="text-amber-600" title="Part-IS Relevant" /> : <span className="text-gray-300">—</span>}</td>
                 <td className="px-4 py-2 text-gray-500">{a.category}</td>
                 <td className="px-4 py-2">{a.criticality}</td>
                 <td className="px-4 py-2"><StatusBadge status={a.status} /></td>
@@ -257,6 +262,32 @@ function AssetReport({ exportFormat, setExportFormat, onExport }) {
   )
 }
 
+function ServiceReport({ exportFormat, setExportFormat, onExport }) {
+  const [data, setData] = useState([])
+  useEffect(() => { reportsApi.services().then(r => setData(r.data)) }, [])
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex justify-end gap-2 p-4 border-b border-gray-100 dark:border-gray-700"><select className="input w-32" value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option></select><button className="btn-secondary" onClick={onExport}><Download size={14} />Export</button></div>
+      <div className="overflow-auto" style={{ maxHeight: '62.5rem' }}>
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 dark:bg-gray-700/50"><tr>{['Name','Part-IS','Criticality','Status','SLA %','Assets','Maintenances','Incidents'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr></thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">{data.map(s => <tr key={s.id}><td className="px-4 py-2 font-medium">{s.name}</td><td className="px-4 py-2">{s.part_is_relevant ? <ShieldCheck size={17} className="text-amber-600" title="Part-IS Relevant" /> : <span className="text-gray-300">—</span>}</td><td className="px-4 py-2">{s.criticality}</td><td className="px-4 py-2"><StatusBadge status={s.status} /></td><td className="px-4 py-2">{s.sla_uptime_percent}%</td><td className="px-4 py-2">{s.asset_count}</td><td className="px-4 py-2">{s.maintenance_count}</td><td className="px-4 py-2">{s.incident_count}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function licenseExpiryMeta(expiryDate, reminderDays = 30) {
+  if (!expiryDate) return { label: 'No expiry', className: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' }
+  const expiry = new Date(expiryDate)
+  if (Number.isNaN(expiry.getTime())) return { label: expiryDate, className: 'bg-gray-100 text-gray-600' }
+  const days = Math.ceil((expiry.setHours(23, 59, 59, 999) - Date.now()) / 86400000)
+  if (days < 0) return { label: 'Expired', className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' }
+  if (days <= Number(reminderDays || 30)) return { label: 'Expiring', className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' }
+  return { label: 'Valid', className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' }
+}
+
 function LicenseReport({ data, exportFormat, setExportFormat, onExport }) {
-  return <div className="card overflow-hidden"><div className="flex justify-end gap-2 p-4 border-b border-gray-100 dark:border-gray-700"><select className="input w-32" value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option></select><button className="btn-secondary" onClick={onExport}><Download size={14} />Export</button></div><div className="overflow-auto"><table className="w-full text-sm"><thead className="bg-gray-50 dark:bg-gray-700/50"><tr>{['Name','Approval status','Expiry date','Renewal date','Supplier','Cost','Assets','Services'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr></thead><tbody className="divide-y divide-gray-100 dark:divide-gray-700">{data.map(row => <tr key={`${row.name}-${row.expiry_date}`}><td className="px-4 py-2 font-medium">{row.name}</td><td className="px-4 py-2">{row.approval_status}</td><td className="px-4 py-2">{row.expiry_date || '—'}</td><td className="px-4 py-2">{row.renewal_date || '—'}</td><td className="px-4 py-2">{row.supplier || row.supplier_company || '—'}</td><td className="px-4 py-2">{row.estimated_cost || '—'} {row.currency || ''}</td><td className="px-4 py-2">{row.asset_count || 0}</td><td className="px-4 py-2">{row.service_count || 0}</td></tr>)}</tbody></table></div></div>
+  return <div className="card overflow-hidden"><div className="flex justify-end gap-2 p-4 border-b border-gray-100 dark:border-gray-700"><select className="input w-32" value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option></select><button className="btn-secondary" onClick={onExport}><Download size={14} />Export</button></div><div className="overflow-auto"><table className="w-full text-sm"><thead className="bg-gray-50 dark:bg-gray-700/50"><tr>{['Name','Approval status','Expiry date','Renewal date','Supplier','Cost','Assets','Services'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr></thead><tbody className="divide-y divide-gray-100 dark:divide-gray-700">{data.map(row => { const expiry = licenseExpiryMeta(row.expiry_date, row.reminder_days); return <tr key={`${row.name}-${row.expiry_date}`}><td className="px-4 py-2 font-medium">{row.name}</td><td className="px-4 py-2">{row.approval_status}</td><td className="px-4 py-2"><span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${expiry.className}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{row.expiry_date || expiry.label}</span></td><td className="px-4 py-2">{row.renewal_date || '—'}</td><td className="px-4 py-2">{row.supplier || row.supplier_company || '—'}</td><td className="px-4 py-2">{row.estimated_cost || '—'} {row.currency || ''}</td><td className="px-4 py-2">{row.asset_count || 0}</td><td className="px-4 py-2">{row.service_count || 0}</td></tr> })}</tbody></table></div></div>
 }

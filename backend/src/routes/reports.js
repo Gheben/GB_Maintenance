@@ -191,7 +191,7 @@ router.get('/uptime', async (req, res) => {
 // ─── GET /api/reports/assets ──────────────────────────────────────────────────
 router.get('/assets', async (req, res) => {
   const rows = await getMany(
-    `SELECT a.id, a.name, a.category, a.criticality, a.status,
+    `SELECT a.id, a.name, a.category, a.criticality, a.status, a.part_is_relevant,
        u.display_name as owner,
        (SELECT COUNT(*) FROM maintenance_assets ma JOIN maintenance_windows mw ON mw.id=ma.maintenance_id
         WHERE ma.asset_id=a.id AND mw.status='completed') as maintenance_count,
@@ -209,6 +209,7 @@ router.get('/assets', async (req, res) => {
       Category: row.category,
       Criticality: row.criticality,
       Status: row.status,
+      'Part-IS': row.part_is_relevant ? 'Yes' : 'No',
       Owner: row.owner || '',
       Maintenances: row.maintenance_count,
       Incidents: row.incident_count,
@@ -221,6 +222,7 @@ router.get('/assets', async (req, res) => {
       Category: row.category,
       Criticality: row.criticality,
       Status: row.status,
+      'Part-IS': row.part_is_relevant ? 'Yes' : 'No',
       Owner: row.owner || '',
       Maintenances: row.maintenance_count,
       Incidents: row.incident_count,
@@ -233,6 +235,7 @@ router.get('/assets', async (req, res) => {
       Category: row.category,
       Criticality: row.criticality,
       Status: row.status,
+      'Part-IS': row.part_is_relevant ? 'Yes' : 'No',
       Owner: row.owner || '',
       Maintenances: row.maintenance_count,
       Incidents: row.incident_count,
@@ -245,10 +248,42 @@ router.get('/assets', async (req, res) => {
   res.json(rows);
 });
 
+// ─── GET /api/reports/services ──────────────────────────────────────────────
+router.get('/services', async (req, res) => {
+  const rows = await getMany(
+    `SELECT s.id, s.name, s.criticality, s.status, s.sla_uptime_percent, s.part_is_relevant,
+       (SELECT COUNT(*)::int FROM service_assets sa WHERE sa.service_id=s.id) AS asset_count,
+       (SELECT COUNT(*)::int FROM maintenance_assets ma JOIN service_assets sa ON sa.asset_id=ma.asset_id WHERE sa.service_id=s.id) AS maintenance_count,
+       (SELECT COUNT(*)::int FROM incident_services ins WHERE ins.service_id=s.id) AS incident_count
+     FROM services s
+     WHERE s.is_active=true ORDER BY s.criticality, s.name`
+  );
+  const reportRows = rows.map(row => ({
+    Name: row.name,
+    'Part-IS': row.part_is_relevant ? 'Yes' : 'No',
+    Criticality: row.criticality,
+    Status: row.status,
+    'SLA %': row.sla_uptime_percent,
+    Assets: row.asset_count,
+    Maintenances: row.maintenance_count,
+    Incidents: row.incident_count,
+  }));
+  const format = String(req.query.format || 'json').toLowerCase();
+  if (format === 'xlsx') return sendExcel(res, reportRows, 'services-report.xlsx', 'Services');
+  if (format === 'pdf') return sendSimplePdf(res, 'Services Report', reportRows, 'services-report.pdf');
+  if (format === 'csv') {
+    const csv = stringify(reportRows, { header: true });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=services-report.csv');
+    return res.send(`\uFEFF${csv}`);
+  }
+  res.json(rows);
+});
+
 // ─── GET /api/reports/licenses ───────────────────────────────────────────────
 router.get('/licenses', async (req, res) => {
   const rows = await getMany(
-    `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.estimated_cost, l.currency,
+    `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.reminder_days, l.estimated_cost, l.currency,
             COALESCE(s.company, l.supplier, '') AS supplier,
             (SELECT COUNT(*)::int FROM license_assets la WHERE la.license_id=l.id) AS asset_count,
             (SELECT COUNT(*)::int FROM license_services ls WHERE ls.license_id=l.id) AS service_count
