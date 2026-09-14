@@ -47,7 +47,21 @@ async function getTransporter() {
   return _transporter;
 }
 
+function normalizeRecipientEmail(value) {
+  if (typeof value !== 'string') return null;
+  const email = value.trim();
+  if (!email) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
+}
+
 async function sendMail({ to, subject, html, text }) {
+  const normalizedTo = normalizeRecipientEmail(to);
+  if (!normalizedTo) {
+    logger.warn(`[Mailer] Skipping email send because recipient is empty or invalid: ${String(to ?? '')}`);
+    return null;
+  }
+
   const transporter = await getTransporter();
   if (!transporter) {
     logger.warn('[Mailer] SMTP not configured, skipping email');
@@ -62,8 +76,8 @@ async function sendMail({ to, subject, html, text }) {
     : (finalHtml ? htmlToPlainText(finalHtml) : undefined);
 
   try {
-    const info = await transporter.sendMail({ from, to, subject, html: finalHtml, text: finalText });
-    logger.info(`[Mailer] Email sent to ${to}: ${info.messageId}`);
+    const info = await transporter.sendMail({ from, to: normalizedTo, subject, html: finalHtml, text: finalText });
+    logger.info(`[Mailer] Email sent to ${normalizedTo}: ${info.messageId}`);
     return {
       messageId: info.messageId,
       accepted: info.accepted || [],
@@ -71,7 +85,7 @@ async function sendMail({ to, subject, html, text }) {
       response: info.response || ''
     };
   } catch (err) {
-    logger.error(`[Mailer] Failed to send email to ${to}: ${err.message}`);
+    logger.error(`[Mailer] Failed to send email to ${normalizedTo}: ${err.message}`);
     throw err;
   }
 }
@@ -99,4 +113,4 @@ function renderTemplate(template, vars) {
   });
 }
 
-module.exports = { sendMail, testSmtp, renderTemplate, getSmtpConfig };
+module.exports = { sendMail, testSmtp, renderTemplate, getSmtpConfig, normalizeRecipientEmail };

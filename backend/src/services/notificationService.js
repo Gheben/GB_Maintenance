@@ -1,5 +1,5 @@
 const { query, getOne, getMany } = require('../db/database');
-const { sendMail, renderTemplate } = require('../utils/mailer');
+const { sendMail, renderTemplate, normalizeRecipientEmail } = require('../utils/mailer');
 const logger = require('../utils/logger');
 const axios = require('axios');
 const {
@@ -133,7 +133,18 @@ async function sendEmailNotification(eventType, toEmails, vars, refType, refId, 
   const general = row?.value ? JSON.parse(row.value || '{}') : {};
   const appUrl = String(general?.app_url || process.env.APP_URL || 'http://localhost:4681').replace(/\/$/, '');
   const appName = String(general?.app_name || 'GB Maintenance');
-  for (const email of toEmails) {
+  const seen = new Set();
+
+  for (const rawEmail of toEmails || []) {
+    const email = normalizeRecipientEmail(rawEmail);
+    if (!email) {
+      const skipValue = rawEmail == null ? '' : String(rawEmail);
+      logger.warn(`[Notify] Skipping invalid recipient for ${eventType}: ${skipValue}`);
+      continue;
+    }
+    if (seen.has(email)) continue;
+    seen.add(email);
+
     let subject = eventType;
     try {
       const recipientVars = options.varsForRecipient
@@ -144,7 +155,11 @@ async function sendEmailNotification(eventType, toEmails, vars, refType, refId, 
       const htmlFragment = renderTemplate(tpl.body_html_template, allVars);
       const html = buildEmailHtmlDocument({ appName, appUrl, subject, bodyHtml: htmlFragment });
       const text = [subject, '', htmlToPlainText(htmlFragment), '', appUrl].filter(Boolean).join('\n');
-      await sendMail({ to: email, subject, html, text });
+      const result = await sendMail({ to: email, subject, html, text });
+      if (result === null) {
+        await logNotification(eventType, 'email', email, refType, refId, subject, 'failed', 'invalid recipient');
+        continue;
+      }
       await logNotification(eventType, 'email', email, refType, refId, subject, 'sent');
     } catch (err) {
       await logNotification(eventType, 'email', email, refType, refId, subject, 'failed', err.message);

@@ -43,44 +43,109 @@ function fmt(dt, f = 'MM/dd/yyyy HH:mm') {
 }
 
 function AffectedAssets({ assets = [] }) {
+  const directAssets = assets.filter((asset) => asset.is_direct)
+  const relatedAssets = assets.filter((asset) => !asset.is_direct)
+  const [expanded, setExpanded] = useState(false)
+
   if (assets.length === 0) return null
+
+  const visibleAssets = directAssets.length > 0 ? directAssets : assets.slice(0, 6)
+  const hiddenRelatedCount = Math.max(relatedAssets.length, 0)
+
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-        <Server size={11} />
-        Affected assets:
-      </span>
-      {assets.map(asset => (
-        <span
-          key={asset.id}
-          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${asset.is_direct ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
-          title={asset.is_direct ? 'Selected asset' : 'Related asset'}
-        >
-          {asset.part_is_relevant && <ShieldCheck size={11} className="text-amber-600" />}
-          {asset.name}
+    <div className="mt-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+          <Server size={11} />
+          Affected assets:
         </span>
-      ))}
+        {visibleAssets.map(asset => (
+          <span
+            key={asset.id}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${asset.is_direct ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
+            title={asset.is_direct ? 'Selected asset' : 'Related asset'}
+          >
+            {asset.part_is_relevant && <ShieldCheck size={11} className="text-amber-600" />}
+            {asset.name}
+          </span>
+        ))}
+      </div>
+      {hiddenRelatedCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="mt-2 text-[11px] font-medium text-brand-600 hover:text-brand-800"
+        >
+          {expanded ? 'Hide related assets' : `Show ${hiddenRelatedCount} related asset${hiddenRelatedCount > 1 ? 's' : ''}`}
+        </button>
+      )}
+      {expanded && relatedAssets.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-2 border-l border-gray-200 dark:border-gray-700">
+          {relatedAssets.map(asset => (
+            <span
+              key={asset.id}
+              className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+              title="Related asset"
+            >
+              {asset.part_is_relevant && <ShieldCheck size={11} className="text-amber-600" />}
+              {asset.name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 function AffectedServices({ services = [] }) {
+  const directServices = services.filter((service) => service.is_direct)
+  const relatedServices = services.filter((service) => !service.is_direct)
+  const [expanded, setExpanded] = useState(false)
+
   if (services.length === 0) return null
+
+  const visibleServices = directServices.length > 0 ? directServices : services.slice(0, 6)
+  const hiddenRelatedCount = Math.max(relatedServices.length, 0)
+
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-        <Cog size={11} />
-        Affected services:
-      </span>
-      {services.map(service => (
-        <span
-          key={service.id}
-          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${service.is_direct ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
-          title={service.is_direct ? 'Selected service' : 'Related service'}
-        >
-          {service.name}
+    <div className="mt-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+          <Cog size={11} />
+          Affected services:
         </span>
-      ))}
+        {visibleServices.map(service => (
+          <span
+            key={service.id}
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${service.is_direct ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}
+            title={service.is_direct ? 'Selected service' : 'Related service'}
+          >
+            {service.name}
+          </span>
+        ))}
+      </div>
+      {hiddenRelatedCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="mt-2 text-[11px] font-medium text-brand-600 hover:text-brand-800"
+        >
+          {expanded ? 'Hide related services' : `Show ${hiddenRelatedCount} related service${hiddenRelatedCount > 1 ? 's' : ''}`}
+        </button>
+      )}
+      {expanded && relatedServices.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-2 border-l border-gray-200 dark:border-gray-700">
+          {relatedServices.map(service => (
+            <span
+              key={service.id}
+              className="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+              title="Related service"
+            >
+              {service.name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

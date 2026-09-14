@@ -3,6 +3,7 @@ import { Layout } from '../components/Layout'
 import { Modal } from '../components/Modal'
 import { ItemPicker } from '../components/ItemPicker'
 import { toast } from '../components/Toast'
+import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
 import { maintenanceApi, assetsApi, servicesApi } from '../api'
 import { useNavigate } from 'react-router-dom'
 import { StatusBadge } from '../components/StatusBadge'
@@ -242,12 +243,14 @@ export default function Calendar() {
       {showCreate && (
         <Modal title="New Maintenance" onClose={() => setShowCreate(false)} size="lg">
           <form onSubmit={submit} className="space-y-4">
+            <PartIsAssetNotice assets={allAssets} selectedIds={form.asset_ids} />
+
             <div>
               <label className="block text-sm font-medium mb-1">Title *</label>
               <input className="input" value={form.title} onChange={e => setForm(f => ({...f, title: e.target.value}))} autoFocus />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Type</label>
                 <select className="input" value={form.type} onChange={e => setForm(f => ({...f, type: e.target.value}))}>
@@ -267,7 +270,7 @@ export default function Calendar() {
               <input className="input" placeholder="e.g., TKT-12345" value={form.ticket_ref} onChange={e => setForm(f => ({...f, ticket_ref: e.target.value}))} />
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Start *</label>
                 <input type="datetime-local" className="input" value={form.scheduled_start} onChange={e => setForm(f => ({...f, scheduled_start: e.target.value}))} />
@@ -278,13 +281,9 @@ export default function Calendar() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Description</label>
-              <textarea className="input" rows={2} value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} />
-            </div>
-
-            <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-4">
-              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Assets and Services</h4>
+            <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 space-y-4 bg-gray-50 dark:bg-gray-800/50">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Assets and Services</p>
+              <p className="text-xs text-gray-500">Only selected assets and services are linked. Related items are shown separately as derived impact.</p>
               <ItemPicker
                 label={`Assets (${form.asset_ids.length} selected)`}
                 allItems={allAssets}
@@ -303,6 +302,11 @@ export default function Calendar() {
                 useModal
                 filterKey="criticality"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Description</label>
+              <textarea className="input" rows={2} value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} />
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
