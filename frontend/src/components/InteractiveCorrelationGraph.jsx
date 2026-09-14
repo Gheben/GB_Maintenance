@@ -403,30 +403,6 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
         {renderNodes()}
       </svg>
 
-      {/* Legend */}
-      <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap gap-4 text-xs">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-blue-500" />
-          <span className="text-slate-600">Asset</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-green-500" />
-          <span className="text-slate-600">Service</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-amber-400" />
-          <span className="text-slate-600">Part-IS</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="h-0.5 w-4 bg-slate-400" />
-          <span className="text-slate-600">Direct</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="h-0.5 w-4 bg-slate-400" style={{ backgroundImage: 'repeating-linear-gradient(90deg, currentColor 0, currentColor 2px, transparent 2px, transparent 5px)' }} />
-          <span className="text-slate-600">Related</span>
-        </div>
-      </div>
-
       {/* Node Details Modal */}
       {showNodeDetails && selectedNode && (
         <div 
@@ -507,11 +483,9 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
               )}
 
               {/* Licenses */}
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase mb-2">Licenses</p>
-                {(selectedNode.licenses || []).length === 0 ? (
-                  <p className="text-sm text-slate-500">No active licenses</p>
-                ) : (
+              {(selectedNode.licenses || []).length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase mb-2">Licenses</p>
                   <div className="space-y-2">
                     {selectedNode.licenses.map(license => (
                       <div key={license.id} className="flex items-start justify-between gap-3 p-2.5 rounded border border-slate-200 bg-slate-50">
@@ -528,8 +502,8 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Footer */}
