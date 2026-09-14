@@ -6,12 +6,13 @@ import { ConfirmDialog, Modal } from '../components/Modal'
 import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { servicesApi, usersApi, groupsApi, settingsApi, maintenanceApi } from '../api'
+import CorrelationGraphLoader from '../components/CorrelationGraphLoader'
 import { format } from 'date-fns'
 import { Trash2, ArrowLeft, Pencil, Save, X, Plus, ExternalLink, User, Mail, Cog, Building2, Search, Play, Info } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CRITICALITIES = ['critical','high','medium','low']
-const TABS = [['info','Info'],['deps','Dependencies'],['assets','Linked Assets'],['licenses','Licenses'],['probes','Probes'],['maintenance','Maintenance'],['users','Users']]
+const TABS = [['info','Info'],['deps','Dependencies'],['assets','Linked Assets'],['licenses','Licenses'],['probes','Probes'],['maintenance','Maintenance'],['correlations','Correlations'],['users','Users']]
 
 function approvalStatusMeta(status) {
   if (status === 'approved') return { label: 'Approved', cls: 'bg-green-100 text-green-700' }
@@ -836,6 +837,13 @@ export default function ServiceDetail() {
                 <button className="btn-secondary" disabled={maintenancePage >= Math.ceil(maintenanceTotal / 25)} onClick={() => loadMaintenance(maintenancePage + 1)}>Next</button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Correlations tab */}
+        {tab === 'correlations' && (
+          <div className="card p-6">
+            <CorrelationGraphLoader entityId={id} entityType="service" />
           </div>
         )}
 

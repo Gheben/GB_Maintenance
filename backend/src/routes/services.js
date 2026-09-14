@@ -5,6 +5,7 @@ const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
 const wsService = require('../services/wsService');
 const ldapService = require('../services/ldapService');
+const { buildServiceGraph } = require('../utils/correlationGraph');
 
 const router = Router();
 router.use(requireAuth);
@@ -899,6 +900,20 @@ router.post('/:id/probe-configs/:probeId/run', requireOperator, async (req, res)
     const result = await probeService.probeNowByIdService(req.params.id, req.params.probeId);
     res.json(result);
   } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// ─── GET /api/services/:id/graph ──────────────────────────────────────────────
+router.get('/:id/graph', async (req, res) => {
+  try {
+    const { depth = 1 } = req.query;
+    const d = Math.max(1, Math.min(3, parseInt(depth, 10)));
+    const graph = await buildServiceGraph(req.params.id, d);
+    if (!graph) return res.status(404).json({ error: 'Service not found' });
+    res.json(graph);
+  } catch (err) {
+    console.error('[GRAPH] Error building service graph:', err.message);
+    res.status(500).json({ error: err.message || 'Error building graph' });
+  }
 });
 
 function _slugify(text) {

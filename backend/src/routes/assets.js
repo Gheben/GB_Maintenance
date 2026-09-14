@@ -6,6 +6,7 @@ const auditService = require('../services/auditService');
 const probeService = require('../services/probeService');
 const wsService = require('../services/wsService');
 const ldapService = require('../services/ldapService');
+const { buildAssetGraph } = require('../utils/correlationGraph');
 
 const router = Router();
 router.use(requireAuth);
@@ -1025,6 +1026,20 @@ router.post('/:id/dependencies', requireOperator, [
 router.delete('/:id/dependencies/:depId', requireOperator, async (req, res) => {
   await query('DELETE FROM asset_dependencies WHERE asset_id=$1 AND depends_on_id=$2', [req.params.id, req.params.depId]);
   res.json({ message: 'Dipendenza rimossa' });
+});
+
+// ─── GET /api/assets/:id/graph ───────────────────────────────────────────────
+router.get('/:id/graph', async (req, res) => {
+  try {
+    const { depth = 1 } = req.query;
+    const d = Math.max(1, Math.min(3, parseInt(depth, 10)));
+    const graph = await buildAssetGraph(req.params.id, d);
+    if (!graph) return res.status(404).json({ error: 'Asset not found' });
+    res.json(graph);
+  } catch (err) {
+    console.error('[GRAPH] Error building asset graph:', err.message);
+    res.status(500).json({ error: err.message || 'Error building graph' });
+  }
 });
 
 function _slugify(text) {

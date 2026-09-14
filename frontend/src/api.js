@@ -91,6 +91,7 @@ export const assetsApi = {
   patchStatus: (id, status) => api.patch(`/assets/${id}/status`, { status }),
   addDependency: (id, dep_id) => api.post(`/assets/${id}/dependencies`, { depends_on_id: dep_id }),
   removeDependency: (id, dep_id) => api.delete(`/assets/${id}/dependencies/${dep_id}`),
+  getGraph: (id, params) => api.get(`/assets/${id}/graph`, { params }),
 }
 
 // ─── Services ─────────────────────────────────────────────────────────────────
@@ -120,6 +121,7 @@ export const servicesApi = {
   probeNow: (id) => api.post(`/services/${id}/probe`),
   probeNowById: (id, probeId) => api.post(`/services/${id}/probe-configs/${probeId}/run`),
   probes: (id, params) => api.get(`/services/${id}/probes`, { params }),
+  getGraph: (id, params) => api.get(`/services/${id}/graph`, { params }),
 }
 
 // ─── Maintenance ──────────────────────────────────────────────────────────────
