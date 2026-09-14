@@ -254,6 +254,7 @@ export default function ServiceDetail() {
         sla_uptime_percent: editForm.sla_target ? parseFloat(editForm.sla_target) : undefined,
         system_name: editForm.system_name || null,
         is_public: !!editForm.is_public,
+        part_is_relevant: editForm.part_is_relevant === true,
         owner_targets: ownerTargets,
         user_targets: Array.isArray(editForm.user_targets) ? editForm.user_targets : [],
         owner_type: firstOwner?.type || 'user',
