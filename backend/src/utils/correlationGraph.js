@@ -1,5 +1,53 @@
 const { getMany, getOne } = require('../db/database');
 
+function getLicenseStatus(expiryDate, reminderDays = 30) {
+  if (!expiryDate) return 'valid';
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const expiry = new Date(`${String(expiryDate).slice(0, 10)}T00:00:00Z`);
+  if (expiry < today) return 'expired';
+  const warningDate = new Date(today);
+  warningDate.setUTCDate(warningDate.getUTCDate() + Number(reminderDays || 30));
+  return expiry <= warningDate ? 'expiring' : 'valid';
+}
+
+async function addNodeLicenses(nodes) {
+  const assetIds = nodes.filter(node => node.type === 'asset').map(node => node.id);
+  const serviceIds = nodes.filter(node => node.type === 'service').map(node => node.id);
+  if (assetIds.length === 0 && serviceIds.length === 0) return nodes;
+
+  const licenses = await getMany(
+    `SELECT l.id, l.name, l.expiry_date, l.reminder_days, l.approval_status,
+            la.asset_id AS node_id, 'asset' AS node_type
+     FROM license_assets la
+     JOIN licenses l ON l.id = la.license_id
+     WHERE l.is_active = true AND la.asset_id = ANY($1::uuid[])
+     UNION ALL
+     SELECT l.id, l.name, l.expiry_date, l.reminder_days, l.approval_status,
+            ls.service_id AS node_id, 'service' AS node_type
+     FROM license_services ls
+     JOIN licenses l ON l.id = ls.license_id
+     WHERE l.is_active = true AND ls.service_id = ANY($2::uuid[])`,
+    [assetIds, serviceIds]
+  );
+
+  const licensesByNode = new Map();
+  for (const license of licenses) {
+    const nodeLicenses = licensesByNode.get(license.node_id) || [];
+    nodeLicenses.push({
+      id: license.id,
+      name: license.name,
+      expiry_date: license.expiry_date,
+      reminder_days: license.reminder_days,
+      approval_status: license.approval_status,
+      status: getLicenseStatus(license.expiry_date, license.reminder_days),
+    });
+    licensesByNode.set(license.node_id, nodeLicenses);
+  }
+
+  return nodes.map(node => ({ ...node, licenses: licensesByNode.get(node.id) || [] }));
+}
+
 /**
  * Builds a correlation graph for an asset or service.
  * Returns nodes and edges with relationship types and depths.
@@ -150,7 +198,7 @@ async function buildAssetGraph(assetId, depth = 1) {
     }
   }
 
-  return { nodes, edges, depth_limit: depth };
+  return { nodes: await addNodeLicenses(nodes), edges, depth_limit: depth };
 }
 
 async function buildServiceGraph(serviceId, depth = 1) {
@@ -297,7 +345,7 @@ async function buildServiceGraph(serviceId, depth = 1) {
     }
   }
 
-  return { nodes, edges, depth_limit: depth };
+  return { nodes: await addNodeLicenses(nodes), edges, depth_limit: depth };
 }
 
 module.exports = {

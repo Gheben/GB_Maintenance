@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ZoomIn, ZoomOut, RotateCcw, X } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, X, KeyRound } from 'lucide-react';
 
 /**
  * InteractiveCorrelationGraph
@@ -72,6 +72,17 @@ function getStatusColor(status) {
     under_maintenance: '#A855F7',
   };
   return statusColors[status] || '#6B7280';
+}
+
+function getLicenseColor(status) {
+  return { valid: '#16A34A', expiring: '#EAB308', expired: '#DC2626' }[status] || '#94A3B8';
+}
+
+function getNodeLicenseStatus(node) {
+  const statuses = (node.licenses || []).map(license => license.status);
+  if (statuses.includes('expired')) return 'expired';
+  if (statuses.includes('expiring')) return 'expiring';
+  return statuses.length > 0 ? 'valid' : null;
 }
 
 const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
@@ -199,6 +210,7 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
       const isSelected = selectedNode?.id === node.id;
       const radius = isHovered || isSelected ? 28 : 20;
       const statusColor = getStatusColor(node.status);
+      const licenseStatus = getNodeLicenseStatus(node);
 
       return (
         <g
@@ -243,6 +255,13 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
               strokeDasharray="3,3"
               opacity={0.5}
             />
+          )}
+
+          {licenseStatus && (
+            <g transform={`translate(${pos.x + radius - 2}, ${pos.y - radius - 2})`}>
+              <circle r="9" fill="white" stroke={getLicenseColor(licenseStatus)} strokeWidth="2" />
+              <KeyRound x="-5" y="-5" width="10" height="10" color={getLicenseColor(licenseStatus)} strokeWidth="2.5" />
+            </g>
           )}
 
           {/* Hover/selected glow */}
@@ -486,6 +505,31 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
                   <p className="text-sm font-medium text-amber-900">🏷️ Part-IS Relevant</p>
                 </div>
               )}
+
+              {/* Licenses */}
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase mb-2">Licenses</p>
+                {(selectedNode.licenses || []).length === 0 ? (
+                  <p className="text-sm text-slate-500">No active licenses</p>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedNode.licenses.map(license => (
+                      <div key={license.id} className="flex items-start justify-between gap-3 p-2.5 rounded border border-slate-200 bg-slate-50">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800 break-words">{license.name}</p>
+                          {license.expiry_date && <p className="text-xs text-slate-500 mt-0.5">Expiry: {String(license.expiry_date).slice(0, 10)}</p>}
+                        </div>
+                        <span
+                          className="shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold"
+                          style={{ color: getLicenseColor(license.status), backgroundColor: `${getLicenseColor(license.status)}18` }}
+                        >
+                          {license.status === 'expired' ? 'Expired' : license.status === 'expiring' ? 'Expiring' : 'Valid'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Footer */}
