@@ -83,6 +83,19 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
 
+  // Prevent page scrolling when hovering over graph
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const handleWheel = (e) => {
+      e.preventDefault();
+    };
+
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', handleWheel);
+  }, []);
+
   if (!graphData || !graphData.nodes || graphData.nodes.length === 0) {
     return (
       <div className="flex items-center justify-center w-full h-96 bg-slate-50 border border-slate-200 rounded-lg">
