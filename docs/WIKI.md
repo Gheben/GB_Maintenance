@@ -278,7 +278,7 @@ Import behavior:
 
 ### Data deletion (superadmin only)
 
-The System section also provides a collapsed destructive-data panel. The operator can select groups or all application data. A confirmation dialog is mandatory. Relationship tables are deleted first and the current superadmin account is preserved. A sanitized backup is created before deletion.
+The System section also provides a collapsed destructive-data panel. The operator can select groups or all application data. A confirmation dialog is mandatory. Relationship tables are deleted first and the current superadmin account is preserved. System settings, default notification templates, and template placeholders are intentionally preserved. A sanitized backup is created before deletion.
 
 ## Backup and Restore
 

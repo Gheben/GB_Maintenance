@@ -70,7 +70,9 @@ const DATA_DELETE_TABLES = {
   maintenance: ['maintenance_owner_approvals', 'maintenance_status_subscribers', 'maintenance_assets', 'maintenance_services', 'maintenance_windows', 'maintenance_templates', 'maintenance_types', 'blackout_periods'],
   incidents: ['incident_updates', 'incident_assets', 'incident_services', 'incidents', 'incident_severities'],
   licenses: ['license_assets', 'license_services', 'licenses', 'suppliers'],
-  configuration: ['notification_templates', 'asset_categories', 'settings'],
+  // System settings and notification templates are application defaults, not operational data.
+  // They must survive "Delete all" so the template editor and placeholders remain usable.
+  configuration: [],
   templates: ['notification_templates', 'settings'],
   monitoring: ['service_probe_results', 'asset_probes', 'service_probes'],
 };

@@ -1076,8 +1076,8 @@ router.get('/', [
 router.get('/report', requireAuth, async (req, res) => {
   try {
     const rows = await getMany(
-      `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.estimated_cost, l.currency,
-              s.company AS supplier,
+            `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.estimated_cost, l.currency,
+              COALESCE(s.company, l.supplier, '') AS supplier,
               (SELECT COUNT(*)::int FROM license_assets la WHERE la.license_id=l.id) AS asset_count,
               (SELECT COUNT(*)::int FROM license_services ls WHERE ls.license_id=l.id) AS service_count
        FROM licenses l
