@@ -270,40 +270,45 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
             {node.type === 'service' ? 'S' : 'A'}
           </text>
 
-          {/* Label */}
+          {/* Label - Improved positioning to avoid cutoff */}
           {(isHovered || isSelected) && (
             <g>
+              <defs>
+                <filter id="tooltip-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="1" stdDeviation="2" floodOpacity="0.15" />
+                </filter>
+              </defs>
               <rect
-                x={pos.x - 60}
-                y={pos.y + 35}
-                width="120"
-                height="40"
-                rx="4"
+                x={Math.max(5, Math.min(pos.x - 75, SVG_WIDTH - 150))}
+                y={pos.y + 32}
+                width="150"
+                height="50"
+                rx="6"
                 fill="white"
-                stroke="#E5E7EB"
-                strokeWidth="1"
-                filter="drop-shadow(0 1px 2px rgba(0,0,0,0.1))"
+                stroke="#D1D5DB"
+                strokeWidth="1.5"
+                filter="url(#tooltip-shadow)"
               />
               <text
-                x={pos.x}
-                y={pos.y + 45}
+                x={Math.max(5, Math.min(pos.x - 75, SVG_WIDTH - 150)) + 75}
+                y={pos.y + 47}
                 fontSize="12"
                 fill="#1F2937"
                 fontWeight="600"
                 textAnchor="middle"
                 className="pointer-events-none"
               >
-                {node.label.length > 15 ? node.label.substring(0, 12) + '...' : node.label}
+                {node.label.length > 18 ? node.label.substring(0, 15) + '...' : node.label}
               </text>
               <text
-                x={pos.x}
-                y={pos.y + 63}
-                fontSize="10"
+                x={Math.max(5, Math.min(pos.x - 75, SVG_WIDTH - 150)) + 75}
+                y={pos.y + 66}
+                fontSize="11"
                 fill="#6B7280"
                 textAnchor="middle"
                 className="pointer-events-none"
               >
-                {node.type} • {node.status || 'unknown'}
+                {node.type === 'service' ? 'Service' : 'Asset'}
               </text>
             </g>
           )}
@@ -481,14 +486,6 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
                   <p className="text-sm font-medium text-amber-900">🏷️ Part-IS Relevant</p>
                 </div>
               )}
-
-              {/* Depth */}
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase mb-1">Distance from main</p>
-                <span className="text-sm text-slate-700">
-                  {selectedNode.depth === 0 ? 'Main entity' : `${selectedNode.depth} hop${selectedNode.depth > 1 ? 's' : ''}`}
-                </span>
-              </div>
             </div>
 
             {/* Footer */}
