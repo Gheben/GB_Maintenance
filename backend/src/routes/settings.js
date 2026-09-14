@@ -108,6 +108,19 @@ async function getTransferTableMetadata(client, table) {
   };
 }
 
+const USER_REFERENCE_COLUMNS = new Set([
+  'user_id', 'owner_id', 'created_by', 'approved_by', 'maintainer_user_id',
+  'approver_user_id', 'rejected_by', 'reopened_by', 'owner_user_id', 'approved_by_user_id',
+]);
+
+function remapTransferValue(table, column, value, idMaps) {
+  if (value === null || value === undefined) return value;
+  if (USER_REFERENCE_COLUMNS.has(column) && idMaps.users?.has(value)) return idMaps.users.get(value);
+  if (column === 'group_id' && idMaps.local_groups?.has(value)) return idMaps.local_groups.get(value);
+  if (column === 'local_group_id' && idMaps.local_groups?.has(value)) return idMaps.local_groups.get(value);
+  return value;
+}
+
 function getTransferTables(groups) {
   const tableOrder = [
     'users', 'local_groups', 'user_group_members', 'ldap_group_mappings',
@@ -323,8 +336,12 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
   if (tables.length === 0) return res.status(400).json({ error: 'No selected data found in the import file' });
 
   const imported = {};
-  await transaction(async (client) => {
-    for (const table of tables) {
+  const idMaps = { users: new Map(), local_groups: new Map() };
+  let currentTable = null;
+  try {
+    await transaction(async (client) => {
+      for (const table of tables) {
+        currentTable = table;
       const rows = payload.tables[table];
       if (rows.length === 0) {
         imported[table] = 0;
@@ -332,6 +349,21 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
       }
 
       const metadata = await getTransferTableMetadata(client, table);
+      if (table === 'users') {
+        const rowsToImport = [];
+        for (const row of rows) {
+          const existing = await client.query('SELECT id FROM "users" WHERE username=$1', [row.username]);
+          if (existing.rows[0]) {
+            idMaps.users.set(row.id, existing.rows[0].id);
+          } else {
+            rowsToImport.push(row);
+            idMaps.users.set(row.id, row.id);
+          }
+        }
+        imported[table] = rows.length - rowsToImport.length;
+        if (rowsToImport.length === 0) continue;
+        rows.splice(0, rows.length, ...rowsToImport);
+      }
       const columns = metadata.columns.filter(column => Object.prototype.hasOwnProperty.call(rows[0], column));
       if (columns.length === 0) continue;
       const quotedColumns = columns.map(quoteIdentifier).join(', ');
@@ -350,7 +382,7 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
         const batch = rows.slice(offset, offset + 200);
         const values = [];
         const placeholders = batch.map(row => {
-          const rowPlaceholders = columns.map(column => `$${values.push(row[column] === undefined ? null : row[column])}`);
+          const rowPlaceholders = columns.map(column => `$${values.push(remapTransferValue(table, column, row[column] === undefined ? null : row[column], idMaps))}`);
           return `(${rowPlaceholders.join(', ')})`;
         }).join(', ');
         await client.query(
@@ -358,9 +390,16 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
           values
         );
       }
-      imported[table] = rows.length;
-    }
-  });
+      imported[table] = (imported[table] || 0) + rows.length;
+      }
+    });
+  } catch (error) {
+    console.error(`[DataTransfer] Import failed on ${currentTable || 'unknown table'}:`, error);
+    return res.status(409).json({
+      error: `Import failed on table ${currentTable || 'unknown'}`,
+      details: error.code === '23505' ? 'A unique value already exists in the destination database.' : error.message,
+    });
+  }
 
   await auditService.log(req.user.id, req.user.username, 'settings:data_import', 'settings', 'data_transfer', JSON.stringify({ groups, tables }), req.ip);
   res.json({ message: 'Data imported successfully', groups, imported });
