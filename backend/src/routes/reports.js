@@ -234,8 +234,14 @@ router.get('/uptime', async (req, res) => {
 
 // ─── GET /api/reports/assets ──────────────────────────────────────────────────
 router.get('/assets', async (req, res) => {
+  const format = String(req.query.format || 'json').toLowerCase();
+  const page = Math.max(1, Number.parseInt(req.query.page || '1', 10) || 1);
+  const limit = Math.min(25, Math.max(1, Number.parseInt(req.query.limit || '25', 10) || 25));
+  const pagination = format === 'json' ? ` LIMIT $1 OFFSET $2` : '';
+  const queryParams = format === 'json' ? [limit, (page - 1) * limit] : [];
   const rows = await getMany(
     `SELECT a.id, a.name, a.category, a.criticality, a.status, a.part_is_relevant,
+       COUNT(*) OVER() AS total_count,
        u.display_name as owner,
        (SELECT COUNT(*) FROM maintenance_assets ma JOIN maintenance_windows mw ON mw.id=ma.maintenance_id
         WHERE ma.asset_id=a.id AND mw.status='completed') as maintenance_count,
@@ -244,9 +250,9 @@ router.get('/assets', async (req, res) => {
        (SELECT COUNT(*) FROM probe_results pr WHERE pr.asset_id=a.id AND pr.success=false
         AND pr.probed_at > NOW() - INTERVAL '30 days') as failed_probes_30d
      FROM assets a LEFT JOIN users u ON u.id=a.owner_id
-     WHERE a.is_active=true ORDER BY a.criticality, a.name`
+      WHERE a.is_active=true ORDER BY a.criticality, a.name${pagination}`,
+     queryParams
   );
-  const format = String(req.query.format || 'json').toLowerCase();
   if (format === 'xlsx') {
     return sendExcel(res, rows.map(row => ({
       Name: row.name,
@@ -289,18 +295,25 @@ router.get('/assets', async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename=assets-report.csv');
     return res.send(`\uFEFF${csv}`);
   }
-  res.json(rows);
+  res.json({ data: rows, total: Number(rows[0]?.total_count || 0), page, limit });
 });
 
 // ─── GET /api/reports/services ──────────────────────────────────────────────
 router.get('/services', async (req, res) => {
+  const format = String(req.query.format || 'json').toLowerCase();
+  const page = Math.max(1, Number.parseInt(req.query.page || '1', 10) || 1);
+  const limit = Math.min(25, Math.max(1, Number.parseInt(req.query.limit || '25', 10) || 25));
+  const pagination = format === 'json' ? ` LIMIT $1 OFFSET $2` : '';
+  const queryParams = format === 'json' ? [limit, (page - 1) * limit] : [];
   const rows = await getMany(
     `SELECT s.id, s.name, s.criticality, s.status, s.sla_uptime_percent, s.part_is_relevant,
+       COUNT(*) OVER() AS total_count,
        (SELECT COUNT(*)::int FROM service_assets sa WHERE sa.service_id=s.id) AS asset_count,
        (SELECT COUNT(*)::int FROM maintenance_assets ma JOIN service_assets sa ON sa.asset_id=ma.asset_id WHERE sa.service_id=s.id) AS maintenance_count,
        (SELECT COUNT(*)::int FROM incident_services ins WHERE ins.service_id=s.id) AS incident_count
      FROM services s
-     WHERE s.is_active=true ORDER BY s.criticality, s.name`
+    WHERE s.is_active=true ORDER BY s.criticality, s.name${pagination}`,
+      queryParams
   );
   const reportRows = rows.map(row => ({
     Name: row.name,
@@ -312,7 +325,6 @@ router.get('/services', async (req, res) => {
     Maintenances: row.maintenance_count,
     Incidents: row.incident_count,
   }));
-  const format = String(req.query.format || 'json').toLowerCase();
   if (format === 'xlsx') return sendExcel(res, reportRows, 'services-report.xlsx', 'Services');
   if (format === 'pdf') return sendSimplePdf(res, 'Services Report', reportRows, 'services-report.pdf');
   if (format === 'csv') {
@@ -321,18 +333,25 @@ router.get('/services', async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename=services-report.csv');
     return res.send(`\uFEFF${csv}`);
   }
-  res.json(rows);
+  res.json({ data: rows, total: Number(rows[0]?.total_count || 0), page, limit });
 });
 
 // ─── GET /api/reports/licenses ───────────────────────────────────────────────
 router.get('/licenses', async (req, res) => {
+  const format = String(req.query.format || 'json').toLowerCase();
+  const page = Math.max(1, Number.parseInt(req.query.page || '1', 10) || 1);
+  const limit = Math.min(25, Math.max(1, Number.parseInt(req.query.limit || '25', 10) || 25));
+  const pagination = format === 'json' ? ` LIMIT $1 OFFSET $2` : '';
+  const queryParams = format === 'json' ? [limit, (page - 1) * limit] : [];
   const rows = await getMany(
-    `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.reminder_days, l.estimated_cost, l.currency,
+        `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.reminder_days, l.estimated_cost, l.currency,
+          COUNT(*) OVER() AS total_count,
             COALESCE(s.company, l.supplier, '') AS supplier,
             (SELECT COUNT(*)::int FROM license_assets la WHERE la.license_id=l.id) AS asset_count,
             (SELECT COUNT(*)::int FROM license_services ls WHERE ls.license_id=l.id) AS service_count
      FROM licenses l LEFT JOIN suppliers s ON s.id=l.supplier_id
-     WHERE l.is_active=true ORDER BY l.expiry_date NULLS LAST, l.name`
+    WHERE l.is_active=true ORDER BY l.expiry_date NULLS LAST, l.name${pagination}`,
+      queryParams
   );
   const reportRows = rows.map(row => ({
     Name: row.name,
@@ -345,7 +364,6 @@ router.get('/licenses', async (req, res) => {
     Assets: row.asset_count,
     Services: row.service_count,
   }));
-  const format = String(req.query.format || 'json').toLowerCase();
   if (format === 'xlsx') return sendExcel(res, reportRows, 'licenses-report.xlsx', 'Licenses');
   if (format === 'pdf') return sendSimplePdf(res, 'Licenses Report', reportRows, 'licenses-report.pdf');
   if (format === 'csv') {
@@ -354,7 +372,7 @@ router.get('/licenses', async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename=licenses-report.csv');
     return res.send(`\uFEFF${csv}`);
   }
-  res.json(rows);
+  res.json({ data: rows, total: Number(rows[0]?.total_count || 0), page, limit });
 });
 
 // ─── GET /api/reports/dashboard ──────────────────────────────────────────────
