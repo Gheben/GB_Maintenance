@@ -205,7 +205,7 @@ export default function IncidentDetail() {
                 <h3 className="font-medium mb-3 text-sm">Selected services</h3>
                 <div className="flex flex-wrap gap-2">
                   {incident.services.map((service) => (
-                    <span key={service.id} className="inline-flex items-center gap-1 text-sm text-brand-600"><Cog size={14} />{service.name}</span>
+                    <span key={service.id} className="inline-flex items-center gap-1 text-sm text-brand-600">{service.part_is_relevant && <ShieldCheck size={14} className="text-amber-600" title="Part-IS Relevant" />}<Cog size={14} />{service.name}</span>
                   ))}
                 </div>
               </div>
@@ -215,7 +215,7 @@ export default function IncidentDetail() {
                 <h3 className="font-medium mb-3 text-sm">Related affected services</h3>
                 <div className="flex flex-wrap gap-2">
                   {relatedServices.map((service) => (
-                    <span key={service.id} className="inline-flex items-center gap-1 text-sm text-gray-600 dark:text-gray-300"><Cog size={14} />{service.name}</span>
+                    <span key={service.id} className="inline-flex items-center gap-1 text-sm text-gray-600 dark:text-gray-300">{service.part_is_relevant && <ShieldCheck size={14} className="text-amber-600" title="Part-IS Relevant" />}<Cog size={14} />{service.name}</span>
                   ))}
                 </div>
               </div>
