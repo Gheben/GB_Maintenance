@@ -36,12 +36,18 @@ export default function Reports() {
   const [to, setTo] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"))
   const [data, setData] = useState([])
   const [uptimeData, setUptimeData] = useState([])
+  const [uptimeTotal, setUptimeTotal] = useState(0)
+  const [uptimePage, setUptimePage] = useState(1)
 
   const load = () => {
     if (tab === 'maintenance') {
       reportsApi.maintenance({ from, to }).then(r => setData(r.data))
     } else if (tab === 'uptime') {
-      reportsApi.uptime({ days: 30 }).then(r => setUptimeData(r.data))
+      reportsApi.uptime({ days: 30, page: uptimePage, limit: 25 }).then(r => {
+        const payload = r.data || {}
+        setUptimeData(payload.data || [])
+        setUptimeTotal(payload.total || 0)
+      })
     } else if (tab === 'licenses' && canLicenses) {
       reportsApi.licenses({ page: licensePage, limit: 25 }).then(r => {
         const payload = r.data || {}
@@ -51,7 +57,7 @@ export default function Reports() {
     }
   }
 
-  useEffect(() => { load() }, [tab, licensePage])
+  useEffect(() => { load() }, [tab, licensePage, uptimePage])
 
   const triggerBlobDownload = (blob, fileName) => {
     const url = URL.createObjectURL(blob)
@@ -172,11 +178,6 @@ export default function Reports() {
                   </tbody>
                 </table>
               </div>
-              {data.length > 25 && (
-                <div className="px-4 py-2 text-xs text-gray-500 border-t border-gray-100 dark:border-gray-700">
-                  Showing 25 rows at a time. Scroll to view more.
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -216,11 +217,7 @@ export default function Reports() {
                   </tbody>
                 </table>
               </div>
-              {uptimeData.length > 25 && (
-                <div className="px-4 py-2 text-xs text-gray-500 border-t border-gray-100 dark:border-gray-700">
-                  Showing 25 rows at a time. Scroll to view more.
-                </div>
-              )}
+              <div className="p-4 border-t border-gray-100 dark:border-gray-700"><Pagination page={uptimePage} limit={25} total={uptimeTotal} onChange={setUptimePage} /></div>
             </div>
           </div>
         )}

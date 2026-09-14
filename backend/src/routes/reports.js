@@ -204,32 +204,37 @@ router.get('/maintenance', async (req, res) => {
 router.get('/uptime', async (req, res) => {
   const { service_id, days = 30 } = req.query;
   const d = parseInt(days);
+  const page = Math.max(1, Number.parseInt(req.query.page || '1', 10) || 1);
+  const limit = Math.min(25, Math.max(1, Number.parseInt(req.query.limit || '25', 10) || 25));
+  const pagination = ` LIMIT $${service_id ? 2 : 1} OFFSET $${service_id ? 3 : 2}`;
 
   let query_str, params;
   if (service_id) {
     query_str = `
-      SELECT s.id, s.name, s.slug, s.sla_uptime_percent,
+      SELECT s.id, s.name, s.slug, s.sla_uptime_percent, s.status,
+        COUNT(*) OVER() AS total_count,
         (SELECT COUNT(*) FROM status_history sh
          JOIN service_assets sa ON sa.asset_id=sh.entity_id
          WHERE sh.entity_type='asset' AND sa.service_id=s.id
            AND sh.status != 'under_maintenance'
            AND sh.created_at > NOW() - INTERVAL '${d} days') as status_changes
-      FROM services s WHERE s.id=$1 AND s.is_active=true`;
-    params = [service_id];
+      FROM services s WHERE s.id=$1 AND s.is_active=true${pagination}`;
+    params = [service_id, limit, (page - 1) * limit];
   } else {
     query_str = `
       SELECT s.id, s.name, s.slug, s.sla_uptime_percent, s.status,
+        COUNT(*) OVER() AS total_count,
         (SELECT COUNT(*) FROM status_history sh
          JOIN service_assets sa ON sa.asset_id=sh.entity_id
          WHERE sh.entity_type='asset' AND sa.service_id=s.id
            AND sh.status IN ('major_outage','partial_outage')
            AND sh.created_at > NOW() - INTERVAL '${d} days') as outage_events
-      FROM services s WHERE s.is_active=true ORDER BY s.name`;
-    params = [];
+      FROM services s WHERE s.is_active=true ORDER BY s.name${pagination}`;
+    params = [limit, (page - 1) * limit];
   }
 
   const rows = await getMany(query_str, params);
-  res.json(rows);
+  res.json({ data: rows, total: Number(rows[0]?.total_count || 0), page, limit });
 });
 
 // ─── GET /api/reports/assets ──────────────────────────────────────────────────
