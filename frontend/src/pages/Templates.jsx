@@ -110,7 +110,7 @@ function renderEmailPreviewDocument(template, eventType) {
     .approval-brand{font-size:11px;text-transform:uppercase;letter-spacing:.16em;color:#64748b;font-weight:700}
     .approval-shell h2{margin:10px 0 8px;color:#0f172a}.approval-status{display:inline-block;padding:6px 10px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700}
     .approval-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.approval-actions button{border:0;border-radius:8px;padding:9px 12px;background:#2563eb;color:white;font-weight:600}.approval-actions button+button{background:white;color:#334155;border:1px solid #cbd5e1}.approval-shell small{display:block;margin-top:18px;color:#64748b;font-size:11px}
-    #approval-preview:not(:target){display:none}
+    #approval-preview{display:block}
   </style></head><body>${rendered}${renderApprovalPreview(eventType)}</body></html>`
 }
 
