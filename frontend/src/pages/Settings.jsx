@@ -67,6 +67,11 @@ export default function Settings() {
   const [transferFileData, setTransferFileData] = useState(null)
   const [importGroups, setImportGroups] = useState([])
   const [importLoading, setImportLoading] = useState(false)
+  const [systemDeleteOpen, setSystemDeleteOpen] = useState(false)
+  const [deleteGroups, setDeleteGroups] = useState([])
+  const [deleteAll, setDeleteAll] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [appBrandUploading, setAppBrandUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showSmtpPass, setShowSmtpPass] = useState(false)
@@ -453,6 +458,26 @@ export default function Settings() {
       toast.error(err.response?.data?.error || 'Import failed')
     } finally {
       setImportLoading(false)
+    }
+  }
+
+  const requestDataDeletion = () => {
+    if (!deleteAll && deleteGroups.length === 0) return toast.error('Select at least one data group to delete')
+    setShowDeleteConfirm(true)
+  }
+
+  const deleteApplicationData = async () => {
+    setDeleteLoading(true)
+    try {
+      const response = await settingsApi.deleteData(deleteGroups, deleteAll)
+      toast.success(response.data?.message || 'Selected data deleted successfully')
+      setShowDeleteConfirm(false)
+      setDeleteGroups([])
+      setDeleteAll(false)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Deletion failed')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -1449,6 +1474,67 @@ export default function Settings() {
                   )}
                 </div>
               </div>
+              )}
+            </div>
+            )}
+
+            {showDeleteConfirm && (
+              <ConfirmDialog
+                title={deleteAll ? 'Delete all application data?' : 'Delete selected application data?'}
+                message="This action cannot be undone. All selected records and their correlations will be permanently removed. Your current superadmin account will be preserved. Continue?"
+                danger
+                confirmLabel={deleteLoading ? 'Deleting...' : 'Delete permanently'}
+                onConfirm={deleteApplicationData}
+                onCancel={() => { if (!deleteLoading) setShowDeleteConfirm(false) }}
+              />
+            )}
+
+            {isSuperAdmin && (
+            <div className="order-last card p-5 sm:p-6 space-y-4">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between text-left"
+                onClick={() => setSystemDeleteOpen(v => !v)}
+              >
+                <h2 className="font-semibold text-base flex items-center gap-2 text-red-700">
+                  <Trash2 size={16} />Delete application data
+                </h2>
+                {systemDeleteOpen ? <ChevronDown size={16} className="text-red-600" /> : <ChevronRight size={16} className="text-red-600" />}
+              </button>
+
+              {systemDeleteOpen && (
+                <div className="space-y-4 border-t border-red-100 dark:border-red-900/40 pt-4">
+                  <p className="text-sm text-red-700 dark:text-red-300">
+                    This permanently deletes selected data and its relationship records. Your current superadmin account is always preserved.
+                  </p>
+                  <label className="flex items-center gap-2 text-sm font-medium text-red-700 dark:text-red-300">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-red-600"
+                      checked={deleteAll}
+                      onChange={e => { setDeleteAll(e.target.checked); if (e.target.checked) setDeleteGroups([]) }}
+                    />
+                    Delete all application data
+                  </label>
+                  {!deleteAll && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {transferGroups.map(group => (
+                        <label key={group.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 accent-red-600"
+                            checked={deleteGroups.includes(group.id)}
+                            onChange={() => toggleTransferGroup(group.id, setDeleteGroups)}
+                          />
+                          {group.label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <button type="button" className="btn-danger inline-flex items-center gap-2" onClick={requestDataDeletion} disabled={deleteLoading}>
+                    <Trash2 size={14} />Delete selected data
+                  </button>
+                </div>
               )}
             </div>
             )}

@@ -224,6 +224,11 @@ export const settingsApi = {
     params: { groups: groups.length ? groups.join(',') : 'all' },
   }),
   importData: (data, groups) => api.post('/settings/data-transfer/import', { data, groups }),
+  deleteData: (groups, all = false) => api.post('/settings/data-transfer/delete', {
+    groups,
+    all,
+    confirmation: 'DELETE_SELECTED_DATA',
+  }),
 }
 
 // ─── Status ───────────────────────────────────────────────────────────────────

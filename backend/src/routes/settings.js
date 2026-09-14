@@ -57,6 +57,17 @@ const DATA_TRANSFER_DEPENDENCIES = {
   monitoring: ['assets', 'services'],
 };
 
+const DATA_DELETE_TABLES = {
+  core: ['ldap_group_mappings', 'user_group_members', 'local_groups', 'users'],
+  assets: ['service_assets', 'license_assets', 'maintenance_assets', 'incident_assets', 'asset_dependencies', 'assets'],
+  services: ['service_subscribers', 'service_dependencies', 'service_assets', 'license_services', 'maintenance_services', 'incident_services', 'services'],
+  maintenance: ['maintenance_owner_approvals', 'maintenance_status_subscribers', 'maintenance_assets', 'maintenance_services', 'maintenance_windows', 'maintenance_templates', 'maintenance_types', 'blackout_periods'],
+  incidents: ['incident_updates', 'incident_assets', 'incident_services', 'incidents', 'incident_severities'],
+  licenses: ['license_assets', 'license_services', 'licenses', 'suppliers'],
+  configuration: ['notification_templates', 'asset_categories', 'settings'],
+  monitoring: ['service_probe_results', 'asset_probes', 'service_probes'],
+};
+
 const DATA_TRANSFER_TABLES = new Set(Object.values(DATA_TRANSFER_GROUPS).flatMap(group => group.tables));
 
 function normalizeTransferGroups(groups) {
@@ -110,6 +121,12 @@ function getTransferTables(groups) {
   const selectedTables = new Set(groups.flatMap(group => DATA_TRANSFER_GROUPS[group].tables));
   return tableOrder.filter(table => selectedTables.has(table))
     .filter(table => DATA_TRANSFER_TABLES.has(table));
+}
+
+function getDeleteTables(groups) {
+  const order = ['monitoring', 'licenses', 'incidents', 'maintenance', 'services', 'assets', 'configuration', 'core'];
+  const selected = new Set(groups.flatMap(group => DATA_DELETE_TABLES[group] || []));
+  return order.flatMap(group => DATA_DELETE_TABLES[group] || []).filter(table => selected.has(table));
 }
 
 function requireLdapDirectorySearchAccess(req, res, next) {
@@ -347,6 +364,31 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
 
   await auditService.log(req.user.id, req.user.username, 'settings:data_import', 'settings', 'data_transfer', JSON.stringify({ groups, tables }), req.ip);
   res.json({ message: 'Data imported successfully', groups, imported });
+});
+
+// ─── POST /api/settings/data-transfer/delete ─────────────────────────────────
+router.post('/data-transfer/delete', requireAuth, requireSuperAdmin, async (req, res) => {
+  if (req.body?.confirmation !== 'DELETE_SELECTED_DATA') {
+    return res.status(400).json({ error: 'Explicit deletion confirmation is required' });
+  }
+
+  const requestedGroups = req.body?.all === true ? ['all'] : req.body?.groups;
+  const groups = normalizeTransferGroups(requestedGroups);
+  const tables = getDeleteTables(groups);
+  if (tables.length === 0) return res.status(400).json({ error: 'No data group selected for deletion' });
+
+  await transaction(async (client) => {
+    for (const table of tables) {
+      if (table === 'users') {
+        await client.query('DELETE FROM "users" WHERE id <> $1', [req.user.id]);
+      } else {
+        await client.query(`DELETE FROM ${quoteIdentifier(table)}`);
+      }
+    }
+  });
+
+  await auditService.log(req.user.id, req.user.username, 'settings:data_delete', 'settings', 'data_transfer', JSON.stringify({ groups, tables }), req.ip);
+  res.json({ message: 'Selected data deleted successfully', groups, deleted_tables: tables });
 });
 
 // ─── GET /api/settings ────────────────────────────────────────────────────────
