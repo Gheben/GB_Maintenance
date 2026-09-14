@@ -2246,6 +2246,14 @@ const MIGRATIONS = [
       await client.query('CREATE INDEX IF NOT EXISTS idx_license_renewal_history_license ON license_renewal_history(license_id, created_at DESC)');
     }
   },
+  {
+    version: 51,
+    name: 'partis_services',
+    up: async (client) => {
+      await client.query(`ALTER TABLE services ADD COLUMN IF NOT EXISTS part_is_relevant BOOLEAN NOT NULL DEFAULT FALSE`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_services_part_is_relevant ON services(part_is_relevant) WHERE part_is_relevant = true`);
+    }
+  },
 ];
 
 async function runMigrations(pool) {

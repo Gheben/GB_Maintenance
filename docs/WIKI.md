@@ -125,6 +125,7 @@ Services support:
 - Service-to-service dependencies.
 - One or more probes.
 - Maintenance and incident scope.
+- Part-IS relevance, with visual badges and approval impact.
 
 ### Correlation graph
 
@@ -149,6 +150,8 @@ A maintenance window can define:
 - Affected users and offices.
 - Owner approval requirement.
 - Subscribers and notifications.
+
+Selecting a Part-IS asset or Part-IS service automatically forces the owner approval flow.
 
 When owner approval is required, the backend resolves owners from selected assets/services and creates approval rows. Owners can approve, reject, or propose a new schedule. Creators and change managers can accept, reject, or counter-propose.
 

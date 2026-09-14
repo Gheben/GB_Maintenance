@@ -59,6 +59,7 @@ function getNodeColor(node) {
   if (node.type === 'asset') {
     return node.part_is_relevant ? COLOR_MAP.part_is.base : COLOR_MAP.asset.base;
   }
+  if (node.type === 'service' && node.part_is_relevant) return COLOR_MAP.part_is.base;
   return COLOR_MAP[node.type]?.base || '#6B7280';
 }
 

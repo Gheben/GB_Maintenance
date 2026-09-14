@@ -7,6 +7,7 @@ import { Modal } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { ItemPicker } from '../components/ItemPicker'
 import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
+import { PartIsServiceNotice } from '../components/PartIsServiceNotice'
 import { incidentsApi, assetsApi, servicesApi, incidentSeveritiesApi } from '../api'
 import { Plus, RefreshCw, Pencil } from 'lucide-react'
 import { format } from 'date-fns'
@@ -164,6 +165,7 @@ export default function Incidents() {
         <Modal title="New Incident" onClose={() => setShowCreate(false)}>
           <form onSubmit={handleCreate} className="space-y-4">
             <PartIsAssetNotice assets={allAssets} selectedIds={createAssetIds} />
+            <PartIsServiceNotice services={allServices} selectedIds={createServiceIds} />
             <div>
               <label className="block text-sm font-medium mb-1">Title *</label>
               <input className="input" required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
@@ -214,6 +216,7 @@ export default function Incidents() {
         <Modal title={`Edit Incident: ${editTarget.title}`} onClose={() => setEditTarget(null)}>
           <form onSubmit={handleEdit} className="space-y-4">
             <PartIsAssetNotice assets={allAssets} selectedIds={editAssetIds} />
+            <PartIsServiceNotice services={allServices} selectedIds={editServiceIds} />
             <div>
               <label className="block text-sm font-medium mb-1">Title *</label>
               <input className="input" required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />

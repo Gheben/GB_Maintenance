@@ -81,7 +81,7 @@ async function buildAssetGraph(assetId, depth = 1) {
   // Depth 1: Direct service relationships
   if (depth >= 1) {
     const directServices = await getMany(
-      `SELECT DISTINCT s.id, s.name, s.status, s.criticality
+      `SELECT DISTINCT s.id, s.name, s.status, s.criticality, s.part_is_relevant
        FROM service_assets sa
        JOIN services s ON s.id = sa.service_id
        WHERE sa.asset_id = $1 AND s.is_active = true`,
@@ -96,6 +96,7 @@ async function buildAssetGraph(assetId, depth = 1) {
           type: 'service',
           status: svc.status,
           criticality: svc.criticality,
+          part_is_relevant: svc.part_is_relevant,
           depth: 1,
         });
         nodeIds.add(svc.id);
@@ -260,7 +261,7 @@ async function buildServiceGraph(serviceId, depth = 1) {
 
     // Depth 1: Other services through same assets
     const relatedServices = await getMany(
-      `SELECT DISTINCT s.id, s.name, s.status, s.criticality, s.is_public
+      `SELECT DISTINCT s.id, s.name, s.status, s.criticality, s.is_public, s.part_is_relevant
        FROM service_assets sa1
        JOIN service_assets sa2 ON sa1.asset_id = sa2.asset_id
        JOIN services s ON s.id = sa2.service_id
@@ -276,6 +277,7 @@ async function buildServiceGraph(serviceId, depth = 1) {
           type: 'service',
           status: svc.status,
           criticality: svc.criticality,
+          part_is_relevant: svc.part_is_relevant,
           is_public: svc.is_public,
           depth: 1,
         });
@@ -299,7 +301,7 @@ async function buildServiceGraph(serviceId, depth = 1) {
 
     if (depth1AssetIds.length > 0) {
       const depth2Services = await getMany(
-        `SELECT DISTINCT s.id, s.name, s.status, s.criticality, s.is_public
+        `SELECT DISTINCT s.id, s.name, s.status, s.criticality, s.is_public, s.part_is_relevant
          FROM service_assets sa
          JOIN services s ON s.id = sa.service_id
          WHERE sa.asset_id = ANY($1::uuid[])
@@ -325,6 +327,7 @@ async function buildServiceGraph(serviceId, depth = 1) {
             type: 'service',
             status: svc.status,
             criticality: svc.criticality,
+            part_is_relevant: svc.part_is_relevant,
             is_public: svc.is_public,
             depth: 2,
           });

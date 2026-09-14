@@ -5,6 +5,7 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Modal } from '../components/Modal'
 import { ItemPicker } from '../components/ItemPicker'
 import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
+import { PartIsServiceNotice } from '../components/PartIsServiceNotice'
 import { toast } from '../components/Toast'
 import { maintenanceApi, assetsApi, servicesApi, maintenanceTypesApi } from '../api'
 import { format } from 'date-fns'
@@ -294,6 +295,7 @@ export default function MaintenanceDetail() {
         {editMode && editForm ? (
           <div className="card p-6 space-y-5">
             <PartIsAssetNotice assets={allAssets} selectedIds={editForm.asset_ids} />
+            <PartIsServiceNotice services={allServices} selectedIds={editForm.service_ids} />
             <div>
               <label className="block text-sm font-medium mb-1">Title *</label>
               <input className="input" value={editForm.title} onChange={e => setEditForm(f => ({...f, title: e.target.value}))} />
@@ -451,7 +453,7 @@ export default function MaintenanceDetail() {
                   <div className="space-y-2 mb-4">
                     {mw.services.map(s => (
                       <Link key={s.id} to={`/services/${s.id}`} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <span className="text-sm">{s.name}</span>
+                        <span className="flex items-center gap-1.5 text-sm">{s.part_is_relevant && <ShieldCheck size={15} className="text-amber-600" title="Part-IS Relevant" />}{s.name}</span>
                         <div className="flex gap-2">
                           <CriticalityBadge criticality={s.criticality} />
                           <StatusBadge status={s.status} />

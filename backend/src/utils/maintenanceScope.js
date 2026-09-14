@@ -35,7 +35,7 @@ async function getAffectedServices(assetIds = [], serviceIds = []) {
        WHERE sa.asset_id = ANY($1::uuid[])
      )
      SELECT s.id, s.id AS service_id, s.name, s.status, s.criticality, s.is_public,
-            BOOL_OR(scoped_services.is_direct) AS is_direct
+           BOOL_OR(scoped_services.is_direct) AS is_direct, s.part_is_relevant
      FROM scoped_services
      JOIN services s ON s.id=scoped_services.service_id
      GROUP BY s.id, s.name, s.status, s.criticality, s.is_public

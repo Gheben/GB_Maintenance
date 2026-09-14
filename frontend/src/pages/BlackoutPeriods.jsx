@@ -4,6 +4,7 @@ import { blackoutApi, servicesApi, assetsApi } from '../api'
 import { Modal, ConfirmDialog } from '../components/Modal'
 import { ItemPicker } from '../components/ItemPicker'
 import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
+import { PartIsServiceNotice } from '../components/PartIsServiceNotice'
 import { toast } from '../components/Toast'
 import { Plus, Trash2, Pencil, Server, Cog, ShieldCheck } from 'lucide-react'
 import { format } from 'date-fns'
@@ -71,6 +72,7 @@ export default function BlackoutPeriods() {
   const formBody = (onSubmit, onCancel) => (
     <form onSubmit={onSubmit} className="space-y-4 p-4">
       <PartIsAssetNotice assets={allAssets} selectedIds={form.asset_ids} />
+      <PartIsServiceNotice services={allServices} selectedIds={form.service_ids} />
       <div><label className="block text-sm font-medium mb-1">Name *</label><input className="input" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
       <div className="grid grid-cols-2 gap-4">
         <div><label className="block text-sm font-medium mb-1">From *</label><input type="date" className="input" required value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} /></div>

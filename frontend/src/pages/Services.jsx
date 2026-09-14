@@ -8,10 +8,10 @@ import { ItemPicker } from '../components/ItemPicker'
 import { OwnerPickerModal } from '../components/OwnerPickerModal'
 import { toast } from '../components/Toast'
 import { servicesApi, usersApi, groupsApi, settingsApi, licensesApi } from '../api'
-import { Plus, Search, RefreshCw, Pencil, Trash2, Globe } from 'lucide-react'
+import { Plus, Search, RefreshCw, Pencil, Trash2, Globe, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
-const BLANK_FORM = { name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, owner_targets: [], user_targets: [], system_name: '' }
+const BLANK_FORM = { name: '', description: '', criticality: 'medium', sla_uptime_percent: 99.9, is_public: false, part_is_relevant: false, owner_targets: [], user_targets: [], system_name: '' }
 
 function parsePublicApiDate(value) {
   if (!value) return null
@@ -217,7 +217,7 @@ export default function Services() {
       })()
     setForm({
       name: s.name, description: s.description || '', criticality: s.criticality,
-      sla_uptime_percent: s.sla_uptime_percent, is_public: s.is_public,
+      sla_uptime_percent: s.sla_uptime_percent, is_public: s.is_public, part_is_relevant: s.part_is_relevant === true,
       owner_targets: ownerTargets,
       user_targets: Array.isArray(s.user_targets) ? s.user_targets : [],
       system_name: s.system_name || ''
@@ -352,6 +352,11 @@ export default function Services() {
         <input type="checkbox" id="svc-public" checked={form.is_public} onChange={e => setForm(f => ({ ...f, is_public: e.target.checked }))} />
         <label htmlFor="svc-public" className="text-sm">Visible on public status page</label>
       </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={!!form.part_is_relevant} onChange={e => setForm(f => ({ ...f, part_is_relevant: e.target.checked }))} />
+        <ShieldCheck size={15} className="text-amber-600" />
+        Part-IS relevant service
+      </label>
       <ItemPicker
         label="Assigned licenses"
         allItems={allLicenses}
@@ -470,6 +475,7 @@ export default function Services() {
                       <td className="px-4 py-3 font-medium">
                         <Link to={`/services/${s.id}`} className="text-brand-600 hover:underline flex items-center gap-1.5">
                           {s.is_public && <Globe size={13} className="text-green-500 flex-shrink-0" />}
+                          {s.part_is_relevant && <ShieldCheck size={13} className="text-amber-600 flex-shrink-0" title="Part-IS Relevant" />}
                           {s.name}
                         </Link>
                       </td>

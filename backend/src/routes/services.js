@@ -227,6 +227,7 @@ router.post('/', requireOperator, [
   body('system_name').optional().isString().trim(),
   body('sla_uptime_percent').optional().isFloat({ min: 0, max: 100 }),
   body('is_public').optional().isBoolean(),
+  body('part_is_relevant').optional().isBoolean(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -249,8 +250,8 @@ router.post('/', requireOperator, [
       return res.status(400).json({ error: 'At least one owner is required' });
     }
     const result = await query(
-      `INSERT INTO services (name, slug, description, criticality, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name, owner_targets, user_targets, system_name, sla_uptime_percent, is_public)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+      `INSERT INTO services (name, slug, description, criticality, owner_id, owner_type, owner_group_id, owner_ldap_dn, owner_ldap_name, owner_targets, user_targets, system_name, sla_uptime_percent, is_public, part_is_relevant)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
       [req.body.name, slug, req.body.description||null, req.body.criticality||'medium',
        ownerFields.owner_id,
        ownerFields.owner_type,
@@ -259,7 +260,7 @@ router.post('/', requireOperator, [
       ownerFields.owner_ldap_name,
       JSON.stringify(ownerTargets),
       JSON.stringify(userTargets),
-       req.body.system_name||null, req.body.sla_uptime_percent||99.9, req.body.is_public||false]
+      req.body.system_name||null, req.body.sla_uptime_percent||99.9, req.body.is_public||false, req.body.part_is_relevant === true]
     );
     const id = result.rows[0].id;
     await query(`INSERT INTO status_history (entity_type, entity_id, status, changed_by) VALUES ('service',$1,'operational',$2)`, [id, req.user.username]);
@@ -288,7 +289,7 @@ router.put('/:id', requireOperator, async (req, res) => {
 
     const hasOwnerTargets = req.body.owner_targets !== undefined;
     const ownerFieldNames = new Set(['owner_id', 'owner_type', 'owner_group_id', 'owner_ldap_dn', 'owner_ldap_name']);
-    const allowed = ['name','description','criticality','owner_id','owner_type','owner_group_id','owner_ldap_dn','owner_ldap_name','owner_targets','user_targets','system_name','sla_uptime_percent','is_public','is_active'];
+    const allowed = ['name','description','criticality','owner_id','owner_type','owner_group_id','owner_ldap_dn','owner_ldap_name','owner_targets','user_targets','system_name','sla_uptime_percent','is_public','part_is_relevant','is_active'];
     const sets=[]; const vals=[]; let i=1;
 
     for (const f of allowed) {

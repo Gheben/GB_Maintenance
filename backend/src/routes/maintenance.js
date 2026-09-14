@@ -102,6 +102,16 @@ async function assetsIncludePartIsRelevant(assetIds = []) {
   return !!row;
 }
 
+async function servicesIncludePartIsRelevant(serviceIds = []) {
+  const ids = (Array.isArray(serviceIds) ? serviceIds : []).filter(Boolean);
+  if (ids.length === 0) return false;
+  const row = await getOne(
+    `SELECT 1 FROM services WHERE id = ANY($1::uuid[]) AND part_is_relevant = true LIMIT 1`,
+    [ids]
+  );
+  return !!row;
+}
+
 function normalizeMaintenanceLinks(assetIds = [], serviceIds = []) {
   return {
     asset_ids: [...new Set((Array.isArray(assetIds) ? assetIds : []).filter(Boolean))],
@@ -683,7 +693,8 @@ router.post('/', requireOperator, [
 
   // Any Part-IS relevant asset in scope forces the owner approval flow, regardless of the request flag.
   const selectedLinks = normalizeMaintenanceLinks(req.body.asset_ids || [], req.body.service_ids || []);
-  const partIsInvolved = await assetsIncludePartIsRelevant(selectedLinks.asset_ids);
+  const partIsInvolved = await assetsIncludePartIsRelevant(selectedLinks.asset_ids)
+    || await servicesIncludePartIsRelevant(selectedLinks.service_ids);
   const ownerApprovalRequired = req.body.owner_approval_required === true || partIsInvolved;
   const ownerApprovalStatus = ownerApprovalRequired ? 'pending' : 'not_required';
 
@@ -938,7 +949,10 @@ router.put('/:id', requireOperator, async (req, res) => {
     }
 
     // Adding a Part-IS relevant asset always forces the owner approval flow (never auto-disabled).
-    if (!maint.owner_approval_required && await assetsIncludePartIsRelevant(selectedLinks.asset_ids)) {
+    if (!maint.owner_approval_required && (
+      await assetsIncludePartIsRelevant(selectedLinks.asset_ids)
+      || await servicesIncludePartIsRelevant(selectedLinks.service_ids)
+    )) {
       partIsNewlyRequired = true;
       sets.push(`owner_approval_required=$${i++}`); vals.push(true);
       sets.push(`owner_approval_status=$${i++}`); vals.push('pending');

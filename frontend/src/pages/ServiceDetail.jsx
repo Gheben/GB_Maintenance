@@ -8,7 +8,7 @@ import { toast } from '../components/Toast'
 import { servicesApi, usersApi, groupsApi, settingsApi, maintenanceApi } from '../api'
 import CorrelationGraphLoader from '../components/CorrelationGraphLoader'
 import { format } from 'date-fns'
-import { Trash2, ArrowLeft, Pencil, Save, X, Plus, ExternalLink, User, Mail, Cog, Building2, Search, Play, Info } from 'lucide-react'
+import { Trash2, ArrowLeft, Pencil, Save, X, Plus, ExternalLink, User, Mail, Cog, Building2, Search, Play, Info, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CRITICALITIES = ['critical','high','medium','low']
@@ -221,6 +221,7 @@ export default function ServiceDetail() {
       sla_target: service.sla_target || service.sla_uptime_percent || '',
       system_name: service.system_name || '',
       is_public: !!service.is_public,
+      part_is_relevant: service.part_is_relevant === true,
       owner_targets: ownerTargets,
       user_targets: Array.isArray(service.user_targets) ? service.user_targets : [],
       owner_type: service.owner_type || 'user',
@@ -535,6 +536,11 @@ export default function ServiceDetail() {
               />
               <label htmlFor="service-public-detail" className="text-sm">Visible on public status page</label>
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={!!editForm.part_is_relevant} onChange={e => setEditForm(f => ({ ...f, part_is_relevant: e.target.checked }))} />
+              <ShieldCheck size={15} className="text-amber-600" />
+              Part-IS relevant service
+            </label>
             {ownerFieldsJsx}
             {usersFieldsJsx}
           </div>
@@ -543,6 +549,7 @@ export default function ServiceDetail() {
             <div className="flex flex-wrap items-center gap-3 mb-3">
               <StatusBadge status={service.status || service.current_status} />
               <CriticalityBadge criticality={service.criticality} />
+              {service.part_is_relevant && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800"><ShieldCheck size={13} />Part-IS Relevant</span>}
               {service.system_name && <span className="badge bg-indigo-100 text-indigo-700">{service.system_name}</span>}
             </div>
             {service.description && <p className="text-gray-600 dark:text-gray-300 mb-3">{service.description}</p>}
