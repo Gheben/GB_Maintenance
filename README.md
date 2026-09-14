@@ -20,12 +20,16 @@ Ideal for IT departments that need to track hardware, software licenses, service
 ### ✨ Key Features
 
 - 🖥️ **Asset Management** — Full inventory of hardware and software assets with categories, location, status, and linked services/licenses
-- 🔧 **Services** — Track IT services, their owners, SLA, and linked assets
-- 📄 **License Management** — Software licenses with expiry tracking, renewal dates, approval workflows, and email notifications
+- 🔧 **Services** — Track IT services, their owners, SLA, linked assets, dependencies, subscribers, and probes
+- 🔗 **Correlation Graphs** — Interactive asset/service relationship graph with depth expansion, pan/zoom, status, and license indicators
+- 📄 **License Management** — Software licenses with expiry tracking, renewal history, documents, reports, approval workflows, and email notifications
 - ✅ **Approval Workflow** — Token-based public approval page, fully brandable (logo, colors, texts) per-customer
 - 🏢 **Supplier Management** — Supplier registry with contact info, website (with favicon preview), and contract details (SLA, emergency contacts, availability, documents)
 - 🔔 **Notifications** — Configurable email templates plus in-app notifications for license workflow actors (approval, rejection, expiry reminders)
 - 📊 **Probes** — Scheduled connectivity checks on assets/services with status history
+- 📈 **Dashboard and Reports** — KPIs, expiring licenses, pending owner approvals, maintenance PDF/CSV, uptime, asset, and license reports
+- 🗓️ **Operations Planning** — Calendar, maintenance lifecycle, owner approvals, recurring windows, blackout periods, and affected-scope tracking
+- 🔁 **Data Migration** — Superadmin-only selectable JSON export/import, dependency-aware relationships, sensitive-data opt-in, preview/dry-run, automatic pre-operation snapshots, and confirmed deletion
 - 🔐 **Authentication** — Local users, LDAP/Active Directory, SSO (Authentik, NetScaler), SAML 2.0
 - 👥 **User Management** — `superadmin`, `admin`, `user` roles with per-section permissions
 - 📋 **Audit Log** — Full operation log (superadmin only)
@@ -300,6 +304,15 @@ The introductory feature guide is available in:
 - [docs/manual/README.md](docs/manual/README.md)
 
 It includes a page-by-page overview with desktop screenshots and a short description for each main area of the platform.
+
+## 📚 Product Wiki
+
+The complete operational documentation is available in:
+
+- [docs/WIKI.md](docs/WIKI.md)
+- [docs/BACKUP.md](docs/BACKUP.md)
+
+The wiki covers modules, roles, authentication, LDAP/AD and SAML, monitoring, approvals, licenses, notifications, migration, security, deployment, API usage, and troubleshooting.
 
 ---
 
