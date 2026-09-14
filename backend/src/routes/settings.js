@@ -44,6 +44,10 @@ const DATA_TRANSFER_GROUPS = {
     label: 'Configuration',
     tables: ['settings', 'notification_templates', 'asset_categories'],
   },
+  templates: {
+    label: 'Templates',
+    tables: ['settings', 'notification_templates'],
+  },
   monitoring: {
     label: 'Monitoring',
     tables: ['asset_probes', 'service_probes'],
@@ -67,6 +71,7 @@ const DATA_DELETE_TABLES = {
   incidents: ['incident_updates', 'incident_assets', 'incident_services', 'incidents', 'incident_severities'],
   licenses: ['license_assets', 'license_services', 'licenses', 'suppliers'],
   configuration: ['notification_templates', 'asset_categories', 'settings'],
+  templates: ['notification_templates', 'settings'],
   monitoring: ['service_probe_results', 'asset_probes', 'service_probes'],
 };
 

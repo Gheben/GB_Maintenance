@@ -260,6 +260,7 @@ The System section includes a collapsed migration panel with selectable groups:
 - Incidents.
 - Licenses.
 - Configuration.
+- Templates (email and Portal branding/configuration).
 - Monitoring.
 
 Exports are JSON files. Related groups are included automatically when required to preserve relationships. Sensitive values are excluded by default; including password hashes or SSO secrets is an explicit option and should only be used for a controlled migration.
