@@ -3,6 +3,7 @@ const { requireAuth, requireAdmin, requireOperator } = require('../middleware/au
 const { query, getMany, getOne } = require('../db/database');
 const PDFDocument = require('pdfkit');
 const { stringify } = require('csv-stringify/sync');
+const XLSX = require('xlsx');
 
 const router = Router();
 router.use(requireAuth);
@@ -33,6 +34,33 @@ function setCachedDashboard(key, payload) {
   });
 }
 
+function sendExcel(res, rows, filename, sheetName) {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  worksheet['!cols'] = Object.keys(rows[0] || {}).map(key => ({ wch: Math.min(40, Math.max(12, key.length + 2)) }));
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+  res.send(buffer);
+}
+
+function sendSimplePdf(res, title, rows, filename) {
+  const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+  doc.pipe(res);
+  doc.fontSize(18).fillColor('#111827').text(title, { align: 'center' });
+  doc.fontSize(10).text(`Generated on ${new Date().toLocaleString('en-GB')}`, { align: 'center' });
+  doc.moveDown();
+  for (const row of rows) {
+    doc.fontSize(10).fillColor('#1e40af').text(String(row.Name || row.Title || '-'));
+    doc.fontSize(8).fillColor('#374151').text(Object.entries(row).filter(([key]) => !['Name', 'Title'].includes(key)).map(([key, value]) => `${key}: ${value ?? '-'}`).join(' | '));
+    doc.moveDown(0.4);
+  }
+  doc.end();
+}
+
 // ─── GET /api/reports/maintenance ────────────────────────────────────────────
 router.get('/maintenance', async (req, res) => {
   const { from, to, asset_id, service_id, status, format = 'json' } = req.query;
@@ -58,6 +86,24 @@ router.get('/maintenance', async (req, res) => {
      ${where} ORDER BY mw.scheduled_start DESC`,
     params
   );
+
+  if (format === 'xlsx') {
+    return sendExcel(res, rows.map(row => ({
+      ID: row.id,
+      Title: row.title,
+      Type: row.type,
+      Status: row.status,
+      Impact: row.impact_level,
+      'Scheduled start': row.scheduled_start,
+      'Scheduled end': row.scheduled_end,
+      'Actual start': row.actual_start,
+      'Actual end': row.actual_end,
+      'Created by': row.created_by || '',
+      Description: row.description || '',
+      Notes: row.notes || '',
+      'Duration (minutes)': Math.round(row.duration_minutes || 0),
+    })), 'maintenance-report.xlsx', 'Maintenance');
+  }
 
   if (format === 'csv') {
     const csvHeaders = [
@@ -156,6 +202,79 @@ router.get('/assets', async (req, res) => {
      FROM assets a LEFT JOIN users u ON u.id=a.owner_id
      WHERE a.is_active=true ORDER BY a.criticality, a.name`
   );
+  const format = String(req.query.format || 'json').toLowerCase();
+  if (format === 'xlsx') {
+    return sendExcel(res, rows.map(row => ({
+      Name: row.name,
+      Category: row.category,
+      Criticality: row.criticality,
+      Status: row.status,
+      Owner: row.owner || '',
+      Maintenances: row.maintenance_count,
+      Incidents: row.incident_count,
+      'Probe fails (30d)': row.failed_probes_30d,
+    })), 'assets-report.xlsx', 'Assets');
+  }
+  if (format === 'pdf') {
+    return sendSimplePdf(res, 'Assets Report', rows.map(row => ({
+      Name: row.name,
+      Category: row.category,
+      Criticality: row.criticality,
+      Status: row.status,
+      Owner: row.owner || '',
+      Maintenances: row.maintenance_count,
+      Incidents: row.incident_count,
+      'Probe fails (30d)': row.failed_probes_30d,
+    })), 'assets-report.pdf');
+  }
+  if (format === 'csv') {
+    const csv = stringify(rows.map(row => ({
+      Name: row.name,
+      Category: row.category,
+      Criticality: row.criticality,
+      Status: row.status,
+      Owner: row.owner || '',
+      Maintenances: row.maintenance_count,
+      Incidents: row.incident_count,
+      'Probe fails (30d)': row.failed_probes_30d,
+    })), { header: true });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=assets-report.csv');
+    return res.send(`\uFEFF${csv}`);
+  }
+  res.json(rows);
+});
+
+// ─── GET /api/reports/licenses ───────────────────────────────────────────────
+router.get('/licenses', async (req, res) => {
+  const rows = await getMany(
+    `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.estimated_cost, l.currency,
+            COALESCE(s.company, l.supplier, '') AS supplier,
+            (SELECT COUNT(*)::int FROM license_assets la WHERE la.license_id=l.id) AS asset_count,
+            (SELECT COUNT(*)::int FROM license_services ls WHERE ls.license_id=l.id) AS service_count
+     FROM licenses l LEFT JOIN suppliers s ON s.id=l.supplier_id
+     WHERE l.is_active=true ORDER BY l.expiry_date NULLS LAST, l.name`
+  );
+  const reportRows = rows.map(row => ({
+    Name: row.name,
+    'Approval status': row.approval_status,
+    'Expiry date': row.expiry_date || '',
+    'Renewal date': row.renewal_date || '',
+    Supplier: row.supplier || '',
+    'Estimated cost': row.estimated_cost || '',
+    Currency: row.currency || '',
+    Assets: row.asset_count,
+    Services: row.service_count,
+  }));
+  const format = String(req.query.format || 'json').toLowerCase();
+  if (format === 'xlsx') return sendExcel(res, reportRows, 'licenses-report.xlsx', 'Licenses');
+  if (format === 'pdf') return sendSimplePdf(res, 'Licenses Report', reportRows, 'licenses-report.pdf');
+  if (format === 'csv') {
+    const csv = stringify(reportRows, { header: true });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=licenses-report.csv');
+    return res.send(`\uFEFF${csv}`);
+  }
   res.json(rows);
 });
 

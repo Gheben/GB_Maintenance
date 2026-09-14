@@ -49,7 +49,7 @@ The application consists of:
 | Licenses | Expiry, renewal, approval, suppliers, linked assets/services, documents, renewal history, CSV report | `/licenses` |
 | Suppliers | Company contacts, SLA details, contracts, emergency contacts, documents | `/licenses` |
 | Notifications | In-app notifications, read state, notification log, linked detail previews | `/notifications` |
-| Reports | Maintenance JSON/CSV/PDF, uptime, asset reports | `/reports` |
+| Reports | Maintenance, asset, and license reports with CSV/Excel/PDF exports; uptime analytics | `/reports` |
 | Users and Groups | Local users, roles, permissions, groups, LDAP mappings, sessions | `/users` |
 | Settings | SMTP, templates, LDAP, SAML, API keys, system governance, migration and deletion | `/settings` |
 | Audit | Operation history for privileged users | `/audit` |
@@ -220,6 +220,8 @@ Reports include:
 - Service uptime and SLA view.
 - Asset report.
 - License CSV report.
+
+Maintenance, asset, and license reports can be exported as CSV, formatted Excel (`.xlsx` with headers and columns), or PDF from the Reports page. The Assets and Licenses tabs are shown only when the current user has the corresponding application visibility permission.
 
 Maintenance PDF and CSV exports use English labels and column headers.
 

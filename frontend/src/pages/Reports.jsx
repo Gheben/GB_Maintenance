@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { Download } from 'lucide-react'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toast'
+import { useAuth } from '../contexts/AuthContext'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
   ResponsiveContainer, LineChart, Line, Legend
@@ -21,7 +22,12 @@ const ChartTip = ({ active, payload, label }) => {
 }
 
 export default function Reports() {
+  const { hasPermission } = useAuth()
+  const canAssets = hasPermission('assets')
+  const canLicenses = hasPermission('maintenance')
   const [tab, setTab] = useState('maintenance')
+  const [exportFormat, setExportFormat] = useState('csv')
+  const [licenseData, setLicenseData] = useState([])
   const [from, setFrom] = useState(format(new Date(Date.now() - 30 * 86400000), "yyyy-MM-dd'T'HH:mm"))
   const [to, setTo] = useState(format(new Date(), "yyyy-MM-dd'T'HH:mm"))
   const [data, setData] = useState([])
@@ -32,6 +38,8 @@ export default function Reports() {
       reportsApi.maintenance({ from, to }).then(r => setData(r.data))
     } else if (tab === 'uptime') {
       reportsApi.uptime({ days: 30 }).then(r => setUptimeData(r.data))
+    } else if (tab === 'licenses' && canLicenses) {
+      reportsApi.licenses().then(r => setLicenseData(r.data)).catch(() => {})
     }
   }
 
@@ -48,21 +56,34 @@ export default function Reports() {
     URL.revokeObjectURL(url)
   }
 
-  const downloadCsv = async () => {
+  const triggerReportDownload = (blob, baseName, extension) => {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${baseName}-${format(new Date(), 'yyyyMMdd-HHmm')}.${extension}`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadMaintenanceReport = async () => {
     try {
-      const res = await reportsApi.maintenanceExportCsv({ from, to })
-      triggerBlobDownload(res.data, `maintenance-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`)
-    } catch {
-      toast.error('CSV download failed')
+      const res = exportFormat === 'pdf'
+        ? await reportsApi.maintenanceExportPdf({ from, to })
+        : exportFormat === 'xlsx'
+          ? await reportsApi.maintenanceExportXlsx({ from, to })
+          : await reportsApi.maintenanceExportCsv({ from, to })
+      triggerReportDownload(res.data, 'maintenance', exportFormat === 'xlsx' ? 'xlsx' : exportFormat)
+    } catch (err) { toast.error(err.response?.data?.error || 'Maintenance report export failed')
     }
   }
 
-  const downloadPdf = async () => {
+  const downloadEntityReport = async (entity) => {
     try {
-      const res = await reportsApi.maintenanceExportPdf({ from, to })
-      triggerBlobDownload(res.data, `maintenance-${format(new Date(), 'yyyyMMdd-HHmm')}.pdf`)
-    } catch {
-      toast.error('PDF download failed')
+      const res = entity === 'licenses'
+        ? await reportsApi.licensesExport(exportFormat)
+        : await reportsApi.assetsExport(exportFormat)
+      triggerReportDownload(res.data, entity, exportFormat === 'xlsx' ? 'xlsx' : exportFormat)
+    } catch (err) { toast.error(err.response?.data?.error || `${entity} report export failed`)
     }
   }
 
@@ -71,7 +92,7 @@ export default function Reports() {
       <div className="space-y-4">
         <div className="py-2 -mx-4 sm:mx-0 px-4 sm:px-0 border-b border-gray-200 dark:border-gray-700">
           <nav className="flex flex-wrap gap-1.5">
-            {[['maintenance','Maintenance'],['uptime','Service Uptime'],['assets','Assets']].map(([k,l]) => (
+            {[['maintenance','Maintenance'],['uptime','Service Uptime'],...(canAssets ? [['assets','Assets']] : []),...(canLicenses ? [['licenses','Licenses']] : [])].map(([k,l]) => (
               <button key={k} onClick={() => setTab(k)}
                 className={`px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors ${
                   tab === k ? 'bg-brand-600 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700/50 hover:text-gray-700 dark:hover:text-gray-200'
@@ -87,8 +108,8 @@ export default function Reports() {
               <div className="min-w-0"><label className="block text-xs font-medium mb-1">To</label><input type="datetime-local" className="input w-full" value={to} onChange={e => setTo(e.target.value)} /></div>
               <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-1 xl:justify-end">
                 <button className="btn-primary" onClick={load}>Refresh</button>
-                <button className="btn-secondary" onClick={downloadCsv}><Download size={14} />CSV</button>
-                <button className="btn-secondary" onClick={downloadPdf}><Download size={14} />PDF</button>
+                <select className="input w-32" value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option></select>
+                <button className="btn-secondary" onClick={downloadMaintenanceReport}><Download size={14} />Export</button>
               </div>
             </div>
 
@@ -194,17 +215,19 @@ export default function Reports() {
           </div>
         )}
 
-        {tab === 'assets' && <AssetReport />}
+        {tab === 'assets' && <AssetReport exportFormat={exportFormat} setExportFormat={setExportFormat} onExport={() => downloadEntityReport('assets')} />}
+        {tab === 'licenses' && <LicenseReport data={licenseData} exportFormat={exportFormat} setExportFormat={setExportFormat} onExport={() => downloadEntityReport('licenses')} />}
       </div>
     </Layout>
   )
 }
 
-function AssetReport() {
+function AssetReport({ exportFormat, setExportFormat, onExport }) {
   const [data, setData] = useState([])
   useEffect(() => { reportsApi.assets().then(r => setData(r.data)) }, [])
   return (
     <div className="card overflow-hidden">
+      <div className="flex justify-end gap-2 p-4 border-b border-gray-100 dark:border-gray-700"><select className="input w-32" value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option></select><button className="btn-secondary" onClick={onExport}><Download size={14} />Export</button></div>
       <div className="overflow-auto" style={{ maxHeight: '62.5rem' }}>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -232,4 +255,8 @@ function AssetReport() {
       )}
     </div>
   )
+}
+
+function LicenseReport({ data, exportFormat, setExportFormat, onExport }) {
+  return <div className="card overflow-hidden"><div className="flex justify-end gap-2 p-4 border-b border-gray-100 dark:border-gray-700"><select className="input w-32" value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option></select><button className="btn-secondary" onClick={onExport}><Download size={14} />Export</button></div><div className="overflow-auto"><table className="w-full text-sm"><thead className="bg-gray-50 dark:bg-gray-700/50"><tr>{['Name','Approval status','Expiry date','Renewal date','Supplier','Cost','Assets','Services'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr></thead><tbody className="divide-y divide-gray-100 dark:divide-gray-700">{data.map(row => <tr key={`${row.name}-${row.expiry_date}`}><td className="px-4 py-2 font-medium">{row.name}</td><td className="px-4 py-2">{row.approval_status}</td><td className="px-4 py-2">{row.expiry_date || '—'}</td><td className="px-4 py-2">{row.renewal_date || '—'}</td><td className="px-4 py-2">{row.supplier || row.supplier_company || '—'}</td><td className="px-4 py-2">{row.estimated_cost || '—'} {row.currency || ''}</td><td className="px-4 py-2">{row.asset_count || 0}</td><td className="px-4 py-2">{row.service_count || 0}</td></tr>)}</tbody></table></div></div>
 }

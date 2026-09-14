@@ -243,9 +243,13 @@ export const statusApi = {
 export const reportsApi = {
   maintenance: (params) => api.get('/reports/maintenance', { params }),
   maintenanceExportCsv: (params) => api.get('/reports/maintenance', { params: { ...(params || {}), format: 'csv' }, responseType: 'blob' }),
+  maintenanceExportXlsx: (params) => api.get('/reports/maintenance', { params: { ...(params || {}), format: 'xlsx' }, responseType: 'blob' }),
   maintenanceExportPdf: (params) => api.get('/reports/maintenance', { params: { ...(params || {}), format: 'pdf' }, responseType: 'blob' }),
   uptime: (params) => api.get('/reports/uptime', { params }),
-  assets: () => api.get('/reports/assets'),
+  assets: (params) => api.get('/reports/assets', { params }),
+  assetsExport: (format) => api.get('/reports/assets', { params: { format }, responseType: 'blob' }),
+  licenses: (params) => api.get('/reports/licenses', { params }),
+  licensesExport: (format) => api.get('/reports/licenses', { params: { format }, responseType: 'blob' }),
   dashboard: (params) => api.get('/reports/dashboard', { params }),
 }
 

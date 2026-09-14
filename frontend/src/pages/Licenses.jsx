@@ -23,7 +23,6 @@ import {
   Mail,
   Paperclip,
   Clock,
-  Download,
 } from 'lucide-react'
 import { QuickCreateUserModal } from '../components/QuickCreateModals'
 import { useAuth } from '../contexts/AuthContext'
@@ -1599,68 +1598,6 @@ export default function Licenses() {
 
   const toggleMulti = (arr, id) => arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]
 
-  const parseBlobError = async (err) => {
-    if (!(err?.response?.data instanceof Blob)) return null
-    try {
-      const text = await err.response.data.text()
-      return JSON.parse(text)
-    } catch {
-      return null
-    }
-  }
-
-  const downloadLicenseReport = async () => {
-    console.log('[Licenses] Export report: requesting /licenses/report ...')
-    try {
-      const response = await licensesApi.report()
-      console.log('[Licenses] Export report: backend endpoint succeeded', { size: response.data?.size, type: response.data?.type })
-      const url = URL.createObjectURL(response.data)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `licenses-report-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`
-      link.click()
-      URL.revokeObjectURL(url)
-      toast.success('License report exported')
-      return
-    } catch (err) {
-      const blobError = await parseBlobError(err)
-      console.error('[Licenses] Export report: backend endpoint failed', {
-        status: err?.response?.status,
-        statusText: err?.response?.statusText,
-        data: blobError || err?.response?.data,
-        message: err?.message,
-      })
-
-      try {
-        console.log('[Licenses] Export report: trying client-side fallback via /licenses list ...')
-        const response = await licensesApi.list({ page: 1, limit: 500 })
-        const rows = Array.isArray(response.data) ? response.data : (response.data?.data || [])
-        console.log(`[Licenses] Export report: fallback fetched ${rows.length} license(s)`)
-        const headers = ['Name', 'Approval status', 'Expiry date', 'Renewal date', 'Supplier', 'Estimated cost', 'Currency', 'Assets', 'Services']
-        const values = rows.map(row => [row.name, row.approval_status, row.expiry_date || '', row.renewal_date || '', row.supplier_company || row.supplier || '', row.estimated_cost || '', row.currency || '', row.asset_count || 0, row.service_count || 0])
-        const csv = [headers, ...values]
-          .map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(','))
-          .join('\n')
-        const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }))
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `licenses-report-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`
-        link.click()
-        URL.revokeObjectURL(url)
-        toast.success('License report exported (fallback mode)')
-      } catch (fallbackError) {
-        console.error('[Licenses] Export report: fallback ALSO failed', {
-          status: fallbackError?.response?.status,
-          data: fallbackError?.response?.data,
-          message: fallbackError?.message,
-        })
-        const status = err?.response?.status
-        const message = blobError?.error || blobError?.details || err.response?.data?.error || fallbackError.response?.data?.error || err.message || 'Report export failed'
-        toast.error(status ? `Report export failed (HTTP ${status}): ${message}` : `Report export failed: ${message}`)
-      }
-    }
-  }
-
   return (
     <Layout title="Licenses">
       <div className="space-y-4">
@@ -1696,7 +1633,6 @@ export default function Licenses() {
                   </button>
                 )}
                 <button className="btn-primary" onClick={openCreateLicense}><Plus size={15} />New License</button>
-                <button className="btn-secondary" onClick={downloadLicenseReport}><Download size={15} />Export report</button>
               </div>
             </div>
 

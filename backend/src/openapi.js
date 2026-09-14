@@ -741,7 +741,7 @@ API keys are created from **Settings -> API Keys**.
         parameters: [
           { in: 'query', name: 'from',   schema: { type: 'string', format: 'date' } },
           { in: 'query', name: 'to',     schema: { type: 'string', format: 'date' } },
-          { in: 'query', name: 'format', schema: { type: 'string', enum: ['json','csv','pdf'], default: 'json' } },
+          { in: 'query', name: 'format', schema: { type: 'string', enum: ['json','csv','xlsx','pdf'], default: 'json' } },
         ],
         responses: {
           200: { description: 'JSON / CSV / PDF based on the format parameter' },
@@ -758,8 +758,15 @@ API keys are created from **Settings -> API Keys**.
       },
     },
     '/reports/assets': {
-      get: { tags: ['Reports'], summary: 'Asset report (counters by type/status/criticality)',
+      get: { tags: ['Reports'], summary: 'Asset report with CSV/Excel export',
+        parameters: [{ in: 'query', name: 'format', schema: { type: 'string', enum: ['json','csv','xlsx','pdf'], default: 'json' } }],
         responses: { 200: { description: 'Stats asset' } },
+      },
+    },
+    '/reports/licenses': {
+      get: { tags: ['Reports'], summary: 'License report with CSV/Excel/PDF export',
+        parameters: [{ in: 'query', name: 'format', schema: { type: 'string', enum: ['json','csv','xlsx','pdf'], default: 'json' } }],
+        responses: { 200: { description: 'License report' } },
       },
     },
 
