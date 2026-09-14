@@ -29,13 +29,13 @@ export default function LocalGroups() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    try { await groupsApi.create(form); toast.success('Gruppo creato'); setShowCreate(false); setForm({ name: '', description: '' }); load() }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await groupsApi.create(form); toast.success('Group created'); setShowCreate(false); setForm({ name: '', description: '' }); load() }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const handleDelete = async () => {
-    try { await groupsApi.delete(deleteTarget.id); toast.success('Eliminato'); setDeleteTarget(null); if (selected?.id === deleteTarget.id) setSelected(null); load() }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await groupsApi.delete(deleteTarget.id); toast.success('Group deleted'); setDeleteTarget(null); if (selected?.id === deleteTarget.id) setSelected(null); load() }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const toggleGroupSelection = (id) => {
@@ -61,8 +61,8 @@ export default function LocalGroups() {
       const results = await Promise.allSettled(selectedGroupIds.map((id) => groupsApi.delete(id)))
       const ok = results.filter(r => r.status === 'fulfilled').length
       const ko = results.length - ok
-      if (ok > 0) toast.success(`${ok} gruppo/i eliminato/i`)
-      if (ko > 0) toast.error(`${ko} gruppo/i non eliminato/i`)
+      if (ok > 0) toast.success(`${ok} group(s) deleted`)
+      if (ko > 0) toast.error(`${ko} group(s) could not be deleted`)
       if (selected?.id && selectedGroupIds.includes(selected.id)) setSelected(null)
       setSelectedGroupIds([])
       setBulkDeleteConfirm(false)
@@ -81,7 +81,7 @@ export default function LocalGroups() {
 
   const handleRemoveMember = async (userId) => {
     try { await groupsApi.removeMember(selected.id, userId); loadDetail(selected.id) }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   return (
@@ -98,7 +98,7 @@ export default function LocalGroups() {
                   disabled={selectedGroupIds.length === 0 || bulkDeleting}
                   onClick={() => setBulkDeleteConfirm(true)}
                 >
-                  <Trash2 size={13} />Elimina selezionati ({selectedGroupIds.length})
+                  <Trash2 size={13} />Delete selected ({selectedGroupIds.length})
                 </button>
               )}
               <button className="btn-primary text-xs" onClick={() => setShowCreate(true)}><Plus size={13} />Nuovo</button>
@@ -138,7 +138,7 @@ export default function LocalGroups() {
               </button>
             </div>
           ))}
-          {groups.length === 0 && <p className="text-sm text-gray-500 text-center py-4">Nessun gruppo</p>}
+          {groups.length === 0 && <p className="text-sm text-gray-500 text-center py-4">No groups</p>}
         </div>
 
         {/* Group detail */}
@@ -187,14 +187,14 @@ export default function LocalGroups() {
             </div>
           ) : (
             <div className="card p-8 flex items-center justify-center text-gray-400">
-              <p className="text-sm">Seleziona un gruppo</p>
+              <p className="text-sm">Select a group</p>
             </div>
           )}
         </div>
       </div>
 
       {showCreate && (
-        <Modal title="Nuovo Gruppo" onClose={() => setShowCreate(false)} size="sm">
+        <Modal title="New Group" onClose={() => setShowCreate(false)} size="sm">
           <form onSubmit={handleCreate} className="space-y-4">
             <div><label className="block text-sm font-medium mb-1">Nome *</label><input className="input" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div><label className="block text-sm font-medium mb-1">Descrizione</label><input className="input" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
@@ -206,13 +206,13 @@ export default function LocalGroups() {
         </Modal>
       )}
 
-      {deleteTarget && <ConfirmDialog title="Elimina Gruppo" message={`Eliminare "${deleteTarget.name}"?`} danger confirmLabel="Elimina" onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />}
+      {deleteTarget && <ConfirmDialog title="Delete Group" message={`Delete "${deleteTarget.name}"?`} danger confirmLabel="Delete" onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />}
       {bulkDeleteConfirm && (
         <ConfirmDialog
-          title="Elimina gruppi selezionati"
-          message={`Eliminare ${selectedGroupIds.length} gruppo/i selezionato/i? L'operazione non puo essere annullata.`}
+          title="Delete selected groups"
+          message={`Delete ${selectedGroupIds.length} selected group(s)? This action cannot be undone.`}
           danger
-          confirmLabel={bulkDeleting ? 'Eliminazione...' : 'Elimina'}
+          confirmLabel={bulkDeleting ? 'Deleting...' : 'Delete'}
           onConfirm={handleBulkDeleteGroups}
           onCancel={() => !bulkDeleting && setBulkDeleteConfirm(false)}
         />

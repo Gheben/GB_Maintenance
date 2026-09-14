@@ -14,7 +14,7 @@ export function useApi(apiFn, options = {}) {
       options.onSuccess?.(res.data)
       return res.data
     } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Errore'
+      const msg = err.response?.data?.error || err.message || 'Error'
       setError(msg)
       options.onError?.(msg)
       throw err

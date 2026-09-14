@@ -33,25 +33,25 @@ export default function ApiKeys() {
       setNewKey(res.data.key)
       setShowCreate(false)
       load()
-    } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const handleDelete = async () => {
-    try { await apikeysApi.delete(deleteTarget.id); toast.success('Chiave eliminata'); setDeleteTarget(null); load() }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    try { await apikeysApi.delete(deleteTarget.id); toast.success('API key deleted'); setDeleteTarget(null); load() }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   return (
     <Layout title="API Keys">
       <div className="space-y-4">
         <div className="flex justify-end">
-          <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />Nuova Chiave</button>
+          <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />New Key</button>
         </div>
 
         <div className="card overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>{['Nome','Prefisso','Scadenza','Ultima uso','Azioni'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+              <tr>{['Name','Prefix','Expiry','Last used','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {visibleKeys.map(k => (
@@ -65,7 +65,7 @@ export default function ApiKeys() {
                   </td>
                 </tr>
               ))}
-              {keys.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-gray-500">Nessuna chiave</td></tr>}
+              {keys.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-gray-500">No API keys</td></tr>}
             </tbody>
           </table>
           <div className="p-4 border-t border-gray-100 dark:border-gray-700">
@@ -75,21 +75,21 @@ export default function ApiKeys() {
       </div>
 
       {showCreate && (
-        <Modal title="Nuova API Key" onClose={() => setShowCreate(false)} size="sm">
+        <Modal title="New API Key" onClose={() => setShowCreate(false)} size="sm">
           <form onSubmit={handleCreate} className="space-y-4">
-            <div><label className="block text-sm font-medium mb-1">Nome *</label><input className="input" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div><label className="block text-sm font-medium mb-1">Scadenza (opzionale)</label><input type="datetime-local" className="input" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Name *</label><input className="input" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><label className="block text-sm font-medium mb-1">Expiry (optional)</label><input type="datetime-local" className="input" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} /></div>
             <div className="flex justify-end gap-3">
-              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Annulla</button>
-              <button type="submit" className="btn-primary">Crea</button>
+              <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="submit" className="btn-primary">Create</button>
             </div>
           </form>
         </Modal>
       )}
 
       {newKey && (
-        <Modal title="Chiave creata" onClose={() => setNewKey(null)} size="sm">
-          <p className="text-sm text-gray-600 mb-3">Copia questa chiave — non sarà più visualizzabile.</p>
+        <Modal title="Key created" onClose={() => setNewKey(null)} size="sm">
+          <p className="text-sm text-gray-600 mb-3">Copy this key now. It will not be shown again.</p>
           <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border">
             <code className="flex-1 text-xs break-all">{newKey}</code>
             <button onClick={() => { navigator.clipboard.writeText(newKey); toast.success('Copiata') }}>
@@ -97,13 +97,13 @@ export default function ApiKeys() {
             </button>
           </div>
           <div className="flex justify-end mt-4">
-            <button className="btn-primary" onClick={() => setNewKey(null)}>Ho salvato la chiave</button>
+            <button className="btn-primary" onClick={() => setNewKey(null)}>I saved the key</button>
           </div>
         </Modal>
       )}
 
       {deleteTarget && (
-        <ConfirmDialog title="Elimina Chiave" message={`Eliminare "${deleteTarget.name}"?`} danger confirmLabel="Elimina"
+        <ConfirmDialog title="Delete API key" message={`Delete "${deleteTarget.name}"?`} danger confirmLabel="Delete"
           onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />
       )}
     </Layout>

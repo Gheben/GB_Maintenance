@@ -334,7 +334,7 @@ export default function Settings() {
       setNewKey(res.data.key)
       setShowCreateKey(false)
       apikeysApi.list().then(r => setKeys(r.data))
-    } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const handleDeleteKey = async () => {

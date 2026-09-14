@@ -31,7 +31,7 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Conferma', dange
     <Modal title={title} onClose={onCancel} size="sm">
       <p className="text-gray-600 dark:text-gray-300 mb-6">{message}</p>
       <div className="flex justify-end gap-3">
-        <button className="btn-secondary" onClick={onCancel}>Annulla</button>
+        <button className="btn-secondary" onClick={onCancel}>Cancel</button>
         <button className={danger ? 'btn-danger' : 'btn-primary'} onClick={onConfirm}>{confirmLabel}</button>
       </div>
     </Modal>
