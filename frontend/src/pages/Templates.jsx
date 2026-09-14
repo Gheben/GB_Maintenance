@@ -71,6 +71,49 @@ function renderNotifyPreview(html, vars) {
   return html.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? `{{${k}}}`)
 }
 
+function renderApprovalPreview(eventType) {
+  const isMaintenance = String(eventType || '').startsWith('maintenance_owner_')
+  const isCounter = eventType === 'maintenance_owner_reschedule_countered'
+  const isProposal = eventType === 'maintenance_owner_reschedule_proposed'
+  const title = isMaintenance ? 'Maintenance Approval' : 'License Approval'
+  const status = isCounter
+    ? 'Counter proposal pending'
+    : isProposal
+      ? 'Reschedule proposal pending'
+      : 'Approval required'
+  const details = isMaintenance
+    ? 'Database Server Upgrade · 12/05/2026 22:00 - 13/05/2026 02:00'
+    : 'Microsoft SQL Server Enterprise · Expiry: 16/05/2027'
+  const actions = isMaintenance
+    ? '<button>Approve</button><button>Reject</button><button>Propose new dates</button>'
+    : '<button>Approve</button><button>Reject</button>'
+
+  return `<div id="approval-preview" class="approval-preview">
+    <div class="approval-shell">
+      <div class="approval-brand">GB Maintenance</div>
+      <h2>${title}</h2>
+      <p class="approval-status">${status}</p>
+      <p>${details}</p>
+      <div class="approval-actions">${actions}</div>
+      <small>This is a local preview. The real tokenized page opens from the delivered email.</small>
+    </div>
+  </div>`
+}
+
+function renderEmailPreviewDocument(template, eventType) {
+  const rendered = renderNotifyPreview(template, NOTIFY_SAMPLE_VARS)
+    .replace(/href=["'][^"']*(?:maintenance\/approval|licenses\/approval)[^"']*["']/gi, 'href="#approval-preview"')
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{font-family:sans-serif;font-size:14px;padding:16px;margin:0;color:#111;background:#fff}
+    .approval-preview{margin-top:24px;padding-top:24px;border-top:1px dashed #cbd5e1}
+    .approval-shell{max-width:520px;margin:auto;padding:24px;border:1px solid #dbeafe;border-radius:16px;background:#f8fafc;box-shadow:0 8px 24px #0f172a12}
+    .approval-brand{font-size:11px;text-transform:uppercase;letter-spacing:.16em;color:#64748b;font-weight:700}
+    .approval-shell h2{margin:10px 0 8px;color:#0f172a}.approval-status{display:inline-block;padding:6px 10px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:700}
+    .approval-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.approval-actions button{border:0;border-radius:8px;padding:9px 12px;background:#2563eb;color:white;font-weight:600}.approval-actions button+button{background:white;color:#334155;border:1px solid #cbd5e1}.approval-shell small{display:block;margin-top:18px;color:#64748b;font-size:11px}
+    #approval-preview:not(:target){display:none}
+  </style></head><body>${rendered}${renderApprovalPreview(eventType)}</body></html>`
+}
+
 export default function Templates() {
   const [activeTab, setActiveTab] = useState('checklist')
 
@@ -257,7 +300,7 @@ export default function Templates() {
                                   <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white" style={{ height: 380 }}>
                                     <iframe
                                       key={editingTpl.body_html_template}
-                                      srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:14px;padding:16px;margin:0;color:#111;background:#fff}</style></head><body>${renderNotifyPreview(editingTpl.body_html_template || '', NOTIFY_SAMPLE_VARS)}</body></html>`}
+                                      srcDoc={renderEmailPreviewDocument(editingTpl.body_html_template || '', editingTpl.event_type)}
                                       sandbox="allow-same-origin"
                                       className="w-full h-full border-0"
                                       title="Email preview"
