@@ -101,9 +101,8 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {expiringLicenses.length > 0 && (
             <div className="card p-5">
-              <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="mb-4">
                 <h2 className="font-semibold">Licenses expiring soon</h2>
-                <Link to="/licenses" className="text-xs text-brand-600 hover:underline">View all</Link>
               </div>
               <div className="space-y-2">
                 {expiringLicenses.map(license => (
@@ -117,9 +116,8 @@ export default function Dashboard() {
           )}
           {pendingApprovalMaintenance.length > 0 && (
             <div className="card p-5">
-              <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="mb-4">
                 <h2 className="font-semibold">Maintenance approvals pending</h2>
-                <Link to="/maintenance?status=pending_approval" className="text-xs text-brand-600 hover:underline">View all</Link>
               </div>
               <div className="space-y-2">
                 {pendingApprovalMaintenance.map(maintenance => (
