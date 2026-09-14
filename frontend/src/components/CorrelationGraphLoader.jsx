@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, Loader } from 'lucide-react';
 import InteractiveCorrelationGraph from './InteractiveCorrelationGraph';
-import { assetApi, serviceApi } from '../api';
+import { assetsApi, servicesApi } from '../api';
 
 /**
  * CorrelationGraphLoader
@@ -23,7 +23,7 @@ const CorrelationGraphLoader = ({ entityId, entityType, onNodeClick }) => {
       setLoading(true);
       setError(null);
 
-      const api = entityType === 'asset' ? assetApi : serviceApi;
+      const api = entityType === 'asset' ? assetsApi : servicesApi;
       const response = await api.getGraph(entityId, { depth });
 
       setGraphData(response);
