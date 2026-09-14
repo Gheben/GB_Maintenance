@@ -15,8 +15,16 @@ const LDAP_DIRECTORY_SEARCH_PERMISSIONS = ['maintenance', 'assets', 'services'];
 
 const DATA_TRANSFER_GROUPS = {
   core: {
-    label: 'Core',
-    tables: ['users', 'local_groups', 'user_group_members', 'ldap_group_mappings', 'assets', 'asset_dependencies', 'services', 'service_assets', 'service_dependencies', 'service_subscribers'],
+    label: 'Users & Groups',
+    tables: ['users', 'local_groups', 'user_group_members', 'ldap_group_mappings'],
+  },
+  assets: {
+    label: 'Assets',
+    tables: ['assets', 'asset_dependencies'],
+  },
+  services: {
+    label: 'Services',
+    tables: ['services', 'service_assets', 'service_dependencies', 'service_subscribers'],
   },
   maintenance: {
     label: 'Maintenance',
@@ -40,11 +48,29 @@ const DATA_TRANSFER_GROUPS = {
   },
 };
 
+const DATA_TRANSFER_DEPENDENCIES = {
+  assets: ['core'],
+  services: ['core', 'assets'],
+  maintenance: ['assets', 'services'],
+  incidents: ['assets', 'services'],
+  licenses: ['assets', 'services'],
+  monitoring: ['assets', 'services'],
+};
+
 const DATA_TRANSFER_TABLES = new Set(Object.values(DATA_TRANSFER_GROUPS).flatMap(group => group.tables));
 
 function normalizeTransferGroups(groups) {
-  if (!Array.isArray(groups) || groups.length === 0 || groups.includes('all')) return Object.keys(DATA_TRANSFER_GROUPS);
-  return [...new Set(groups.filter(group => Object.prototype.hasOwnProperty.call(DATA_TRANSFER_GROUPS, group)))];
+  const requested = !Array.isArray(groups) || groups.length === 0 || groups.includes('all')
+    ? Object.keys(DATA_TRANSFER_GROUPS)
+    : groups.filter(group => Object.prototype.hasOwnProperty.call(DATA_TRANSFER_GROUPS, group));
+  const expanded = new Set();
+  const addGroup = (group) => {
+    if (expanded.has(group)) return;
+    for (const dependency of DATA_TRANSFER_DEPENDENCIES[group] || []) addGroup(dependency);
+    expanded.add(group);
+  };
+  requested.forEach(addGroup);
+  return [...expanded];
 }
 
 function quoteIdentifier(value) {
@@ -72,7 +98,17 @@ async function getTransferTableMetadata(client, table) {
 }
 
 function getTransferTables(groups) {
-  return [...new Set(groups.flatMap(group => DATA_TRANSFER_GROUPS[group].tables))]
+  const tableOrder = [
+    'users', 'local_groups', 'user_group_members', 'ldap_group_mappings',
+    'assets', 'asset_dependencies', 'services', 'service_assets', 'service_dependencies', 'service_subscribers',
+    'maintenance_templates', 'maintenance_types', 'maintenance_windows', 'maintenance_assets', 'maintenance_services',
+    'blackout_periods', 'maintenance_status_subscribers', 'maintenance_owner_approvals',
+    'incident_severities', 'incidents', 'incident_assets', 'incident_services', 'incident_updates',
+    'suppliers', 'licenses', 'license_assets', 'license_services',
+    'settings', 'notification_templates', 'asset_categories', 'asset_probes', 'service_probes',
+  ];
+  const selectedTables = new Set(groups.flatMap(group => DATA_TRANSFER_GROUPS[group].tables));
+  return tableOrder.filter(table => selectedTables.has(table))
     .filter(table => DATA_TRANSFER_TABLES.has(table));
 }
 

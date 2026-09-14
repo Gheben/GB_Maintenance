@@ -59,6 +59,7 @@ export default function Settings() {
   const [demoLoading, setDemoLoading] = useState(false)
   const [demoWorking, setDemoWorking] = useState(false)
   const [showDemoClearConfirm, setShowDemoClearConfirm] = useState(false)
+  const [systemMigrationOpen, setSystemMigrationOpen] = useState(false)
   const [transferGroups, setTransferGroups] = useState([])
   const [selectedTransferGroups, setSelectedTransferGroups] = useState([])
   const [transferLoading, setTransferLoading] = useState(false)
@@ -1372,19 +1373,25 @@ export default function Settings() {
         )}
 
         {tab === 'general' && (
-          <div className="space-y-6">
+          <div className="flex flex-col space-y-6">
             {isSuperAdmin && (
-            <div className="card p-5 sm:p-6 space-y-4">
-              <div>
+            <div className="order-last card p-5 sm:p-6 space-y-4">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between text-left"
+                onClick={() => setSystemMigrationOpen(v => !v)}
+              >
                 <h2 className="font-semibold text-base flex items-center gap-2">
                   <Download size={16} className="text-gray-500" />Data migration
                 </h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Export or import selected application data as a JSON file. Existing records are updated by ID; data is not deleted.
-                </p>
-              </div>
+                {systemMigrationOpen ? <ChevronDown size={16} className="text-gray-500" /> : <ChevronRight size={16} className="text-gray-500" />}
+              </button>
 
+              {systemMigrationOpen && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 border-t border-gray-100 dark:border-gray-700 pt-4">
+                <p className="text-sm text-gray-500 lg:col-span-2">
+                  Export or import selected application data as a JSON file. Existing records are updated by ID; data is not deleted. Related entities are included automatically to preserve correlations.
+                </p>
                 <div className="space-y-3">
                   <h3 className="text-sm font-medium">Export data</h3>
                   <div className="grid grid-cols-2 gap-2">
@@ -1442,6 +1449,7 @@ export default function Settings() {
                   )}
                 </div>
               </div>
+              )}
             </div>
             )}
 
