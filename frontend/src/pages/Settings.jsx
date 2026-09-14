@@ -1373,7 +1373,7 @@ export default function Settings() {
         )}
 
         {tab === 'general' && (
-          <div className="flex flex-col space-y-6">
+          <div className="flex flex-col space-y-0">
             {isSuperAdmin && (
             <div className="order-last card p-5 sm:p-6 space-y-4">
               <button
