@@ -60,7 +60,25 @@ router.get('/maintenance', async (req, res) => {
   );
 
   if (format === 'csv') {
-    const csv = stringify(rows, { header: true });
+    const csvHeaders = [
+      ['id', 'ID'],
+      ['title', 'Title'],
+      ['type', 'Type'],
+      ['status', 'Status'],
+      ['impact_level', 'Impact'],
+      ['scheduled_start', 'Scheduled start'],
+      ['scheduled_end', 'Scheduled end'],
+      ['actual_start', 'Actual start'],
+      ['actual_end', 'Actual end'],
+      ['created_by', 'Created by'],
+      ['description', 'Description'],
+      ['notes', 'Notes'],
+      ['duration_minutes', 'Duration (minutes)'],
+    ];
+    const csv = stringify([
+      csvHeaders.map(([, label]) => label),
+      ...rows.map(row => csvHeaders.map(([key]) => row[key] ?? '')),
+    ]);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=maintenance-report.csv');
     return res.send(csv);
@@ -71,16 +89,16 @@ router.get('/maintenance', async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename=maintenance-report.pdf');
     doc.pipe(res);
-    doc.fontSize(18).text('Report Manutenzioni', { align: 'center' });
-    doc.fontSize(10).text(`Generato il ${new Date().toLocaleString('it-IT')}`, { align: 'center' });
+    doc.fontSize(18).text('Maintenance Report', { align: 'center' });
+    doc.fontSize(10).text(`Generated on ${new Date().toLocaleString('en-GB')}`, { align: 'center' });
     doc.moveDown();
 
     for (const row of rows) {
       doc.fontSize(11).fillColor('#1e40af').text(row.title);
       doc.fontSize(9).fillColor('#374151')
-        .text(`Tipo: ${row.type} | Stato: ${row.status} | Impatto: ${row.impact_level}`)
-        .text(`Inizio: ${new Date(row.scheduled_start).toLocaleString('it-IT')} | Fine: ${new Date(row.scheduled_end).toLocaleString('it-IT')}`)
-        .text(`Durata: ${Math.round(row.duration_minutes || 0)} min | Creato da: ${row.created_by || '-'}`);
+        .text(`Type: ${row.type} | Status: ${row.status} | Impact: ${row.impact_level}`)
+        .text(`Start: ${new Date(row.scheduled_start).toLocaleString('en-GB')} | End: ${new Date(row.scheduled_end).toLocaleString('en-GB')}`)
+        .text(`Duration: ${Math.round(row.duration_minutes || 0)} min | Created by: ${row.created_by || '-'}`);
       doc.moveDown(0.5);
       doc.moveTo(40, doc.y).lineTo(800, doc.y).strokeColor('#e5e7eb').stroke();
       doc.moveDown(0.3);
