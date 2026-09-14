@@ -12,6 +12,14 @@ const DEFAULT_BRANDING = {
   approval_page_loading_label: 'Loading approval request...',
   approval_page_missing_token_text: 'Missing approval token',
   approval_page_load_error_text: 'Cannot load approval request',
+  maintenance_approval_page_title: 'Maintenance Approval',
+  maintenance_approval_page_subtitle: 'Review the scheduled maintenance affecting an asset you own and confirm the proposed dates.',
+  maintenance_approval_page_primary_color: '#2563eb',
+  maintenance_approval_page_approve_label: 'Approve',
+  maintenance_approval_page_reject_label: 'Reject',
+  maintenance_approval_page_propose_label: 'Propose new date',
+  maintenance_approval_page_submit_label: 'Submit proposed date',
+  maintenance_approval_page_footer_text: 'Powered by {app_name}',
 }
 
 function getCachedBranding() {
@@ -125,10 +133,10 @@ export default function MaintenanceOwnerApproval() {
     }
   }
 
-  const accent = branding.approval_page_primary_color || DEFAULT_BRANDING.approval_page_primary_color
+  const accent = branding.maintenance_approval_page_primary_color || DEFAULT_BRANDING.maintenance_approval_page_primary_color
   const appName = branding.app_name || DEFAULT_BRANDING.app_name
   const logoUrl = String(branding.app_brand_image_url || branding.approval_page_logo_url || '').trim()
-  const footerTextTemplate = branding.approval_page_footer_text || DEFAULT_BRANDING.approval_page_footer_text
+  const footerTextTemplate = branding.maintenance_approval_page_footer_text || DEFAULT_BRANDING.maintenance_approval_page_footer_text
   const footerText = String(footerTextTemplate).replaceAll('{app_name}', appName)
   const initials = appName.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase()).join('') || 'GB'
   const status = String(info?.status || '').toLowerCase()
@@ -150,8 +158,8 @@ export default function MaintenanceOwnerApproval() {
               )}
               <div className="min-w-0">
                 <div className="text-xs uppercase tracking-[0.22em] text-gray-500 font-semibold">{appName}</div>
-                <h1 className="mt-2 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">Maintenance Approval</h1>
-                <p className="mt-3 text-sm sm:text-base text-gray-600 max-w-2xl">Review the scheduled maintenance affecting an asset you own and confirm the proposed dates.</p>
+                <h1 className="mt-2 text-3xl sm:text-4xl font-bold text-gray-900 leading-tight">{branding.maintenance_approval_page_title || DEFAULT_BRANDING.maintenance_approval_page_title}</h1>
+                <p className="mt-3 text-sm sm:text-base text-gray-600 max-w-2xl">{branding.maintenance_approval_page_subtitle || DEFAULT_BRANDING.maintenance_approval_page_subtitle}</p>
               </div>
             </div>
           </div>
@@ -224,18 +232,18 @@ export default function MaintenanceOwnerApproval() {
 
                     <div className="flex flex-wrap gap-3">
                       <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-white font-medium shadow-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60" style={{ backgroundColor: accent }} disabled={busy} onClick={() => respond('approve')}>
-                        <CheckCircle2 size={18} />Approve
+                        <CheckCircle2 size={18} />{branding.maintenance_approval_page_approve_label || DEFAULT_BRANDING.maintenance_approval_page_approve_label}
                       </button>
                       <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-700 font-medium border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-60" disabled={busy} onClick={() => respond('reject')}>
-                        <XCircle size={18} />Reject
+                        <XCircle size={18} />{branding.maintenance_approval_page_reject_label || DEFAULT_BRANDING.maintenance_approval_page_reject_label}
                       </button>
                       {!showReschedule ? (
                         <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-600 font-medium border border-gray-200 bg-gray-50 hover:bg-gray-100 disabled:opacity-60" disabled={busy} onClick={() => setShowReschedule(true)}>
-                          <CalendarClock size={18} />Propose new date
+                          <CalendarClock size={18} />{branding.maintenance_approval_page_propose_label || DEFAULT_BRANDING.maintenance_approval_page_propose_label}
                         </button>
                       ) : (
                         <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-white font-medium shadow-sm disabled:opacity-60" style={{ backgroundColor: '#0f766e' }} disabled={busy} onClick={() => respond('reschedule')}>
-                          <CalendarClock size={18} />Submit proposed date
+                          <CalendarClock size={18} />{branding.maintenance_approval_page_submit_label || DEFAULT_BRANDING.maintenance_approval_page_submit_label}
                         </button>
                       )}
                       <button className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-gray-600 font-medium border border-gray-200 bg-gray-50 hover:bg-gray-100 disabled:opacity-60" disabled={busy} onClick={load}>

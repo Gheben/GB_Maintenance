@@ -281,6 +281,14 @@ function getDefaultGeneralSettings() {
     approval_page_reject_reason_placeholder: 'Add a note for the requester, if needed.',
     approval_page_missing_token_text: 'Missing approval token',
     approval_page_load_error_text: 'Cannot load approval request',
+    maintenance_approval_page_title: 'Maintenance Approval',
+    maintenance_approval_page_subtitle: 'Review the scheduled maintenance affecting an asset you own and confirm the proposed dates.',
+    maintenance_approval_page_primary_color: '#2563eb',
+    maintenance_approval_page_approve_label: 'Approve',
+    maintenance_approval_page_reject_label: 'Reject',
+    maintenance_approval_page_propose_label: 'Propose new date',
+    maintenance_approval_page_submit_label: 'Submit proposed date',
+    maintenance_approval_page_footer_text: 'Powered by {app_name}',
   };
 }
 
@@ -377,6 +385,14 @@ router.get('/public-branding', async (req, res) => {
     approval_page_reject_reason_placeholder: general.approval_page_reject_reason_placeholder || defaults.approval_page_reject_reason_placeholder,
     approval_page_missing_token_text: general.approval_page_missing_token_text || defaults.approval_page_missing_token_text,
     approval_page_load_error_text: general.approval_page_load_error_text || defaults.approval_page_load_error_text,
+    maintenance_approval_page_title: general.maintenance_approval_page_title || defaults.maintenance_approval_page_title,
+    maintenance_approval_page_subtitle: general.maintenance_approval_page_subtitle || defaults.maintenance_approval_page_subtitle,
+    maintenance_approval_page_primary_color: general.maintenance_approval_page_primary_color || defaults.maintenance_approval_page_primary_color,
+    maintenance_approval_page_approve_label: general.maintenance_approval_page_approve_label || defaults.maintenance_approval_page_approve_label,
+    maintenance_approval_page_reject_label: general.maintenance_approval_page_reject_label || defaults.maintenance_approval_page_reject_label,
+    maintenance_approval_page_propose_label: general.maintenance_approval_page_propose_label || defaults.maintenance_approval_page_propose_label,
+    maintenance_approval_page_submit_label: general.maintenance_approval_page_submit_label || defaults.maintenance_approval_page_submit_label,
+    maintenance_approval_page_footer_text: general.maintenance_approval_page_footer_text || defaults.maintenance_approval_page_footer_text,
   });
 });
 

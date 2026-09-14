@@ -1611,6 +1611,39 @@ export default function Settings() {
                     )}
                     <p className="text-xs text-gray-400 mt-1">Used for sidebar logo, browser tab favicon and app icon.</p>
                   </div>
+                  <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-3">
+                    <div>
+                      <h3 className="font-medium text-sm">Maintenance approval page</h3>
+                      <p className="text-xs text-gray-400 mt-1">Customize the public owner-approval page used by maintenance emails. The app image above is used as its logo.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Page title</label>
+                      <input className="input" value={general.maintenance_approval_page_title || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_title: e.target.value }))} placeholder="Maintenance Approval" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Page subtitle</label>
+                      <textarea className="input min-h-[70px]" value={general.maintenance_approval_page_subtitle || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_subtitle: e.target.value }))} placeholder="Review the scheduled maintenance..." />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Primary color</label>
+                        <div className="flex items-center gap-2">
+                          <input type="color" className="w-10 h-9 rounded border border-gray-300 p-1 bg-white" value={general.maintenance_approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_primary_color: e.target.value }))} />
+                          <input className="input font-mono" value={general.maintenance_approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_primary_color: e.target.value }))} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1">Footer text</label>
+                        <input className="input" value={general.maintenance_approval_page_footer_text || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_footer_text: e.target.value }))} placeholder="Powered by {app_name}" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div><label className="block text-xs font-medium mb-1">Approve button</label><input className="input" value={general.maintenance_approval_page_approve_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_approve_label: e.target.value }))} /></div>
+                      <div><label className="block text-xs font-medium mb-1">Reject button</label><input className="input" value={general.maintenance_approval_page_reject_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_reject_label: e.target.value }))} /></div>
+                      <div><label className="block text-xs font-medium mb-1">Propose date button</label><input className="input" value={general.maintenance_approval_page_propose_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_propose_label: e.target.value }))} /></div>
+                      <div><label className="block text-xs font-medium mb-1">Submit proposal button</label><input className="input" value={general.maintenance_approval_page_submit_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_submit_label: e.target.value }))} /></div>
+                    </div>
+                  </div>
                   <div className="flex justify-end pt-2">
                     <button type="submit" className="btn-primary">Save</button>
                   </div>
