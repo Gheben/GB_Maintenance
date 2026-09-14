@@ -135,7 +135,7 @@ export default function Settings() {
   const [emailTemplates, setEmailTemplates] = useState([])
   const [editingTpl, setEditingTpl] = useState(null) // { id, subject_template, body_html_template, is_active }
   const [expandedTplGroups, setExpandedTplGroups] = useState({})
-  const [templateEmailOpen, setTemplateEmailOpen] = useState(true)
+  const [templateEmailOpen, setTemplateEmailOpen] = useState(false)
   const [templatePortalOpen, setTemplatePortalOpen] = useState(false)
   const [portalLicenseOpen, setPortalLicenseOpen] = useState(false)
   const [portalMaintenanceOpen, setPortalMaintenanceOpen] = useState(false)

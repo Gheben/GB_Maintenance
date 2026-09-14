@@ -1074,22 +1074,27 @@ router.get('/', [
 });
 
 router.get('/report', requireAuth, async (req, res) => {
-  const rows = await getMany(
-    `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.estimated_cost, l.currency,
-            s.company AS supplier,
-            (SELECT COUNT(*)::int FROM license_assets la WHERE la.license_id=l.id) AS asset_count,
-            (SELECT COUNT(*)::int FROM license_services ls WHERE ls.license_id=l.id) AS service_count
-     FROM licenses l
-     LEFT JOIN suppliers s ON s.id=l.supplier_id
-     WHERE l.is_active=true
-     ORDER BY l.expiry_date NULLS LAST, l.name`
-  );
-  const headers = ['Name', 'Approval status', 'Expiry date', 'Renewal date', 'Supplier', 'Estimated cost', 'Currency', 'Assets', 'Services'];
-  const values = rows.map(row => [row.name, row.approval_status, row.expiry_date || '', row.renewal_date || '', row.supplier || '', row.estimated_cost || '', row.currency || '', row.asset_count, row.service_count]);
-  const csv = [headers, ...values].map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename=licenses-report.csv');
-  res.send(`\uFEFF${csv}`);
+  try {
+    const rows = await getMany(
+      `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.estimated_cost, l.currency,
+              s.company AS supplier,
+              (SELECT COUNT(*)::int FROM license_assets la WHERE la.license_id=l.id) AS asset_count,
+              (SELECT COUNT(*)::int FROM license_services ls WHERE ls.license_id=l.id) AS service_count
+       FROM licenses l
+       LEFT JOIN suppliers s ON s.id=l.supplier_id
+       WHERE l.is_active=true
+       ORDER BY l.expiry_date NULLS LAST, l.name`
+    );
+    const headers = ['Name', 'Approval status', 'Expiry date', 'Renewal date', 'Supplier', 'Estimated cost', 'Currency', 'Assets', 'Services'];
+    const values = rows.map(row => [row.name, row.approval_status, row.expiry_date || '', row.renewal_date || '', row.supplier || '', row.estimated_cost || '', row.currency || '', row.asset_count, row.service_count]);
+    const csv = [headers, ...values].map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=licenses-report.csv');
+    res.send(`\uFEFF${csv}`);
+  } catch (err) {
+    console.error(`[Licenses] Report export failed: ${err.message}`);
+    res.status(500).json({ error: 'License report export failed', details: err.message });
+  }
 });
 
 router.get('/:id/history', [param('id').isUUID()], async (req, res) => {

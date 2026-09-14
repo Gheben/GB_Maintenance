@@ -1608,7 +1608,14 @@ export default function Licenses() {
       link.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Report export failed')
+      let message = err.response?.data?.error || 'Report export failed'
+      if (err.response?.data instanceof Blob) {
+        try {
+          const payload = JSON.parse(await err.response.data.text())
+          message = payload.error || payload.message || message
+        } catch { /* Keep the generic export message. */ }
+      }
+      toast.error(message)
     }
   }
 
