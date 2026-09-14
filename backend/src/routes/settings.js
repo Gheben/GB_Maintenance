@@ -90,7 +90,7 @@ function quoteIdentifier(value) {
 
 async function getTransferTableMetadata(client, table) {
   const columns = await client.query(
-    `SELECT column_name FROM information_schema.columns
+    `SELECT column_name, data_type, udt_name FROM information_schema.columns
      WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`,
     [table]
   );
@@ -104,6 +104,9 @@ async function getTransferTableMetadata(client, table) {
   );
   return {
     columns: columns.rows.map(row => row.column_name),
+    jsonColumns: new Set(columns.rows
+      .filter(row => row.data_type === 'json' || row.data_type === 'jsonb' || row.udt_name === 'json' || row.udt_name === 'jsonb')
+      .map(row => row.column_name)),
     primaryKey: primaryKey.rows.map(row => row.column_name),
   };
 }
@@ -145,6 +148,19 @@ function remapTransferValue(table, column, value, idMaps) {
     if (dependencyTable && idMaps[dependencyTable]?.has(value)) return idMaps[dependencyTable].get(value);
   }
   return value;
+}
+
+function normalizeTransferValue(value, isJsonColumn) {
+  if (!isJsonColumn || value === null || value === undefined) return value;
+  if (typeof value === 'string') {
+    try {
+      JSON.parse(value);
+      return value;
+    } catch {
+      return JSON.stringify(value);
+    }
+  }
+  return JSON.stringify(value);
 }
 
 function getTransferTables(groups) {
@@ -395,7 +411,10 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
           );
           if (updateColumns.length > 0) {
             const updateValues = updateColumns.map(column => remapTransferValue(
-              table, column, row[column] === undefined ? null : row[column], idMaps
+              table,
+              column,
+              normalizeTransferValue(row[column] === undefined ? null : row[column], metadata.jsonColumns.has(column)),
+              idMaps
             ));
             const updateConditions = naturalKey
               .map((column, index) => `${quoteIdentifier(column)}=$${updateColumns.length + index + 1}`)
@@ -446,7 +465,12 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
         const batch = rows.slice(offset, offset + 200);
         const values = [];
         const placeholders = batch.map(row => {
-          const rowPlaceholders = columns.map(column => `$${values.push(remapTransferValue(table, column, row[column] === undefined ? null : row[column], idMaps))}`);
+          const rowPlaceholders = columns.map(column => `$${values.push(remapTransferValue(
+            table,
+            column,
+            normalizeTransferValue(row[column] === undefined ? null : row[column], metadata.jsonColumns.has(column)),
+            idMaps
+          ))}`);
           return `(${rowPlaceholders.join(', ')})`;
         }).join(', ');
         await client.query(
