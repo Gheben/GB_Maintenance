@@ -337,7 +337,7 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
   };
 
   return (
-    <div className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col">
+    <div className="relative w-full bg-white border border-slate-200 rounded-lg overflow-visible flex flex-col isolate">
       {/* Controls */}
       <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
         <div className="text-sm text-slate-600">
@@ -371,23 +371,24 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
         </div>
       </div>
 
-      {/* SVG Canvas */}
-      <svg
-        ref={svgRef}
-        width={SVG_WIDTH}
-        height={SVG_HEIGHT}
-        className="flex-1 bg-gradient-to-br from-slate-50 to-white cursor-grab active:cursor-grabbing"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
-        style={{
-          transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
-          transformOrigin: 'top left',
-          transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-        }}
-      >
+      {/* SVG viewport: clips only the zoomed and panned graph. */}
+      <div className="relative h-[600px] w-full overflow-hidden bg-gradient-to-br from-slate-50 to-white">
+        <svg
+          ref={svgRef}
+          width={SVG_WIDTH}
+          height={SVG_HEIGHT}
+          className="block cursor-grab active:cursor-grabbing"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onWheel={handleWheel}
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: 'center center',
+            transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+          }}
+        >
         {/* Grid background */}
         <defs>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -401,12 +402,13 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
 
         {/* Render nodes */}
         {renderNodes()}
-      </svg>
+        </svg>
+      </div>
 
       {/* Node Details Modal */}
       {showNodeDetails && selectedNode && (
         <div 
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100]"
           onClick={() => {
             setShowNodeDetails(false);
             setSelectedNode(null);
