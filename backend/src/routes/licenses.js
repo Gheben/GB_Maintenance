@@ -1074,6 +1074,7 @@ router.get('/', [
 });
 
 router.get('/report', requireAuth, async (req, res) => {
+  console.log(`[Licenses] /report requested by user=${req.user?.username || req.user?.id || 'unknown'}`);
   try {
     const rows = await getMany(
             `SELECT l.name, l.approval_status, l.expiry_date, l.renewal_date, l.estimated_cost, l.currency,
@@ -1085,15 +1086,24 @@ router.get('/report', requireAuth, async (req, res) => {
        WHERE l.is_active=true
        ORDER BY l.expiry_date NULLS LAST, l.name`
     );
+    console.log(`[Licenses] /report query returned ${rows.length} row(s)`);
     const headers = ['Name', 'Approval status', 'Expiry date', 'Renewal date', 'Supplier', 'Estimated cost', 'Currency', 'Assets', 'Services'];
     const values = rows.map(row => [row.name, row.approval_status, row.expiry_date || '', row.renewal_date || '', row.supplier || '', row.estimated_cost || '', row.currency || '', row.asset_count, row.service_count]);
     const csv = [headers, ...values].map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename=licenses-report.csv');
     res.send(`\uFEFF${csv}`);
+    console.log('[Licenses] /report CSV sent successfully');
   } catch (err) {
-    console.error(`[Licenses] Report export failed: ${err.message}`);
-    res.status(500).json({ error: 'License report export failed', details: err.message });
+    console.error('[Licenses] /report FAILED');
+    console.error(`  message: ${err.message}`);
+    console.error(`  pg code: ${err.code || 'n/a'}`);
+    console.error(`  stack: ${err.stack}`);
+    res.status(500).json({
+      error: 'License report export failed',
+      details: err.message,
+      code: err.code || null,
+    });
   }
 });
 
