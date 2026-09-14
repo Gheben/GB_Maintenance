@@ -13,6 +13,69 @@ const router = Router();
 
 const LDAP_DIRECTORY_SEARCH_PERMISSIONS = ['maintenance', 'assets', 'services'];
 
+const DATA_TRANSFER_GROUPS = {
+  core: {
+    label: 'Core',
+    tables: ['users', 'local_groups', 'user_group_members', 'ldap_group_mappings', 'assets', 'asset_dependencies', 'services', 'service_assets', 'service_dependencies', 'service_subscribers'],
+  },
+  maintenance: {
+    label: 'Maintenance',
+    tables: ['maintenance_templates', 'maintenance_types', 'maintenance_windows', 'maintenance_assets', 'maintenance_services', 'blackout_periods', 'maintenance_status_subscribers', 'maintenance_owner_approvals'],
+  },
+  incidents: {
+    label: 'Incidents',
+    tables: ['incident_severities', 'incidents', 'incident_assets', 'incident_services', 'incident_updates'],
+  },
+  licenses: {
+    label: 'Licenses',
+    tables: ['suppliers', 'licenses', 'license_assets', 'license_services'],
+  },
+  configuration: {
+    label: 'Configuration',
+    tables: ['settings', 'notification_templates', 'asset_categories'],
+  },
+  monitoring: {
+    label: 'Monitoring',
+    tables: ['asset_probes', 'service_probes'],
+  },
+};
+
+const DATA_TRANSFER_TABLES = new Set(Object.values(DATA_TRANSFER_GROUPS).flatMap(group => group.tables));
+
+function normalizeTransferGroups(groups) {
+  if (!Array.isArray(groups) || groups.length === 0 || groups.includes('all')) return Object.keys(DATA_TRANSFER_GROUPS);
+  return [...new Set(groups.filter(group => Object.prototype.hasOwnProperty.call(DATA_TRANSFER_GROUPS, group)))];
+}
+
+function quoteIdentifier(value) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+async function getTransferTableMetadata(client, table) {
+  const columns = await client.query(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`,
+    [table]
+  );
+  const primaryKey = await client.query(
+    `SELECT a.attname AS column_name
+     FROM pg_index i
+     JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=ANY(i.indkey)
+     WHERE i.indrelid=$1::regclass AND i.indisprimary
+     ORDER BY array_position(i.indkey, a.attnum)`,
+    [table]
+  );
+  return {
+    columns: columns.rows.map(row => row.column_name),
+    primaryKey: primaryKey.rows.map(row => row.column_name),
+  };
+}
+
+function getTransferTables(groups) {
+  return [...new Set(groups.flatMap(group => DATA_TRANSFER_GROUPS[group].tables))]
+    .filter(table => DATA_TRANSFER_TABLES.has(table));
+}
+
 function requireLdapDirectorySearchAccess(req, res, next) {
   if (!req.user) return res.status(401).json({ error: 'Non autenticato' });
   if (req.user.role === 'superadmin' || req.user.role === 'admin') return next();
@@ -165,6 +228,89 @@ router.get('/public-branding', async (req, res) => {
     approval_page_missing_token_text: general.approval_page_missing_token_text || defaults.approval_page_missing_token_text,
     approval_page_load_error_text: general.approval_page_load_error_text || defaults.approval_page_load_error_text,
   });
+});
+
+// ─── GET /api/settings/data-transfer/options ─────────────────────────────────
+router.get('/data-transfer/options', requireAuth, requireSuperAdmin, async (req, res) => {
+  res.json({
+    groups: Object.entries(DATA_TRANSFER_GROUPS).map(([id, group]) => ({ id, label: group.label, tables: group.tables })),
+  });
+});
+
+// ─── GET /api/settings/data-transfer/export ──────────────────────────────────
+router.get('/data-transfer/export', requireAuth, requireSuperAdmin, async (req, res) => {
+  const requestedGroups = String(req.query.groups || 'all').split(',').map(group => group.trim()).filter(Boolean);
+  const groups = normalizeTransferGroups(requestedGroups);
+  const tables = getTransferTables(groups);
+  const data = {};
+
+  for (const table of tables) {
+    data[table] = await getMany(`SELECT * FROM ${quoteIdentifier(table)}`);
+  }
+
+  await auditService.log(req.user.id, req.user.username, 'settings:data_export', 'settings', 'data_transfer', JSON.stringify({ groups }), req.ip);
+  res.json({
+    format: 'gb-maintenance-data-transfer',
+    version: 1,
+    exported_at: new Date().toISOString(),
+    groups,
+    tables: data,
+  });
+});
+
+// ─── POST /api/settings/data-transfer/import ─────────────────────────────────
+router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req, res) => {
+  const payload = req.body?.data || req.body;
+  if (!payload || payload.format !== 'gb-maintenance-data-transfer' || !payload.tables || typeof payload.tables !== 'object') {
+    return res.status(400).json({ error: 'Invalid GB Maintenance data transfer file' });
+  }
+
+  const groups = normalizeTransferGroups(req.body?.groups || payload.groups);
+  const tables = getTransferTables(groups).filter(table => Array.isArray(payload.tables[table]));
+  if (tables.length === 0) return res.status(400).json({ error: 'No selected data found in the import file' });
+
+  const imported = {};
+  await transaction(async (client) => {
+    for (const table of tables) {
+      const rows = payload.tables[table];
+      if (rows.length === 0) {
+        imported[table] = 0;
+        continue;
+      }
+
+      const metadata = await getTransferTableMetadata(client, table);
+      const columns = metadata.columns.filter(column => Object.prototype.hasOwnProperty.call(rows[0], column));
+      if (columns.length === 0) continue;
+      const quotedColumns = columns.map(quoteIdentifier).join(', ');
+      let conflictClause = 'ON CONFLICT DO NOTHING';
+      if (metadata.primaryKey.length > 0 && metadata.primaryKey.every(column => columns.includes(column))) {
+        const updates = columns
+          .filter(column => !metadata.primaryKey.includes(column))
+          .map(column => `${quoteIdentifier(column)}=EXCLUDED.${quoteIdentifier(column)}`)
+          .join(', ');
+        conflictClause = updates
+          ? `ON CONFLICT (${metadata.primaryKey.map(quoteIdentifier).join(', ')}) DO UPDATE SET ${updates}`
+          : `ON CONFLICT (${metadata.primaryKey.map(quoteIdentifier).join(', ')}) DO NOTHING`;
+      }
+
+      for (let offset = 0; offset < rows.length; offset += 200) {
+        const batch = rows.slice(offset, offset + 200);
+        const values = [];
+        const placeholders = batch.map(row => {
+          const rowPlaceholders = columns.map(column => `$${values.push(row[column] === undefined ? null : row[column])}`);
+          return `(${rowPlaceholders.join(', ')})`;
+        }).join(', ');
+        await client.query(
+          `INSERT INTO ${quoteIdentifier(table)} (${quotedColumns}) VALUES ${placeholders} ${conflictClause}`,
+          values
+        );
+      }
+      imported[table] = rows.length;
+    }
+  });
+
+  await auditService.log(req.user.id, req.user.username, 'settings:data_import', 'settings', 'data_transfer', JSON.stringify({ groups, tables }), req.ip);
+  res.json({ message: 'Data imported successfully', groups, imported });
 });
 
 // ─── GET /api/settings ────────────────────────────────────────────────────────

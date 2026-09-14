@@ -219,6 +219,11 @@ export const settingsApi = {
   getDemoStatus: () => api.get('/settings/demo/status'),
   createDemoData: () => api.post('/settings/demo/create'),
   clearDemoData: () => api.post('/settings/demo/clear'),
+  dataTransferOptions: () => api.get('/settings/data-transfer/options'),
+  exportData: (groups) => api.get('/settings/data-transfer/export', {
+    params: { groups: groups.length ? groups.join(',') : 'all' },
+  }),
+  importData: (data, groups) => api.post('/settings/data-transfer/import', { data, groups }),
 }
 
 // ─── Status ───────────────────────────────────────────────────────────────────

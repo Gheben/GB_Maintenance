@@ -5,7 +5,7 @@ import { settingsApi, apikeysApi, maintenanceTypesApi, assetCategoriesApi, notif
 import { toast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 import { format } from 'date-fns'
-import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, Clock, RefreshCw, Pencil, GripVertical, Mail, Network, KeyRound, Tag, Cog, Bell, ChevronDown, ChevronRight, Upload } from 'lucide-react'
+import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, Clock, RefreshCw, Pencil, GripVertical, Mail, Network, KeyRound, Tag, Cog, Bell, ChevronDown, ChevronRight, Upload, Download } from 'lucide-react'
 
 
 function Section({ title, children }) {
@@ -59,6 +59,13 @@ export default function Settings() {
   const [demoLoading, setDemoLoading] = useState(false)
   const [demoWorking, setDemoWorking] = useState(false)
   const [showDemoClearConfirm, setShowDemoClearConfirm] = useState(false)
+  const [transferGroups, setTransferGroups] = useState([])
+  const [selectedTransferGroups, setSelectedTransferGroups] = useState([])
+  const [transferLoading, setTransferLoading] = useState(false)
+  const [transferFile, setTransferFile] = useState(null)
+  const [transferFileData, setTransferFileData] = useState(null)
+  const [importGroups, setImportGroups] = useState([])
+  const [importLoading, setImportLoading] = useState(false)
   const [appBrandUploading, setAppBrandUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showSmtpPass, setShowSmtpPass] = useState(false)
@@ -147,6 +154,15 @@ export default function Settings() {
         .then(r => setDemoStatus(r.data))
         .catch(() => setDemoStatus(null))
         .finally(() => setDemoLoading(false))
+    }
+    if (tab === 'general' && isSuperAdmin) {
+      settingsApi.dataTransferOptions()
+        .then(r => {
+          const groups = r.data?.groups || []
+          setTransferGroups(groups)
+          setSelectedTransferGroups(groups.map(group => group.id))
+        })
+        .catch(() => {})
     }
   }, [tab, isSuperAdmin])
 
@@ -377,6 +393,67 @@ export default function Settings() {
   }
 
   const spBaseUrl = saml.sp_base_url || window.location.origin
+
+  const toggleTransferGroup = (groupId, setter) => {
+    setter(current => current.includes(groupId)
+      ? current.filter(id => id !== groupId)
+      : [...current, groupId])
+  }
+
+  const exportApplicationData = async () => {
+    if (selectedTransferGroups.length === 0) return toast.error('Select at least one data group')
+    setTransferLoading(true)
+    try {
+      const response = await settingsApi.exportData(selectedTransferGroups)
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `gb-maintenance-data-${format(new Date(), 'yyyyMMdd-HHmm')}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      toast.success('Data exported successfully')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Export failed')
+    } finally {
+      setTransferLoading(false)
+    }
+  }
+
+  const readTransferFile = async (file) => {
+    setTransferFile(file || null)
+    setTransferFileData(null)
+    setImportGroups([])
+    if (!file) return
+    try {
+      const data = JSON.parse(await file.text())
+      if (data?.format !== 'gb-maintenance-data-transfer' || !data.tables) throw new Error('Invalid transfer file')
+      const availableGroups = transferGroups
+        .filter(group => group.tables.some(table => Array.isArray(data.tables[table])))
+        .map(group => group.id)
+      setTransferFileData(data)
+      setImportGroups(availableGroups)
+    } catch {
+      setTransferFile(null)
+      toast.error('Invalid data transfer JSON file')
+    }
+  }
+
+  const importApplicationData = async () => {
+    if (!transferFileData || importGroups.length === 0) return toast.error('Select at least one data group to import')
+    setImportLoading(true)
+    try {
+      const response = await settingsApi.importData(transferFileData, importGroups)
+      toast.success(response.data?.message || 'Data imported successfully')
+      setTransferFile(null)
+      setTransferFileData(null)
+      setImportGroups([])
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Import failed')
+    } finally {
+      setImportLoading(false)
+    }
+  }
 
   const TYPE_COLORS = [
     '#3b82f6','#6366f1','#8b5cf6','#ec4899',
@@ -1296,6 +1373,78 @@ export default function Settings() {
 
         {tab === 'general' && (
           <div className="space-y-6">
+            {isSuperAdmin && (
+            <div className="card p-5 sm:p-6 space-y-4">
+              <div>
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <Download size={16} className="text-gray-500" />Data migration
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Export or import selected application data as a JSON file. Existing records are updated by ID; data is not deleted.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 border-t border-gray-100 dark:border-gray-700 pt-4">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium">Export data</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {transferGroups.map(group => (
+                      <label key={group.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 accent-brand-600"
+                          checked={selectedTransferGroups.includes(group.id)}
+                          onChange={() => toggleTransferGroup(group.id, setSelectedTransferGroups)}
+                        />
+                        {group.label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className="btn-secondary text-xs" onClick={() => setSelectedTransferGroups(transferGroups.map(group => group.id))}>Select all</button>
+                    <button type="button" className="btn-secondary text-xs" onClick={() => setSelectedTransferGroups([])}>Clear</button>
+                    <button type="button" className="btn-primary inline-flex items-center gap-2" onClick={exportApplicationData} disabled={transferLoading}>
+                      <Download size={14} />{transferLoading ? 'Exporting...' : 'Export JSON'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium">Import data</h3>
+                  <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer text-sm w-fit">
+                    <Upload size={14} />Choose JSON file
+                    <input type="file" accept="application/json,.json" className="hidden" onChange={e => readTransferFile(e.target.files?.[0])} />
+                  </label>
+                  {transferFileData && (
+                    <>
+                      <p className="text-xs text-gray-500 break-all">{transferFile?.name} · Select groups to import:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {transferGroups.map(group => {
+                          const available = group.tables.some(table => Array.isArray(transferFileData.tables[table]))
+                          if (!available) return null
+                          return (
+                            <label key={group.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 accent-brand-600"
+                                checked={importGroups.includes(group.id)}
+                                onChange={() => toggleTransferGroup(group.id, setImportGroups)}
+                              />
+                              {group.label}
+                            </label>
+                          )
+                        })}
+                      </div>
+                      <button type="button" className="btn-primary inline-flex items-center gap-2" onClick={importApplicationData} disabled={importLoading}>
+                        <Upload size={14} />{importLoading ? 'Importing...' : 'Import selected data'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+            )}
+
             {isSuperAdmin && (
             <div className="card p-5 sm:p-6 space-y-4">
               <button
