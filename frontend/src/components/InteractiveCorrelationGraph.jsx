@@ -85,6 +85,28 @@ function getNodeLicenseStatus(node) {
   return statuses.length > 0 ? 'valid' : null;
 }
 
+function getLabelLines(label, maxLength = 20) {
+  const words = String(label || '').trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 1 && String(label || '').length <= maxLength) return [String(label || '')];
+
+  const lines = [];
+  let currentLine = '';
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (currentLine && candidate.length > maxLength) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = candidate;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+
+  const limitedLines = lines.slice(0, 2);
+  if (lines.length > 2) limitedLines[1] = `${limitedLines[1].slice(0, maxLength - 3)}...`;
+  return limitedLines;
+}
+
 const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
   const svgRef = useRef(null);
   const [zoom, setZoom] = useState(1);
@@ -211,6 +233,13 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
       const radius = isHovered || isSelected ? 28 : 20;
       const statusColor = getStatusColor(node.status);
       const licenseStatus = getNodeLicenseStatus(node);
+      const labelLines = getLabelLines(node.label);
+      const labelWidth = 170;
+      const labelHeight = 68;
+      const labelX = Math.max(5, Math.min(pos.x - labelWidth / 2, SVG_WIDTH - labelWidth - 5));
+      const labelY = pos.y + 32 + labelHeight > SVG_HEIGHT - 5
+        ? pos.y - labelHeight - 32
+        : pos.y + 32;
 
       return (
         <g
@@ -298,10 +327,10 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
                 </filter>
               </defs>
               <rect
-                x={Math.max(5, Math.min(pos.x - 75, SVG_WIDTH - 150))}
-                y={pos.y + 32}
-                width="150"
-                height="50"
+                x={labelX}
+                y={labelY}
+                width={labelWidth}
+                height={labelHeight}
                 rx="6"
                 fill="white"
                 stroke="#D1D5DB"
@@ -309,19 +338,23 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
                 filter="url(#tooltip-shadow)"
               />
               <text
-                x={Math.max(5, Math.min(pos.x - 75, SVG_WIDTH - 150)) + 75}
-                y={pos.y + 47}
+                x={labelX + labelWidth / 2}
+                y={labelY + 18}
                 fontSize="12"
                 fill="#1F2937"
                 fontWeight="600"
                 textAnchor="middle"
                 className="pointer-events-none"
               >
-                {node.label.length > 18 ? node.label.substring(0, 15) + '...' : node.label}
+                {labelLines.map((line, index) => (
+                  <tspan key={`${node.id}-label-${index}`} x={labelX + labelWidth / 2} dy={index === 0 ? 0 : 16}>
+                    {line}
+                  </tspan>
+                ))}
               </text>
               <text
-                x={Math.max(5, Math.min(pos.x - 75, SVG_WIDTH - 150)) + 75}
-                y={pos.y + 66}
+                x={labelX + labelWidth / 2}
+                y={labelY + (labelLines.length > 1 ? 56 : 48)}
                 fontSize="11"
                 fill="#6B7280"
                 textAnchor="middle"

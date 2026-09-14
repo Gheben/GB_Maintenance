@@ -37,7 +37,7 @@ function impactLabel(v) {
   return String(v || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Unknown'
 }
 
-function fmt(dt, f = 'MM/dd/yyyy HH:mm') {
+function fmt(dt, f = 'dd/MM/yyyy HH:mm') {
   if (!dt) return '—'
   try { return format(new Date(dt), f) } catch { return '—' }
 }
@@ -226,7 +226,7 @@ function MaintenanceCard({ m, colorClass }) {
           <span>Finished: {fmt(m.actual_end)}</span>
         )}
         {m.status === 'scheduled' && m.scheduled_start && (
-          <span>{fmt(m.scheduled_start)} → {fmt(m.scheduled_end, 'HH:mm MM/dd')}</span>
+          <span>{fmt(m.scheduled_start)} → {fmt(m.scheduled_end, 'HH:mm dd/MM')}</span>
         )}
       </div>
       {m.description && <p className="text-xs text-gray-400 mt-1">{m.description}</p>}
