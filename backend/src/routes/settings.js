@@ -368,7 +368,7 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
     await transaction(async (client) => {
       for (const table of tables) {
         currentTable = table;
-      const rows = payload.tables[table];
+      let rows = payload.tables[table].slice();
       if (rows.length === 0) {
         imported[table] = 0;
         continue;
@@ -377,13 +377,39 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
       const metadata = await getTransferTableMetadata(client, table);
       const naturalKey = TRANSFER_NATURAL_KEYS[table];
       if (naturalKey && naturalKey.every(column => Object.prototype.hasOwnProperty.call(rows[0], column))) {
+        const rowsToInsert = [];
         for (const row of rows) {
           const conditions = naturalKey.map((column, index) => `${quoteIdentifier(column)}=$${index + 1}`).join(' AND ');
           const existing = await client.query(
             `SELECT ${quoteIdentifier(metadata.primaryKey[0] || 'id')} AS id FROM ${quoteIdentifier(table)} WHERE ${conditions} LIMIT 1`,
             naturalKey.map(column => row[column])
           );
-          if (existing.rows[0] && row.id && idMaps[table]) idMaps[table].set(row.id, existing.rows[0].id);
+          if (!existing.rows[0]) {
+            rowsToInsert.push(row);
+            continue;
+          }
+
+          if (row.id && idMaps[table]) idMaps[table].set(row.id, existing.rows[0].id);
+          const updateColumns = metadata.columns.filter(column =>
+            column !== 'id' && !naturalKey.includes(column) && Object.prototype.hasOwnProperty.call(row, column)
+          );
+          if (updateColumns.length > 0) {
+            const updateValues = updateColumns.map(column => remapTransferValue(
+              table, column, row[column] === undefined ? null : row[column], idMaps
+            ));
+            const updateConditions = naturalKey
+              .map((column, index) => `${quoteIdentifier(column)}=$${updateColumns.length + index + 1}`)
+              .join(' AND ');
+            await client.query(
+              `UPDATE ${quoteIdentifier(table)} SET ${updateColumns.map((column, index) => `${quoteIdentifier(column)}=$${index + 1}`).join(', ')} WHERE ${updateConditions}`,
+              [...updateValues, ...naturalKey.map(column => row[column])]
+            );
+          }
+        }
+        rows = rowsToInsert;
+        if (rows.length === 0) {
+          imported[table] = payload.tables[table].length;
+          continue;
         }
       }
       if (table === 'users') {
@@ -405,16 +431,14 @@ router.post('/data-transfer/import', requireAuth, requireSuperAdmin, async (req,
       if (columns.length === 0) continue;
       const quotedColumns = columns.map(quoteIdentifier).join(', ');
       let conflictClause = 'ON CONFLICT DO NOTHING';
-      const conflictColumns = naturalKey?.every(column => columns.includes(column))
-        ? naturalKey
-        : metadata.primaryKey;
+      const conflictColumns = metadata.primaryKey;
       if (conflictColumns.length > 0 && conflictColumns.every(column => columns.includes(column))) {
         const updates = columns
           .filter(column => !conflictColumns.includes(column) && column !== 'id')
           .map(column => `${quoteIdentifier(column)}=EXCLUDED.${quoteIdentifier(column)}`)
           .join(', ');
         conflictClause = updates
-          ? `ON CONFLICT DO UPDATE SET ${updates}`
+          ? `ON CONFLICT (${conflictColumns.map(quoteIdentifier).join(', ')}) DO UPDATE SET ${updates}`
           : 'ON CONFLICT DO NOTHING';
       }
 
