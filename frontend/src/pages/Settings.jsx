@@ -105,6 +105,10 @@ export default function Settings() {
   const [emailTemplates, setEmailTemplates] = useState([])
   const [editingTpl, setEditingTpl] = useState(null) // { id, subject_template, body_html_template, is_active }
   const [expandedTplGroups, setExpandedTplGroups] = useState({})
+  const [templateEmailOpen, setTemplateEmailOpen] = useState(true)
+  const [templatePortalOpen, setTemplatePortalOpen] = useState(false)
+  const [portalLicenseOpen, setPortalLicenseOpen] = useState(false)
+  const [portalMaintenanceOpen, setPortalMaintenanceOpen] = useState(false)
 
   // Asset Categories state
   const [aCats, setACats] = useState([])
@@ -510,7 +514,7 @@ export default function Settings() {
 
   const TABS = [
     { id: 'smtp',     label: 'SMTP & Email',      icon: Mail },
-    { id: 'emailtpl', label: 'Email Templates',   icon: Bell },
+    { id: 'emailtpl', label: 'Templates',          icon: Bell },
     ...(isSuperAdmin ? [{ id: 'ldap', label: 'LDAP / AD', icon: Network }] : []),
     ...(isSuperAdmin ? [{ id: 'saml', label: 'SAML / SSO', icon: Shield }] : []),
     { id: 'apikeys',  label: 'API Keys',           icon: KeyRound },
@@ -1174,7 +1178,13 @@ export default function Settings() {
 
           return (
             <div className="space-y-4">
-              <Section title="Email Templates">
+              <div className="card p-5 sm:p-6 space-y-4">
+                <button type="button" className="w-full flex items-center justify-between text-left" onClick={() => setTemplateEmailOpen(v => !v)}>
+                  <h2 className="font-semibold text-base flex items-center gap-2"><Bell size={16} className="text-gray-500" />Email</h2>
+                  {templateEmailOpen ? <ChevronDown size={16} className="text-gray-500" /> : <ChevronRight size={16} className="text-gray-500" />}
+                </button>
+                {templateEmailOpen && (
+                <div className="space-y-4 border-t border-gray-100 dark:border-gray-700 pt-4">
                 <p className="text-sm text-gray-500">Customize the subject and body of automated emails for each event. Use <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded text-xs">{'{{variable}}'}</code> placeholders — preview uses sample data.</p>
                 <div className="space-y-4">
                   {orderedGroups.map(({ group, templates }) => (
@@ -1324,10 +1334,62 @@ export default function Settings() {
                   ))}
                   {emailTemplates.length === 0 && <p className="text-sm text-gray-400 py-4 text-center">No email templates found</p>}
                 </div>
-              </Section>
+                </div>
+                )}
+              </div>
             </div>
           )
         })()}
+
+        {tab === 'emailtpl' && (
+          <div className="card p-5 sm:p-6 space-y-4">
+            <button type="button" className="w-full flex items-center justify-between text-left" onClick={() => setTemplatePortalOpen(v => !v)}>
+              <h2 className="font-semibold text-base flex items-center gap-2"><ExternalLink size={16} className="text-gray-500" />Portal</h2>
+              {templatePortalOpen ? <ChevronDown size={16} className="text-gray-500" /> : <ChevronRight size={16} className="text-gray-500" />}
+            </button>
+            {templatePortalOpen && (
+              <div className="space-y-3 border-t border-gray-100 dark:border-gray-700 pt-4">
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                  <button type="button" className="w-full px-4 py-3 flex items-center justify-between text-left bg-gray-50 dark:bg-gray-700/50" onClick={() => setPortalLicenseOpen(v => !v)}>
+                    <span className="font-medium text-sm">License approval page</span>
+                    {portalLicenseOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  </button>
+                  {portalLicenseOpen && (
+                    <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-5">
+                      <div className="space-y-3">
+                        <input className="input" placeholder="Page title" value={general.approval_page_title || ''} onChange={e => setGeneral(f => ({ ...f, approval_page_title: e.target.value }))} />
+                        <textarea className="input min-h-[80px]" placeholder="Page subtitle" value={general.approval_page_subtitle || ''} onChange={e => setGeneral(f => ({ ...f, approval_page_subtitle: e.target.value }))} />
+                        <div className="flex items-center gap-2"><input type="color" className="w-10 h-9" value={general.approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, approval_page_primary_color: e.target.value }))} /><input className="input font-mono" value={general.approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, approval_page_primary_color: e.target.value }))} /></div>
+                        <div className="grid grid-cols-2 gap-2"><input className="input" placeholder="Approve" value={general.approval_page_approve_button_label || ''} onChange={e => setGeneral(f => ({ ...f, approval_page_approve_button_label: e.target.value }))} /><input className="input" placeholder="Reject" value={general.approval_page_reject_button_label || ''} onChange={e => setGeneral(f => ({ ...f, approval_page_reject_button_label: e.target.value }))} /></div>
+                        <button type="button" className="btn-primary" onClick={saveGeneral}>Save license portal</button>
+                      </div>
+                      <div className="rounded-2xl border border-gray-200 bg-slate-50 p-5"><p className="text-xs uppercase tracking-widest text-gray-500">{general.app_name || 'GB Maintenance'}</p><h3 className="mt-2 text-xl font-bold">{general.approval_page_title || 'License Approval'}</h3><p className="mt-2 text-sm text-gray-600">{general.approval_page_subtitle || 'Review the request and confirm.'}</p><div className="mt-5 flex gap-2"><span className="px-3 py-2 rounded-lg text-white text-sm" style={{ backgroundColor: general.approval_page_primary_color || '#2563eb' }}>{general.approval_page_approve_button_label || 'Approve'}</span><span className="px-3 py-2 rounded-lg border bg-white text-sm">{general.approval_page_reject_button_label || 'Reject'}</span></div></div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                  <button type="button" className="w-full px-4 py-3 flex items-center justify-between text-left bg-gray-50 dark:bg-gray-700/50" onClick={() => setPortalMaintenanceOpen(v => !v)}>
+                    <span className="font-medium text-sm">Maintenance approval page</span>
+                    {portalMaintenanceOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  </button>
+                  {portalMaintenanceOpen && (
+                    <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-5">
+                      <div className="space-y-3">
+                        <input className="input" placeholder="Page title" value={general.maintenance_approval_page_title || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_title: e.target.value }))} />
+                        <textarea className="input min-h-[80px]" placeholder="Page subtitle" value={general.maintenance_approval_page_subtitle || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_subtitle: e.target.value }))} />
+                        <div className="flex items-center gap-2"><input type="color" className="w-10 h-9" value={general.maintenance_approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_primary_color: e.target.value }))} /><input className="input font-mono" value={general.maintenance_approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_primary_color: e.target.value }))} /></div>
+                        <div className="grid grid-cols-2 gap-2"><input className="input" placeholder="Approve" value={general.maintenance_approval_page_approve_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_approve_label: e.target.value }))} /><input className="input" placeholder="Reject" value={general.maintenance_approval_page_reject_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_reject_label: e.target.value }))} /><input className="input" placeholder="Propose new date" value={general.maintenance_approval_page_propose_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_propose_label: e.target.value }))} /><input className="input" placeholder="Submit proposed date" value={general.maintenance_approval_page_submit_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_submit_label: e.target.value }))} /></div>
+                        <button type="button" className="btn-primary" onClick={saveGeneral}>Save maintenance portal</button>
+                      </div>
+                      <div className="rounded-2xl border border-gray-200 bg-slate-50 p-5"><p className="text-xs uppercase tracking-widest text-gray-500">{general.app_name || 'GB Maintenance'}</p><h3 className="mt-2 text-xl font-bold">{general.maintenance_approval_page_title || 'Maintenance Approval'}</h3><p className="mt-2 text-sm text-gray-600">{general.maintenance_approval_page_subtitle || 'Review the scheduled maintenance.'}</p><div className="mt-5 flex flex-wrap gap-2"><span className="px-3 py-2 rounded-lg text-white text-sm" style={{ backgroundColor: general.maintenance_approval_page_primary_color || '#2563eb' }}>{general.maintenance_approval_page_approve_label || 'Approve'}</span><span className="px-3 py-2 rounded-lg border bg-white text-sm">{general.maintenance_approval_page_reject_label || 'Reject'}</span><span className="px-3 py-2 rounded-lg border bg-white text-sm">{general.maintenance_approval_page_propose_label || 'Propose new date'}</span></div></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {tab === 'assetcat' && (
           <div className="space-y-4">
@@ -1610,39 +1672,6 @@ export default function Settings() {
                       </div>
                     )}
                     <p className="text-xs text-gray-400 mt-1">Used for sidebar logo, browser tab favicon and app icon.</p>
-                  </div>
-                  <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-3">
-                    <div>
-                      <h3 className="font-medium text-sm">Maintenance approval page</h3>
-                      <p className="text-xs text-gray-400 mt-1">Customize the public owner-approval page used by maintenance emails. The app image above is used as its logo.</p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Page title</label>
-                      <input className="input" value={general.maintenance_approval_page_title || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_title: e.target.value }))} placeholder="Maintenance Approval" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Page subtitle</label>
-                      <textarea className="input min-h-[70px]" value={general.maintenance_approval_page_subtitle || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_subtitle: e.target.value }))} placeholder="Review the scheduled maintenance..." />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium mb-1">Primary color</label>
-                        <div className="flex items-center gap-2">
-                          <input type="color" className="w-10 h-9 rounded border border-gray-300 p-1 bg-white" value={general.maintenance_approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_primary_color: e.target.value }))} />
-                          <input className="input font-mono" value={general.maintenance_approval_page_primary_color || '#2563eb'} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_primary_color: e.target.value }))} />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium mb-1">Footer text</label>
-                        <input className="input" value={general.maintenance_approval_page_footer_text || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_footer_text: e.target.value }))} placeholder="Powered by {app_name}" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div><label className="block text-xs font-medium mb-1">Approve button</label><input className="input" value={general.maintenance_approval_page_approve_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_approve_label: e.target.value }))} /></div>
-                      <div><label className="block text-xs font-medium mb-1">Reject button</label><input className="input" value={general.maintenance_approval_page_reject_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_reject_label: e.target.value }))} /></div>
-                      <div><label className="block text-xs font-medium mb-1">Propose date button</label><input className="input" value={general.maintenance_approval_page_propose_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_propose_label: e.target.value }))} /></div>
-                      <div><label className="block text-xs font-medium mb-1">Submit proposal button</label><input className="input" value={general.maintenance_approval_page_submit_label || ''} onChange={e => setGeneral(f => ({ ...f, maintenance_approval_page_submit_label: e.target.value }))} /></div>
-                    </div>
                   </div>
                   <div className="flex justify-end pt-2">
                     <button type="submit" className="btn-primary">Save</button>
