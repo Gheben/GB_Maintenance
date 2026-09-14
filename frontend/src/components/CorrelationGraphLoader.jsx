@@ -26,7 +26,8 @@ const CorrelationGraphLoader = ({ entityId, entityType, onNodeClick }) => {
       const api = entityType === 'asset' ? assetsApi : servicesApi;
       const response = await api.getGraph(entityId, { depth });
 
-      setGraphData(response);
+      console.log('[CorrelationGraph] Response:', response);
+      setGraphData(response.data || response);
     } catch (err) {
       console.error('Error loading correlation graph:', err);
       setError(err.message || 'Failed to load correlation graph');
@@ -60,6 +61,13 @@ const CorrelationGraphLoader = ({ entityId, entityType, onNodeClick }) => {
 
   return (
     <div className="space-y-3">
+      {/* Debug info - remove later */}
+      {graphData && (
+        <div className="px-3 py-2 text-xs bg-blue-50 border border-blue-200 rounded text-blue-600">
+          Loaded: {graphData.nodes?.length || 0} nodes, {graphData.edges?.length || 0} edges
+        </div>
+      )}
+
       {/* Depth control */}
       <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg border border-slate-200">
         <label htmlFor="graph-depth" className="text-sm font-medium text-slate-700">

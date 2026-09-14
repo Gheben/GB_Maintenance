@@ -314,6 +314,9 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
       <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
         <div className="text-sm text-slate-600">
           {graphData.nodes.length} nodes • {graphData.edges.length} connections
+          {graphData.nodes.length === 1 && graphData.edges.length === 0 && (
+            <span className="ml-3 text-amber-600">ℹ️ No correlations found - this is an isolated entity</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button

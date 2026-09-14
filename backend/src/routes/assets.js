@@ -1035,6 +1035,7 @@ router.get('/:id/graph', async (req, res) => {
     const d = Math.max(1, Math.min(3, parseInt(depth, 10)));
     const graph = await buildAssetGraph(req.params.id, d);
     if (!graph) return res.status(404).json({ error: 'Asset not found' });
+    console.log(`[GRAPH] Asset ${req.params.id}: ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
     res.json(graph);
   } catch (err) {
     console.error('[GRAPH] Error building asset graph:', err.message);
