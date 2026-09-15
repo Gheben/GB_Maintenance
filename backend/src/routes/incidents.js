@@ -75,8 +75,8 @@ router.get('/:id', async (req, res) => {
     [req.params.id]
   );
   const services = await getMany(
-    `SELECT s.id, s.name, s.slug, s.status AS current_status
-           s.part_is_relevant
+    `SELECT s.id, s.name, s.slug, s.status AS current_status,
+            s.part_is_relevant
      FROM services s JOIN incident_services is2 ON is2.service_id=s.id WHERE is2.incident_id=$1`,
     [req.params.id]
   );

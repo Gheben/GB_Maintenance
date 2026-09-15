@@ -212,7 +212,7 @@ export default function Maintenance() {
                     />
                   </th>
                 )}
-                {['Title','Type','Impact','Status','Assets','Start','End',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
+                {['Title','Type','Impact','Status','Assets','Services','Period',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -254,8 +254,12 @@ export default function Maintenance() {
                             ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">{m.asset_count}</span>
                             : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-gray-500">{format(new Date(m.scheduled_start), 'MM/dd HH:mm')}</td>
-                        <td className="px-4 py-3 text-gray-500">{format(new Date(m.scheduled_end), 'MM/dd HH:mm')}</td>
+                        <td className="px-4 py-3 text-center">
+                          {m.service_count > 0
+                            ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-purple-100 text-purple-700">{m.service_count}</span>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{format(new Date(m.scheduled_start), 'MM/dd/yyyy HH:mm')} - {format(new Date(m.scheduled_end), 'MM/dd/yyyy HH:mm')}</td>
                         <td className="px-4 py-3">
                           <button onClick={e => { e.stopPropagation(); navigate(`/maintenance/${m.id}`) }} className="action-icon-btn" title="Edit"><Pencil size={14} /></button>
                         </td>

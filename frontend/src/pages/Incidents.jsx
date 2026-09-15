@@ -1,20 +1,24 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
-import { Modal } from '../components/Modal'
+import { Modal, ConfirmDialog } from '../components/Modal'
 import { toast } from '../components/Toast'
 import { ItemPicker } from '../components/ItemPicker'
 import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
 import { PartIsServiceNotice } from '../components/PartIsServiceNotice'
 import { incidentsApi, assetsApi, servicesApi, incidentSeveritiesApi } from '../api'
-import { Plus, RefreshCw, Pencil } from 'lucide-react'
+import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
+import { useAuth } from '../contexts/AuthContext'
 
 const SEVERITIES = ['critical','high','medium','low']
 
 export default function Incidents() {
+  const { hasRole } = useAuth()
+  const canBulkDelete = hasRole('superadmin', 'admin')
+  const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -23,6 +27,9 @@ export default function Incidents() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
+  const [selectedIncidentIds, setSelectedIncidentIds] = useState([])
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const [form, setForm] = useState({ title: '', severity: 'high', description: '', ticket_ref: '' })
   const [allAssets, setAllAssets] = useState([])
   const [allServices, setAllServices] = useState([])
@@ -40,6 +47,9 @@ export default function Incidents() {
   }, [filterStatus, page, limit])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    setSelectedIncidentIds(prev => prev.filter(id => items.some(i => i.id === id)))
+  }, [items])
 
   useEffect(() => {
     if (showCreate || editTarget) {
@@ -103,6 +113,39 @@ export default function Incidents() {
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
+  const toggleIncidentSelection = (id) => {
+    if (!canBulkDelete) return
+    setSelectedIncidentIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const toggleSelectAllVisible = (checked) => {
+    if (!canBulkDelete) return
+    setSelectedIncidentIds(checked ? items.map(i => i.id) : [])
+  }
+
+  const handleBulkDelete = async () => {
+    if (!canBulkDelete || selectedIncidentIds.length === 0) return
+    setBulkDeleting(true)
+    try {
+      const results = await Promise.allSettled(selectedIncidentIds.map(id => incidentsApi.delete(id)))
+      const deleted = results.filter(r => r.status === 'fulfilled').length
+      const failedIds = selectedIncidentIds.filter((_, index) => results[index].status === 'rejected')
+      if (deleted > 0) toast.success(`${deleted} incident(s) deleted`)
+      if (failedIds.length > 0) {
+        toast.error(`${failedIds.length} incident(s) could not be deleted`)
+        setSelectedIncidentIds(failedIds)
+      } else {
+        setSelectedIncidentIds([])
+        setConfirmBulkDelete(false)
+      }
+      load()
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  const allVisibleSelected = items.length > 0 && items.every(i => selectedIncidentIds.includes(i.id))
+
   return (
     <Layout title="Incidents">
       <div className="space-y-4">
@@ -113,6 +156,11 @@ export default function Incidents() {
           </select>
           <div className="flex gap-2">
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
+            {canBulkDelete && (
+              <button className="btn-danger" disabled={selectedIncidentIds.length === 0 || bulkDeleting} onClick={() => setConfirmBulkDelete(true)}>
+                <Trash2 size={15} />Delete selected ({selectedIncidentIds.length})
+              </button>
+            )}
             <Link to="/incidents/severities" className="btn-secondary">Severity</Link>
             <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} />New Incident</button>
           </div>
@@ -120,16 +168,38 @@ export default function Incidents() {
 
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="min-w-[640px] w-full text-sm">
+          <table className="min-w-[700px] w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
-              <tr>{['Title','Severity','Status','Opened','Resolved',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
+              <tr>
+                {canBulkDelete && (
+                  <th className="text-left px-4 py-3 font-medium text-gray-600 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={(e) => toggleSelectAllVisible(e.target.checked)}
+                      aria-label="Select all visible incidents"
+                    />
+                  </th>
+                )}
+                {['Title','Severity','Status','Opened','Resolved',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
+              </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {loading ? <tr><td colSpan={6} className="text-center py-8 text-gray-500">Loading...</td></tr>
+              {loading ? <tr><td colSpan={canBulkDelete ? 7 : 6} className="text-center py-8 text-gray-500">Loading...</td></tr>
                 : items.map(i => (
-                  <tr key={i.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <tr key={i.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onDoubleClick={() => navigate(`/incidents/${i.id}`)} title="Double click to open">
+                    {canBulkDelete && (
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIncidentIds.includes(i.id)}
+                          onChange={() => toggleIncidentSelection(i.id)}
+                          aria-label={`Select incident ${i.title}`}
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-3 font-medium">
-                      <Link to={`/incidents/${i.id}`} className="text-brand-600 hover:underline">{i.title}</Link>
+                      <span className="text-sm text-gray-800 dark:text-gray-100">{i.title}</span>
                       {i.ticket_ref && <div className="text-xs text-brand-600 mt-0.5">Ticket: {i.ticket_ref}</div>}
                     </td>
                     <td className="px-4 py-3">
@@ -148,7 +218,7 @@ export default function Incidents() {
                     <td className="px-4 py-3 text-gray-500">{format(new Date(i.started_at), 'MM/dd HH:mm')}</td>
                     <td className="px-4 py-3 text-gray-500">{i.resolved_at ? format(new Date(i.resolved_at), 'MM/dd HH:mm') : '—'}</td>
                     <td className="px-4 py-3">
-                      <button onClick={() => openEdit(i)} className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">
+                      <button onClick={(e) => { e.stopPropagation(); openEdit(i) }} className="action-icon-btn" title="Edit">
                         <Pencil size={14} />
                       </button>
                     </td>
@@ -261,6 +331,17 @@ export default function Incidents() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {confirmBulkDelete && (
+        <ConfirmDialog
+          title="Delete Selected Incidents"
+          message={`Delete ${selectedIncidentIds.length} selected incident(s)? This action cannot be undone.`}
+          danger
+          confirmLabel={bulkDeleting ? 'Deleting...' : 'Delete'}
+          onConfirm={handleBulkDelete}
+          onCancel={() => !bulkDeleting && setConfirmBulkDelete(false)}
+        />
       )}
     </Layout>
   )
