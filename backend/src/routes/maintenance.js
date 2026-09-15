@@ -438,7 +438,7 @@ router.use(requireAuth);
 
 // ─── GET /api/maintenance ─────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
-  const { status, type, impact_level, asset_id, from, to, page = 1, limit = 50, upcoming } = req.query;
+  const { status, type, impact_level, asset_id, from, to, page = 1, limit = 50, upcoming, search } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
   const params = []; let i = 1;
   const filters = [];
@@ -449,6 +449,12 @@ router.get('/', async (req, res) => {
   if (from)         { filters.push(`mw.scheduled_start >= $${i++}`); params.push(from); }
   if (to)           { filters.push(`mw.scheduled_end <= $${i++}`); params.push(to); }
   if (upcoming === 'true') { filters.push(`mw.scheduled_start > NOW() AND mw.status IN ('scheduled','draft','pending_approval')`); }
+  if (search && String(search).trim()) {
+    const q = `%${String(search).trim()}%`;
+    filters.push(`(mw.title ILIKE $${i} OR mw.description ILIKE $${i + 1} OR mw.ticket_ref ILIKE $${i + 2} OR mw.type ILIKE $${i + 3})`);
+    params.push(q, q, q, q);
+    i += 4;
+  }
   if (asset_id) {
     filters.push(`mw.id IN (SELECT maintenance_id FROM maintenance_assets WHERE asset_id=$${i++})`);
     params.push(asset_id);

@@ -9,7 +9,7 @@ import { ItemPicker } from '../components/ItemPicker'
 import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
 import { PartIsServiceNotice } from '../components/PartIsServiceNotice'
 import { incidentsApi, assetsApi, servicesApi, incidentSeveritiesApi } from '../api'
-import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react'
+import { Plus, RefreshCw, Pencil, Trash2, Search, Cog, Server } from 'lucide-react'
 import { format } from 'date-fns'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -24,6 +24,7 @@ export default function Incidents() {
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(25)
   const [filterStatus, setFilterStatus] = useState('')
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
@@ -41,10 +42,10 @@ export default function Incidents() {
 
   const load = useCallback(() => {
     setLoading(true)
-    incidentsApi.list({ status: filterStatus, page, limit })
+    incidentsApi.list({ status: filterStatus, search: search.trim() || undefined, page, limit })
       .then(r => { setItems(r.data.data); setTotal(r.data.total) })
       .finally(() => setLoading(false))
-  }, [filterStatus, page, limit])
+  }, [filterStatus, search, page, limit])
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
@@ -150,11 +151,16 @@ export default function Incidents() {
     <Layout title="Incidents">
       <div className="space-y-4">
         <div className="flex flex-wrap gap-3 items-center justify-between">
-          <select className="input w-48" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
-            <option value="">All statuses</option>
-            {['investigating','identified','monitoring','resolved'].map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
+            <input className="input pl-9 w-48" placeholder="Search..." value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          </div>
           <div className="flex gap-2">
+            <select className="input w-48" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
+              <option value="">All statuses</option>
+              {['investigating','identified','monitoring','resolved'].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
             {canBulkDelete && (
               <button className="btn-danger" disabled={selectedIncidentIds.length === 0 || bulkDeleting} onClick={() => setConfirmBulkDelete(true)}>
@@ -181,7 +187,7 @@ export default function Incidents() {
                     />
                   </th>
                 )}
-                {['Title','Severity','Status','Opened','Resolved',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
+                {['Title','Severity','Status','Assets','Services','Opened','Resolved',''].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -215,6 +221,16 @@ export default function Incidents() {
                       </span>
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={i.status} /></td>
+                    <td className="px-4 py-3 text-center">
+                      {i.asset_count > 0
+                        ? <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700"><Cog size={11} />{i.asset_count}</span>
+                        : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {i.service_count > 0
+                        ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700"><Server size={11} />{i.service_count}</span>
+                        : <span className="text-gray-300">—</span>}
+                    </td>
                     <td className="px-4 py-3 text-gray-500">{format(new Date(i.started_at), 'MM/dd HH:mm')}</td>
                     <td className="px-4 py-3 text-gray-500">{i.resolved_at ? format(new Date(i.resolved_at), 'MM/dd HH:mm') : '—'}</td>
                     <td className="px-4 py-3">

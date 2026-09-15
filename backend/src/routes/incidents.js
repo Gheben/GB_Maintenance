@@ -22,13 +22,19 @@ async function getAllowedSeverities() {
 
 // ─── GET /api/incidents ───────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
-  const { status, severity, page = 1, limit = 50 } = req.query;
+  const { status, severity, search, page = 1, limit = 50 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
   const params = []; let i = 1;
   const filters = [];
 
   if (status)   { filters.push(`i.status=$${i++}`); params.push(status); }
   if (severity) { filters.push(`i.severity=$${i++}`); params.push(severity); }
+  if (search && String(search).trim()) {
+    const q = `%${String(search).trim()}%`;
+    filters.push(`(i.title ILIKE $${i} OR i.description ILIKE $${i + 1} OR i.ticket_ref ILIKE $${i + 2})`);
+    params.push(q, q, q);
+    i += 3;
+  }
 
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
   const countRes = await query(`SELECT COUNT(*) FROM incidents i ${where}`, params);
@@ -36,7 +42,8 @@ router.get('/', async (req, res) => {
 
   const rows = await getMany(
     `SELECT i.*, u.display_name as created_by_name,
-       COALESCE(ia.asset_count, 0) as asset_count
+       COALESCE(ia.asset_count, 0) as asset_count,
+       COALESCE(isvc.service_count, 0) as service_count
      FROM incidents i
      LEFT JOIN users u ON u.id=i.created_by
      LEFT JOIN LATERAL (
@@ -44,6 +51,11 @@ router.get('/', async (req, res) => {
        FROM incident_assets ia
        WHERE ia.incident_id=i.id
      ) ia ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS service_count
+       FROM incident_services is2
+       WHERE is2.incident_id=i.id
+     ) isvc ON TRUE
      ${where} ORDER BY i.started_at DESC LIMIT $${i++} OFFSET $${i}`,
     [...params, parseInt(limit), offset]
   );

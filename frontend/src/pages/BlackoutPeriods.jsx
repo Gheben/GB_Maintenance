@@ -8,7 +8,7 @@ import { PartIsServiceNotice } from '../components/PartIsServiceNotice'
 import { Pagination } from '../components/Pagination'
 import { StatusBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toast'
-import { Plus, Trash2, Pencil, Server, Cog, ShieldCheck, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Pencil, Server, Cog, ShieldCheck, RefreshCw, Search } from 'lucide-react'
 import { format } from 'date-fns'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -31,6 +31,7 @@ export default function BlackoutPeriods() {
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(25)
+  const [search, setSearch] = useState('')
   const [selectedPeriodIds, setSelectedPeriodIds] = useState([])
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -156,26 +157,38 @@ export default function BlackoutPeriods() {
     </form>
   )
 
-  const visiblePeriods = periods
+  const filteredPeriods = periods.filter((period) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return [period.name, period.description, period.ticket_ref].some((value) => String(value || '').toLowerCase().includes(q));
+  })
+  const visiblePeriods = filteredPeriods
   const total = visiblePeriods.length
   const pageCount = Math.max(1, Math.ceil(total / limit))
   const currentPage = Math.min(page, pageCount)
   const pagedPeriods = visiblePeriods.slice((currentPage - 1) * limit, currentPage * limit)
   const allVisibleSelected = pagedPeriods.length > 0 && pagedPeriods.every(period => selectedPeriodIds.includes(period.id))
 
-  useEffect(() => { setPage(1) }, [limit])
+  useEffect(() => { setPage(1) }, [limit, search])
 
   return (
     <Layout title="Blackout Periods">
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
+            <input className="input pl-9 w-48" placeholder="Search..." value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
           {canBulkDelete && (
             <button className="btn-danger" disabled={selectedPeriodIds.length === 0 || bulkDeleting} onClick={() => setConfirmBulkDelete(true)}>
               <Trash2 size={15} />Delete selected ({selectedPeriodIds.length})
             </button>
           )}
-          <button className="btn-primary" onClick={() => { setForm(EMPTY_FORM); setShowCreate(true) }}><Plus size={15} />New Period</button>
+            <button className="btn-primary" onClick={() => { setForm(EMPTY_FORM); setShowCreate(true) }}><Plus size={15} />New Period</button>
+          </div>
         </div>
 
         <div className="card overflow-hidden">
@@ -183,17 +196,17 @@ export default function BlackoutPeriods() {
             <table className="min-w-[700px] w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50"><tr>
                 {canBulkDelete && <th className="text-left px-4 py-3 font-medium text-gray-600 w-10"><input type="checkbox" checked={allVisibleSelected} onChange={event => toggleSelectAllVisible(event.target.checked)} aria-label="Select all visible blackout periods" /></th>}
-                {['Name','Period','Status','Services','Assets',''].map(header => <th key={header} className="text-left px-4 py-3 font-medium text-gray-600">{header}</th>)}
+                {['Name','Services','Assets','Period','Status',''].map(header => <th key={header} className="text-left px-4 py-3 font-medium text-gray-600">{header}</th>)}
               </tr></thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {loading ? <tr><td colSpan={canBulkDelete ? 7 : 6} className="py-8 text-center text-gray-500">Loading...</td></tr> : pagedPeriods.map(period => (
                   <tr key={period.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onDoubleClick={() => openEdit(period)} title="Double click to edit">
                     {canBulkDelete && <td className="px-4 py-3" onClick={event => event.stopPropagation()}><input type="checkbox" checked={selectedPeriodIds.includes(period.id)} onChange={() => togglePeriodSelection(period.id)} aria-label={`Select blackout period ${period.name}`} /></td>}
                     <td className="px-4 py-3"><p className="font-medium">{period.name}</p>{period.ticket_ref && <p className="mt-0.5 text-xs text-brand-600">Ticket: {period.ticket_ref}</p>}</td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{format(new Date(period.start_date), 'MM/dd/yyyy')} - {format(new Date(period.end_date), 'MM/dd/yyyy')}</td>
-                    <td className="px-4 py-3"><StatusBadge status={blackoutStatus(period)} /></td>
                     <td className="px-4 py-3"><span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700"><Cog size={11} />{period.services?.length || 0}</span></td>
                     <td className="px-4 py-3"><span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700"><Server size={11} />{period.assets?.length || 0}{period.assets?.some(asset => asset.part_is_relevant) && <ShieldCheck size={11} className="text-amber-600" title="Part-IS Relevant" />}</span></td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{format(new Date(period.start_date), 'MM/dd/yyyy')} - {format(new Date(period.end_date), 'MM/dd/yyyy')}</td>
+                    <td className="px-4 py-3"><StatusBadge status={blackoutStatus(period)} /></td>
                     <td className="px-4 py-3">
                       <button onClick={e => { e.stopPropagation(); openEdit(period) }} className="action-icon-btn" title="Edit"><Pencil size={14} /></button>
                     </td>

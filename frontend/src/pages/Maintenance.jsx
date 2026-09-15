@@ -9,7 +9,7 @@ import { ItemPicker } from '../components/ItemPicker'
 import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
 import { PartIsServiceNotice } from '../components/PartIsServiceNotice'
 import { maintenanceApi, maintenanceTypesApi, assetsApi, servicesApi, blackoutApi } from '../api'
-import { Plus, RefreshCw, Pencil, ChevronDown, ChevronRight as ChevronRight2, CheckCircle2, Ban, AlertTriangle, Trash2 } from 'lucide-react'
+import { Plus, RefreshCw, Pencil, ChevronDown, ChevronRight as ChevronRight2, CheckCircle2, Ban, AlertTriangle, Trash2, Search, Cog, Server } from 'lucide-react'
 import { format } from 'date-fns'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -25,6 +25,7 @@ export default function Maintenance() {
   const [limit, setLimit] = useState(25)
   const [filterStatus, setFilterStatus] = useState('')
   const [filterUpcoming, setFilterUpcoming] = useState(false)
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [expandedId, setExpandedId] = useState(null)
@@ -45,10 +46,10 @@ export default function Maintenance() {
 
   const load = useCallback(() => {
     setLoading(true)
-    maintenanceApi.list({ status: filterStatus, upcoming: filterUpcoming || undefined, page, limit })
+    maintenanceApi.list({ status: filterStatus, upcoming: filterUpcoming || undefined, search: search.trim() || undefined, page, limit })
       .then(r => { setItems(r.data.data); setTotal(r.data.total) })
       .finally(() => setLoading(false))
-  }, [filterStatus, filterUpcoming, page, limit])
+  }, [filterStatus, filterUpcoming, search, page, limit])
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
@@ -172,6 +173,11 @@ export default function Maintenance() {
         ))}
         <div className="flex flex-wrap gap-3 items-center justify-between">
           <div className="flex gap-2 flex-wrap items-center">
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
+              <input className="input pl-9 w-48" placeholder="Search..." value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1) }} />
+            </div>
             <select className="input w-48" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
               <option value="">All statuses</option>
               {['scheduled','pending_approval','in_progress','completed','cancelled','rejected'].map(s => <option key={s} value={s}>{s}</option>)}
@@ -251,12 +257,12 @@ export default function Maintenance() {
                         <td className="px-4 py-3"><StatusBadge status={m.status} /></td>
                         <td className="px-4 py-3 text-center">
                           {m.asset_count > 0
-                            ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">{m.asset_count}</span>
+                            ? <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700"><Cog size={11} />{m.asset_count}</span>
                             : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-3 text-center">
                           {m.service_count > 0
-                            ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-purple-100 text-purple-700">{m.service_count}</span>
+                            ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700"><Server size={11} />{m.service_count}</span>
                             : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{format(new Date(m.scheduled_start), 'MM/dd/yyyy HH:mm')} - {format(new Date(m.scheduled_end), 'MM/dd/yyyy HH:mm')}</td>
