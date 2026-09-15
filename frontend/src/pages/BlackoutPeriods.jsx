@@ -196,17 +196,17 @@ export default function BlackoutPeriods() {
             <table className="min-w-[700px] w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50"><tr>
                 {canBulkDelete && <th className="text-left px-4 py-3 font-medium text-gray-600 w-10"><input type="checkbox" checked={allVisibleSelected} onChange={event => toggleSelectAllVisible(event.target.checked)} aria-label="Select all visible blackout periods" /></th>}
-                {['Name','Services','Assets','Period','Status',''].map(header => <th key={header} className="text-left px-4 py-3 font-medium text-gray-600">{header}</th>)}
+                {['Name','Status','Services','Assets','Period',''].map(header => <th key={header} className="text-left px-4 py-3 font-medium text-gray-600">{header}</th>)}
               </tr></thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {loading ? <tr><td colSpan={canBulkDelete ? 7 : 6} className="py-8 text-center text-gray-500">Loading...</td></tr> : pagedPeriods.map(period => (
                   <tr key={period.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onDoubleClick={() => openEdit(period)} title="Double click to edit">
                     {canBulkDelete && <td className="px-4 py-3" onClick={event => event.stopPropagation()}><input type="checkbox" checked={selectedPeriodIds.includes(period.id)} onChange={() => togglePeriodSelection(period.id)} aria-label={`Select blackout period ${period.name}`} /></td>}
                     <td className="px-4 py-3"><p className="font-medium">{period.name}</p>{period.ticket_ref && <p className="mt-0.5 text-xs text-brand-600">Ticket: {period.ticket_ref}</p>}</td>
+                    <td className="px-4 py-3"><StatusBadge status={blackoutStatus(period)} /></td>
                     <td className="px-4 py-3"><span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700"><Cog size={11} />{period.services?.length || 0}</span></td>
                     <td className="px-4 py-3"><span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700"><Server size={11} />{period.assets?.length || 0}{period.assets?.some(asset => asset.part_is_relevant) && <ShieldCheck size={11} className="text-amber-600" title="Part-IS Relevant" />}</span></td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{format(new Date(period.start_date), 'MM/dd/yyyy')} - {format(new Date(period.end_date), 'MM/dd/yyyy')}</td>
-                    <td className="px-4 py-3"><StatusBadge status={blackoutStatus(period)} /></td>
                     <td className="px-4 py-3">
                       <button onClick={e => { e.stopPropagation(); openEdit(period) }} className="action-icon-btn" title="Edit"><Pencil size={14} /></button>
                     </td>
