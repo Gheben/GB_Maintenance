@@ -5,14 +5,24 @@ import { Modal, ConfirmDialog } from '../components/Modal'
 import { ItemPicker } from '../components/ItemPicker'
 import { PartIsAssetNotice } from '../components/PartIsAssetNotice'
 import { PartIsServiceNotice } from '../components/PartIsServiceNotice'
+import { Pagination } from '../components/Pagination'
 import { toast } from '../components/Toast'
-import { Plus, Trash2, Pencil, Server, Cog, ShieldCheck } from 'lucide-react'
+import { Plus, Trash2, Pencil, Server, Cog, ShieldCheck, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
+import { useAuth } from '../contexts/AuthContext'
 
 const EMPTY_FORM = { name: '', start_date: '', end_date: '', description: '', ticket_ref: '', service_ids: [], asset_ids: [] }
 
 export default function BlackoutPeriods() {
+  const { hasRole } = useAuth()
+  const canBulkDelete = hasRole('superadmin', 'admin')
   const [periods, setPeriods] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(25)
+  const [selectedPeriodIds, setSelectedPeriodIds] = useState([])
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const [officeFilter, setOfficeFilter] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
@@ -21,8 +31,12 @@ export default function BlackoutPeriods() {
   const [allServices, setAllServices] = useState([])
   const [allAssets, setAllAssets] = useState([])
 
-  const load = () => blackoutApi.list().then(r => setPeriods(r.data))
+  const load = () => {
+    setLoading(true)
+    return blackoutApi.list().then(r => setPeriods(r.data)).finally(() => setLoading(false))
+  }
   useEffect(() => { load() }, [])
+  useEffect(() => { setSelectedPeriodIds(previous => previous.filter(id => periods.some(period => period.id === id))) }, [periods])
 
   // Load services & assets when a modal is opened
   useEffect(() => {
@@ -60,6 +74,37 @@ export default function BlackoutPeriods() {
   const handleDelete = async () => {
     try { await blackoutApi.delete(deleteTarget.id); toast.success('Deleted'); setDeleteTarget(null); load() }
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
+  }
+
+  const togglePeriodSelection = (id) => {
+    if (!canBulkDelete) return
+    setSelectedPeriodIds(previous => previous.includes(id) ? previous.filter(value => value !== id) : [...previous, id])
+  }
+
+  const toggleSelectAllVisible = (checked) => {
+    if (!canBulkDelete) return
+    setSelectedPeriodIds(checked ? visiblePeriods.map(period => period.id) : [])
+  }
+
+  const handleBulkDelete = async () => {
+    if (!canBulkDelete || selectedPeriodIds.length === 0) return
+    setBulkDeleting(true)
+    try {
+      const results = await Promise.allSettled(selectedPeriodIds.map(id => blackoutApi.delete(id)))
+      const deleted = results.filter(result => result.status === 'fulfilled').length
+      const failedIds = selectedPeriodIds.filter((_, index) => results[index].status === 'rejected')
+      if (deleted > 0) toast.success(`${deleted} blackout period(s) deleted`)
+      if (failedIds.length > 0) {
+        toast.error(`${failedIds.length} blackout period(s) could not be deleted`)
+        setSelectedPeriodIds(failedIds)
+      } else {
+        setSelectedPeriodIds([])
+        setConfirmBulkDelete(false)
+      }
+      load()
+    } finally {
+      setBulkDeleting(false)
+    }
   }
 
   const toggleService = (id) => setForm(f => ({
@@ -111,11 +156,24 @@ export default function BlackoutPeriods() {
   const visiblePeriods = officeFilter
     ? periods.filter((p) => Array.isArray(p.offices_impacted) && p.offices_impacted.includes(officeFilter))
     : periods
+  const total = visiblePeriods.length
+  const pageCount = Math.max(1, Math.ceil(total / limit))
+  const currentPage = Math.min(page, pageCount)
+  const pagedPeriods = visiblePeriods.slice((currentPage - 1) * limit, currentPage * limit)
+  const allVisibleSelected = pagedPeriods.length > 0 && pagedPeriods.every(period => selectedPeriodIds.includes(period.id))
+
+  useEffect(() => { setPage(1) }, [officeFilter, limit])
 
   return (
     <Layout title="Blackout Periods">
       <div className="space-y-4">
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
+          {canBulkDelete && (
+            <button className="btn-danger" disabled={selectedPeriodIds.length === 0 || bulkDeleting} onClick={() => setConfirmBulkDelete(true)}>
+              <Trash2 size={15} />Delete selected ({selectedPeriodIds.length})
+            </button>
+          )}
           <button className="btn-primary" onClick={() => { setForm(EMPTY_FORM); setShowCreate(true) }}><Plus size={15} />New Period</button>
         </div>
 
@@ -144,85 +202,30 @@ export default function BlackoutPeriods() {
           </div>
         )}
 
-        <div className="space-y-3">
-          {visiblePeriods.map(p => (
-            <div key={p.id} className="card p-4 cursor-pointer" onDoubleClick={() => openEdit(p)} title="Double click to edit">
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium">{p.name}</p>
-                  <p className="text-xs text-gray-500">
-                    {format(new Date(p.start_date), 'MMM dd yyyy')} → {format(new Date(p.end_date), 'MMM dd yyyy')}
-                  </p>
-                  {p.ticket_ref && <p className="text-xs text-brand-600 mt-1">Ticket: {p.ticket_ref}</p>}
-                  {p.description && <p className="text-xs text-gray-400 mt-1">{p.description}</p>}
-                  {p.services?.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {p.services.map(s => (
-                        <span key={s.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                          <Cog size={10} />{s.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {p.affected_services?.some((service) => !service.is_direct) && (
-                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                      <span className="text-xs text-gray-400">Related services:</span>
-                      {p.affected_services.filter((service) => !service.is_direct).map((service) => (
-                        <span key={service.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                          <Cog size={10} />{service.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {p.assets?.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {p.assets.map(a => (
-                        <span key={a.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                          <Server size={10} />
-                          {a.part_is_relevant && <ShieldCheck size={11} title="Part-IS Relevant" />}
-                          {a.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {p.affected_assets?.some((asset) => !asset.is_direct) && (
-                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                      <span className="text-xs text-gray-400">Related assets:</span>
-                      {p.affected_assets.filter((asset) => !asset.is_direct).map((asset) => (
-                        <span key={asset.id} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                          <Server size={10} />
-                          {asset.part_is_relevant && <ShieldCheck size={11} className="text-amber-600" title="Part-IS Relevant" />}
-                          {asset.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-500">Offices impacted: <strong>{p.offices_impacted_count || 0}</strong></p>
-                    {Array.isArray(p.offices_impacted) && p.offices_impacted.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {p.offices_impacted.map((office) => (
-                          <button
-                            type="button"
-                            key={office}
-                            onClick={(e) => { e.stopPropagation(); setOfficeFilter(office) }}
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${officeFilter === office ? 'bg-indigo-200 text-indigo-900 dark:bg-indigo-700/60 dark:text-indigo-100' : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300'}`}
-                          >
-                            {office}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex gap-1 shrink-0 ml-3">
-                  <button className="p-1.5 text-gray-400 hover:bg-gray-100 rounded hover:text-brand-600 transition-colors" onClick={(e) => { e.stopPropagation(); openEdit(p) }}><Pencil size={14} /></button>
-                  <button className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors" onClick={(e) => { e.stopPropagation(); setDeleteTarget(p) }}><Trash2 size={14} /></button>
-                </div>
-              </div>
-            </div>
-          ))}
-          {visiblePeriods.length === 0 && <p className="text-center text-gray-500 py-8">No blackout periods for current office filter</p>}
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-[760px] w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-700/50"><tr>
+                {canBulkDelete && <th className="text-left px-4 py-3 font-medium text-gray-600 w-10"><input type="checkbox" checked={allVisibleSelected} onChange={event => toggleSelectAllVisible(event.target.checked)} aria-label="Select all visible blackout periods" /></th>}
+                {['Name','Period','Services','Assets','Offices',''].map(header => <th key={header} className="text-left px-4 py-3 font-medium text-gray-600">{header}</th>)}
+              </tr></thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {loading ? <tr><td colSpan={canBulkDelete ? 7 : 6} className="py-8 text-center text-gray-500">Loading...</td></tr> : pagedPeriods.map(period => (
+                  <tr key={period.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50" onDoubleClick={() => openEdit(period)} title="Double click to edit">
+                    {canBulkDelete && <td className="px-4 py-3" onClick={event => event.stopPropagation()}><input type="checkbox" checked={selectedPeriodIds.includes(period.id)} onChange={() => togglePeriodSelection(period.id)} aria-label={`Select blackout period ${period.name}`} /></td>}
+                    <td className="px-4 py-3"><p className="font-medium">{period.name}</p>{period.ticket_ref && <p className="mt-0.5 text-xs text-brand-600">Ticket: {period.ticket_ref}</p>}</td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{format(new Date(period.start_date), 'MM/dd/yyyy')} - {format(new Date(period.end_date), 'MM/dd/yyyy')}</td>
+                    <td className="px-4 py-3"><span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700"><Cog size={11} />{period.services?.length || 0}</span></td>
+                    <td className="px-4 py-3"><span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700"><Server size={11} />{period.assets?.length || 0}{period.assets?.some(asset => asset.part_is_relevant) && <ShieldCheck size={11} className="text-amber-600" title="Part-IS Relevant" />}</span></td>
+                    <td className="px-4 py-3"><div className="flex flex-wrap gap-1">{(period.offices_impacted || []).map(office => <button type="button" key={office} onClick={() => setOfficeFilter(office)} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">{office}</button>)}{(period.offices_impacted || []).length === 0 && <span className="text-gray-300">-</span>}</div></td>
+                    <td className="px-4 py-3"><div className="flex gap-1"><button className="action-icon-btn" onClick={() => openEdit(period)} title="Edit"><Pencil size={14} /></button>{canBulkDelete && <button className="action-icon-btn text-red-500 hover:text-red-600" onClick={() => setDeleteTarget(period)} title="Delete"><Trash2 size={14} /></button>}</div></td>
+                  </tr>
+                ))}
+                {!loading && pagedPeriods.length === 0 && <tr><td colSpan={canBulkDelete ? 7 : 6} className="py-8 text-center text-gray-500">No blackout periods for current office filter</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-4"><Pagination page={currentPage} limit={limit} total={total} onChange={setPage} onLimitChange={setLimit} /></div>
         </div>
       </div>
 
@@ -239,6 +242,7 @@ export default function BlackoutPeriods() {
       )}
 
       {deleteTarget && <ConfirmDialog title="Delete Period" message={`Delete "${deleteTarget.name}"?`} danger confirmLabel="Delete" onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />}
+      {confirmBulkDelete && <ConfirmDialog title="Delete Selected Blackout Periods" message={`Delete ${selectedPeriodIds.length} selected blackout period(s)? This action cannot be undone.`} danger confirmLabel={bulkDeleting ? 'Deleting...' : 'Delete'} onConfirm={handleBulkDelete} onCancel={() => !bulkDeleting && setConfirmBulkDelete(false)} />}
     </Layout>
   )
 }
