@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, X, ChevronUp, ChevronDown } from 'lucide-react'
+import { Search, X, ChevronUp, ChevronDown, ShieldCheck } from 'lucide-react'
 import { Modal } from './Modal'
 
 export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = 'name', badgeKey, useModal = false, filterKey, maxResults }) {
@@ -54,7 +54,10 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
               onChange={() => onToggle(item.id)}
               className="rounded"
             />
-            <span className="flex-1">{item[nameKey]}</span>
+            <span className="flex-1 flex items-center gap-1.5">
+              {item.part_is_relevant && <ShieldCheck size={13} className="text-amber-600 shrink-0" title="Part-IS Relevant" />}
+              {item[nameKey]}
+            </span>
             {badgeKey && item[badgeKey] && (
               <span className="text-xs text-gray-400">{item[badgeKey]}</span>
             )}
@@ -98,6 +101,7 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
         <div className="max-h-28 overflow-y-auto flex flex-wrap gap-1.5 pr-1">
           {selected.map(item => (
             <span key={item.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+              {item.part_is_relevant && <ShieldCheck size={12} className="text-amber-600 shrink-0" title="Part-IS Relevant" />}
               {item[nameKey]}
               {badgeKey && item[badgeKey] && <span className="opacity-60">({item[badgeKey]})</span>}
               <button type="button" onClick={() => onToggle(item.id)} className="hover:text-red-500"><X size={11}/></button>
