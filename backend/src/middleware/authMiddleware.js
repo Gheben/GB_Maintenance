@@ -81,7 +81,7 @@ async function requireApiKey(req, res, next) {
   );
 
   for (const row of rows) {
-    if (bcrypt.compareSync(key, row.key_hash)) {
+    if (await bcrypt.compare(key, row.key_hash)) {
       if (!row.is_active) return res.status(403).json({ error: 'User disabled' });
       req.user = { id: row.owner_id, role: row.role, permissions: row.permissions };
       req.apiKeyId = row.id;

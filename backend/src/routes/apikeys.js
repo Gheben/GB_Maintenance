@@ -37,7 +37,7 @@ router.post('/', requireAdmin, [
   const randomPart = crypto.randomBytes(24).toString('hex');
   const key = `gbm_${randomPart}`;
   const prefix = key.slice(0, 10);
-  const hash = bcrypt.hashSync(key, 10);
+  const hash = await bcrypt.hash(key, 10);
 
   const result = await query(
     `INSERT INTO api_keys (name, key_prefix, key_hash, permissions, owner_id, expires_at)

@@ -277,7 +277,7 @@ router.post('/change-password', requireAuth, [
   try {
     const user = await authService.getUserWithHash(req.user.id);
     if (!user || user.auth_type !== 'local') return res.status(400).json({ error: 'Local accounts only' });
-    const valid = authService.verifyPassword(req.body.current_password, user.password_hash);
+    const valid = await authService.verifyPassword(req.body.current_password, user.password_hash);
     if (!valid) return res.status(400).json({ error: 'Current password is invalid' });
     await authService.updateUser(req.user.id, { password: req.body.new_password });
     await authService.revokeAllUserSessions(req.user.id);

@@ -51,11 +51,12 @@ function normalizePermissions(role, permissions) {
 }
 
 // ─── Password ─────────────────────────────────────────────────────────────────
+// Async bcrypt keeps the single-threaded event loop free under concurrent load.
 function hashPassword(plain) {
-  return bcrypt.hashSync(plain, 12);
+  return bcrypt.hash(plain, 12);
 }
 function verifyPassword(plain, hash) {
-  return bcrypt.compareSync(plain, hash);
+  return bcrypt.compare(plain, hash);
 }
 
 // ─── JWT ──────────────────────────────────────────────────────────────────────
@@ -91,7 +92,7 @@ async function seedSuperAdmin() {
 
   const existing = await getOne("SELECT id FROM users WHERE role = 'superadmin'");
   const allPerms = Object.fromEntries(PERMISSION_KEYS.map(k => [k, true]));
-  const hash = hashPassword(password);
+  const hash = await hashPassword(password);
 
   if (existing) {
     await query(
@@ -123,7 +124,7 @@ async function loginLocal(username, password) {
     throw Object.assign(new Error(`Account locked until ${unlockAt}`), { code: 'ACCOUNT_LOCKED' });
   }
 
-  const valid = verifyPassword(password, user.password_hash);
+  const valid = await verifyPassword(password, user.password_hash);
   if (!valid) {
     const fails = (user.failed_login_count || 0) + 1;
     const lockUntil = fails >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
@@ -236,7 +237,7 @@ async function getUserWithHash(id) {
 }
 
 async function createUser(username, password, role, opts = {}) {
-  const hash = hashPassword(password);
+  const hash = await hashPassword(password);
   const perms = normalizePermissions(role, opts.permissions || ROLE_DEFAULTS[role] || {});
   const colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444'];
   const color = colors[Math.floor(Math.random() * colors.length)];
@@ -264,7 +265,7 @@ async function updateUser(id, fields) {
   if (fields.avatar_color !== undefined) { sets.push(`avatar_color=$${idx++}`); vals.push(fields.avatar_color); }
   if (fields.password) {
     sets.push(`password_hash=$${idx++}`);
-    vals.push(hashPassword(fields.password));
+    vals.push(await hashPassword(fields.password));
     sets.push(`password_changed_at=$${idx++}`);
     vals.push(new Date());
     sets.push(`failed_login_count=$${idx++}`);
