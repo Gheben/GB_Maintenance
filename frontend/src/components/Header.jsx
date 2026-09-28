@@ -3,7 +3,10 @@ import { NotificationBell } from './NotificationBell'
 
 export function Header({ title, onOpenSidebar }) {
   return (
-    <header className="flex items-center justify-between px-4 sm:px-6 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shrink-0">
+    <header
+      style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+      className="flex items-center justify-between px-4 sm:px-6 pb-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shrink-0"
+    >
       <div className="flex items-center gap-3">
         <button
           onClick={onOpenSidebar}

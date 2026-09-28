@@ -190,8 +190,8 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }) {
         ${open ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Header / Logo */}
-        <div style={{ paddingTop: 'env(safe-area-inset-top)' }}
-          className={`border-b border-gray-700 flex items-center ${cl ? 'px-1 py-3 justify-between' : 'px-4 py-3 gap-3'}`}>
+        <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+          className={`border-b border-gray-700 flex items-center ${cl ? 'px-1 pb-3 justify-between' : 'px-4 pb-3 gap-3'}`}>
           {brandImage ? (
             <img src={brandImage} alt={appName} className="w-8 h-8 rounded-lg flex-shrink-0 object-contain bg-gray-800" />
           ) : (
