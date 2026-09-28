@@ -3,6 +3,7 @@ const { sendMail, renderTemplate, normalizeRecipientEmail } = require('../utils/
 const logger = require('../utils/logger');
 const axios = require('axios');
 const webpushService = require('./webpushService');
+const authService = require('./authService');
 const {
   getAffectedAssets,
   getAffectedServices,
@@ -178,6 +179,20 @@ async function sendWebhook(url, payload) {
     logger.error(`[Notify] Webhook failed for ${url}: ${err.message}`);
     return false;
   }
+}
+
+// Push notifications should deep-link into pages the recipient can actually view. A user without
+// the relevant module permission (e.g. the 'subscriber' role, which has maintenance/incidents=false
+// by default) would otherwise tap the notification and get silently bounced to the dashboard.
+async function _resolvePushUrls(userIds, permissionKey, deepUrl, fallbackUrl = '/status') {
+  const map = new Map();
+  if (!userIds || userIds.length === 0) return map;
+  const rows = await getMany(`SELECT id, role, permissions FROM users WHERE id = ANY($1::uuid[])`, [userIds]).catch(() => []);
+  for (const row of rows) {
+    const perms = authService.normalizePermissions(row.role, row.permissions);
+    map.set(row.id, perms[permissionKey] ? deepUrl : fallbackUrl);
+  }
+  return map;
 }
 
 // ─── Get subscribers for a maintenance window ─────────────────────────────────
@@ -402,10 +417,13 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
       tasks.push(Promise.all(userIds.map((uid) =>
         sendInApp(uid, eventType, titles[eventType] || maint.title, vars.description, 'maintenance', maintenanceId)
       )));
-      tasks.push(Promise.all(userIds.map((uid) =>
-        webpushService.sendToUser(uid, { title: titles[eventType] || maint.title, body: maint.description || '', url: `/maintenance/${maintenanceId}` })
-          .catch((err) => logger.warn(`[Notifications] Web push failed for user ${uid}: ${err.message}`))
-      )));
+      tasks.push((async () => {
+        const urlByUser = await _resolvePushUrls(userIds, 'maintenance', `/maintenance/${maintenanceId}`);
+        await Promise.all(userIds.map((uid) =>
+          webpushService.sendToUser(uid, { title: titles[eventType] || maint.title, body: maint.description || '', url: urlByUser.get(uid) || '/status' })
+            .catch((err) => logger.warn(`[Notifications] Web push failed for user ${uid}: ${err.message}`))
+        ));
+      })());
     }
     tasks.push(_dispatchWebhooks(eventType, { maintenance: maint, ...extraVars }));
 
@@ -601,10 +619,13 @@ async function notifyIncident(incidentId, eventType) {
       tasks.push(Promise.all([...userIds].map((uid) =>
         sendInApp(uid, eventType, `Incident: ${incident.title}`, incident.description, 'incident', incidentId)
       )));
-      tasks.push(Promise.all([...userIds].map((uid) =>
-        webpushService.sendToUser(uid, { title: `Incident: ${incident.title}`, body: incident.description || '', url: `/incidents/${incidentId}` })
-          .catch((err) => logger.warn(`[Notifications] Web push failed for user ${uid}: ${err.message}`))
-      )));
+      tasks.push((async () => {
+        const urlByUser = await _resolvePushUrls([...userIds], 'incidents', `/incidents/${incidentId}`);
+        await Promise.all([...userIds].map((uid) =>
+          webpushService.sendToUser(uid, { title: `Incident: ${incident.title}`, body: incident.description || '', url: urlByUser.get(uid) || '/status' })
+            .catch((err) => logger.warn(`[Notifications] Web push failed for user ${uid}: ${err.message}`))
+        ));
+      })());
     }
     tasks.push(_dispatchWebhooks(eventType, { incident }));
 

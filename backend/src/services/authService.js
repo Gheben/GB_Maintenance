@@ -341,6 +341,7 @@ module.exports = {
   hashPassword, verifyPassword,
   signToken, verifyToken,
   safeUser,
+  normalizePermissions,
   seedSuperAdmin,
   loginLocal,
   getAllUsers, getUsersPage, getUserById, getUserWithHash, createUser, updateUser, deleteUser,
