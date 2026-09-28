@@ -67,7 +67,7 @@ export default function MaintenanceTypes() {
   return (
     <Layout title="Maintenance Types">
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link to="/maintenance" className="btn-secondary">
             <ArrowLeft size={15} />Back to Maintenance
           </Link>
