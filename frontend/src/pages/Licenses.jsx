@@ -1622,7 +1622,7 @@ export default function Licenses() {
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <input className="input w-full sm:w-80" placeholder="Search licenses..." value={licensesQ} onChange={e => { setLicensesQ(e.target.value); setLicensesPage(1) }} />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {canBulkDelete && (
                   <button
                     className="btn-danger"
@@ -1636,7 +1636,52 @@ export default function Licenses() {
               </div>
             </div>
 
-            <div className="card overflow-hidden">
+            {/* Mobile card list (below sm breakpoint) */}
+            <div className="sm:hidden space-y-3">
+              {canBulkDelete && licenses.length > 0 && (
+                <label className="flex items-center gap-2 text-xs text-gray-500 px-1">
+                  <input type="checkbox" checked={allVisibleLicensesSelected} onChange={(e) => toggleSelectAllVisibleLicenses(e.target.checked)} aria-label="Select all visible licenses" />
+                  Select all visible
+                </label>
+              )}
+              {licenses.length === 0 ? (
+                <div className="card p-6 text-center text-gray-500 text-sm">No licenses</div>
+              ) : licenses.map(l => (
+                <div key={l.id} className="card p-4 space-y-2.5" onClick={() => openEditLicense(l)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-medium inline-flex items-center gap-2 min-w-0">
+                      <span className="truncate">{l.name}</span>
+                      {hasLicenseDocuments(l.documents) && <Paperclip size={13} className="text-gray-400 shrink-0" title="Attachments available" />}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {canBulkDelete && (
+                        <input type="checkbox" checked={selectedLicenseIds.includes(l.id)} onChange={() => toggleLicenseSelection(l.id)} aria-label={`Select license ${l.name}`} />
+                      )}
+                      <button onClick={() => openEditLicense(l)} className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">
+                        <Pencil size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${approvalStatusMeta(l.approval_status, l.approval_required !== false).cls}`}>
+                      {approvalStatusMeta(l.approval_status, l.approval_required !== false).label}
+                    </span>
+                    <span className="text-xs text-gray-500">{l.asset_count || 0} assets · {l.service_count || 0} services</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                    <div className="min-w-0"><span className="text-gray-400">Supplier: </span><span className="text-gray-600 dark:text-gray-300">{l.supplier_company || l.supplier || '—'}</span></div>
+                    <div className="min-w-0"><span className="text-gray-400">Expiry: </span><span className="text-gray-600 dark:text-gray-300">{l.expiry_date ? formatDateOnlyLabel(l.expiry_date) : '—'}</span></div>
+                    <div className="min-w-0"><span className="text-gray-400">Owner: </span><span className="text-gray-600 dark:text-gray-300">{l.owner_name || contactSummary(l.owner_contact)}</span></div>
+                    <div className="min-w-0"><span className="text-gray-400">Approver: </span><span className="text-gray-600 dark:text-gray-300">{l.approver_name || contactSummary(l.approver_contact)}</span></div>
+                  </div>
+                </div>
+              ))}
+              <div className="card p-4">
+                <Pagination page={licensesPage} limit={licensesLimit} total={licensesTotal} onChange={setLicensesPage} onLimitChange={setLicensesLimit} />
+              </div>
+            </div>
+
+            <div className="card overflow-hidden hidden sm:block">
               <div className="overflow-x-auto">
                 <table className="min-w-[900px] w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -1708,7 +1753,7 @@ export default function Licenses() {
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <input className="input w-full sm:w-80" placeholder="Search suppliers..." value={suppliersQ} onChange={e => { setSuppliersQ(e.target.value); setSuppliersPage(1) }} />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {canBulkDelete && (
                   <button
                     className="btn-danger"
@@ -1722,7 +1767,56 @@ export default function Licenses() {
               </div>
             </div>
 
-            <div className="card overflow-hidden">
+            {/* Mobile card list (below sm breakpoint) */}
+            <div className="sm:hidden space-y-3">
+              {canBulkDelete && suppliers.length > 0 && (
+                <label className="flex items-center gap-2 text-xs text-gray-500 px-1">
+                  <input type="checkbox" checked={allVisibleSuppliersSelected} onChange={(e) => toggleSelectAllVisibleSuppliers(e.target.checked)} aria-label="Select all visible suppliers" />
+                  Select all visible
+                </label>
+              )}
+              {suppliers.length === 0 ? (
+                <div className="card p-6 text-center text-gray-500 text-sm">No suppliers</div>
+              ) : suppliers.map(s => (
+                <div key={s.id} className="card p-4 space-y-2.5" onClick={() => openEditSupplier(s)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">{s.company}</span>
+                      {s.website ? (
+                        <a
+                          href={s.website.startsWith('http') ? s.website : `https://${s.website}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Open supplier website"
+                          className="inline-flex items-center shrink-0 text-brand-600"
+                        >
+                          <SupplierFavicon url={s.website} />
+                        </a>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {canBulkDelete && (
+                        <input type="checkbox" checked={selectedSupplierIds.includes(s.id)} onChange={() => toggleSupplierSelection(s.id)} aria-label={`Select supplier ${s.company}`} />
+                      )}
+                      <button onClick={() => openEditSupplier(s)} className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors"><Pencil size={14} /></button>
+                      <button onClick={() => setSupplierDeleteTarget(s)} className="p-1.5 -m-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 transition-colors"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                  {(s.first_name || s.last_name) && <div className="text-xs text-gray-500">{s.first_name} {s.last_name}</div>}
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                    <div className="col-span-2 min-w-0"><span className="text-gray-400">Email: </span><span className="text-gray-600 dark:text-gray-300 break-all">{s.email || '—'}</span></div>
+                    <div><span className="text-gray-400">Phone: </span><span className="text-gray-600 dark:text-gray-300">{s.phone || '—'}</span></div>
+                    <div><span className="text-gray-400">Mobile: </span><span className="text-gray-600 dark:text-gray-300">{s.mobile || '—'}</span></div>
+                  </div>
+                </div>
+              ))}
+              <div className="card p-4">
+                <Pagination page={suppliersPage} limit={suppliersLimit} total={suppliersTotal} onChange={setSuppliersPage} onLimitChange={setSuppliersLimit} />
+              </div>
+            </div>
+
+            <div className="card overflow-hidden hidden sm:block">
               <div className="overflow-x-auto">
                 <table className="min-w-[760px] w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
