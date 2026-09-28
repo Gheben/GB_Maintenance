@@ -217,6 +217,14 @@ async function getMaintenanceSubscribers(maintenanceId) {
     [serviceIds]
   ) : [];
 
+  // Asset owners (was missing entirely — only service owners were notified before)
+  const assetOwners = assetIds.length > 0 ? await getMany(
+    `SELECT DISTINCT a.owner_id as user_id, u.email as user_email
+     FROM assets a JOIN users u ON u.id=a.owner_id
+     WHERE a.id = ANY($1::uuid[]) AND a.owner_id IS NOT NULL AND u.is_active=true`,
+    [assetIds]
+  ) : [];
+
   // Users audience from service user_targets
   const targetServiceOwners = serviceIds.length > 0 ? await getMany(
     `SELECT DISTINCT u.id AS user_id, u.email AS user_email
@@ -322,6 +330,10 @@ async function getMaintenanceSubscribers(maintenanceId) {
     if (ss.user_id) userIds.add(ss.user_id);
   }
   for (const o of owners) {
+    if (o.user_email) emails.add(o.user_email);
+    if (o.user_id) userIds.add(o.user_id);
+  }
+  for (const o of assetOwners) {
     if (o.user_email) emails.add(o.user_email);
     if (o.user_id) userIds.add(o.user_id);
   }
@@ -470,6 +482,18 @@ async function notifyIncident(incidentId, eventType) {
     }
 
     if (assetIds.length > 0 || serviceIds.length > 0) {
+      // Asset owners (was missing entirely — only service owners were notified before)
+      const assetOwners = assetIds.length > 0 ? await getMany(
+        `SELECT DISTINCT a.owner_id as user_id, u.email as user_email
+         FROM assets a JOIN users u ON u.id=a.owner_id
+         WHERE a.id = ANY($1::uuid[]) AND a.owner_id IS NOT NULL AND u.is_active=true`,
+        [assetIds]
+      ).catch(() => []) : [];
+      assetOwners.forEach(o => {
+        if (o.user_email) emails.add(o.user_email);
+        if (o.user_id) userIds.add(o.user_id);
+      });
+
       const targetAssetOwners = await getMany(
         `SELECT DISTINCT u.id AS user_id, u.email AS user_email
          FROM assets a
