@@ -390,8 +390,63 @@ export default function Assets() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="card overflow-hidden">
+        {/* Mobile card list (below sm breakpoint) */}
+        <div className="sm:hidden space-y-3">
+          {canBulkDelete && assets.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-gray-500 px-1">
+              <input type="checkbox" checked={allVisibleSelected} onChange={(e) => toggleSelectAllVisible(e.target.checked)} aria-label="Select all visible assets" />
+              Select all visible
+            </label>
+          )}
+          {loading ? (
+            <div className="card p-6 text-center text-gray-500 text-sm">Loading...</div>
+          ) : assets.length === 0 ? (
+            <div className="card p-6 text-center text-gray-500 text-sm">No assets found</div>
+          ) : assets.map(a => (
+            <div key={a.id} className="card p-4 space-y-2.5" onClick={canEdit ? () => openEdit(a) : undefined}>
+              <div className="flex items-start justify-between gap-2">
+                <Link to={`/assets/${a.id}`} onClick={e => e.stopPropagation()} className="text-brand-600 hover:underline font-medium inline-flex items-center gap-1.5 min-w-0">
+                  {a.part_is_relevant && <ShieldAlert size={14} className="text-amber-500 shrink-0" title="Part-IS Relevant" />}
+                  <span className="truncate">{a.name}</span>
+                </Link>
+                <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {canBulkDelete && (
+                    <input type="checkbox" checked={selectedAssetIds.includes(a.id)} onChange={() => toggleAssetSelection(a.id)} aria-label={`Select asset ${a.name}`} />
+                  )}
+                  {canEdit && (
+                    <button onClick={() => openEdit(a)} className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">
+                      <Pencil size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <CriticalityBadge criticality={a.criticality} />
+                <StatusBadge status={a.status} />
+                <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: (categories.find(c => c.slug === a.category) || {}).color || '#6b7280' }} />
+                  {a.category}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                <div className="min-w-0">
+                  <span className="text-gray-400">Owner: </span>
+                  <span className="text-gray-600 dark:text-gray-300">{(a.owner_label || a.owner_name || '—')}{(a.owner_count || 0) > 1 ? ` +${a.owner_count - 1}` : ''}</span>
+                </div>
+                <div className="min-w-0"><span className="text-gray-400">Probe: </span><ProbeState row={a} /></div>
+              </div>
+              {Number(a.license_count || 0) > 0 && (
+                <div className="pt-1 flex justify-start"><LicenseState row={a} /></div>
+              )}
+            </div>
+          ))}
+          <div className="card p-4">
+            <Pagination page={page} limit={limit} total={total} onChange={setPage} onLimitChange={setLimit} />
+          </div>
+        </div>
+
+        {/* Table (sm and up) */}
+        <div className="card overflow-hidden hidden sm:block">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
