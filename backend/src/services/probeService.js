@@ -15,10 +15,15 @@ let _interval = null;
 
 function start() {
   if (_interval) return;
-  _interval = setInterval(_runProbes, TICK_SECONDS * 1000);
+  _interval = setInterval(_tick, TICK_SECONDS * 1000);
   logger.info(`[ProbeService] Started (tick every ${TICK_SECONDS}s)`);
   // Run once on start
-  setTimeout(_runProbes, 5000);
+  setTimeout(_tick, 5000);
+}
+
+async function _tick() {
+  await _runProbes();
+  await _runServiceProbes();
 }
 
 function stop() {
@@ -66,6 +71,48 @@ async function _runProbes() {
     }
   } catch (err) {
     logger.error(`[ProbeService] _runProbes error: ${err.message}`);
+  }
+}
+
+async function _runServiceProbes() {
+  try {
+    const probes = await getMany(
+      `SELECT sp.id, sp.service_id, sp.name,
+              sp.probe_type, sp.probe_target, sp.probe_timeout_seconds,
+              sp.expected_status_code, sp.probe_interval_seconds,
+              sp.failure_threshold, sp.recovery_threshold,
+              sp.pause_during_maintenance,
+              sp.dns_record_type, sp.dns_expected_value, sp.ssl_expiry_warning_days,
+              sp.consecutive_failures, sp.consecutive_successes, sp.current_state,
+              s.status AS service_status
+       FROM service_probes sp
+       JOIN services s ON s.id = sp.service_id
+       WHERE sp.probe_enabled = true
+         AND s.is_active = true
+         AND sp.next_probe_at <= NOW()
+       ORDER BY sp.next_probe_at ASC
+       LIMIT $1`,
+      [PROBE_BATCH_SIZE]
+    );
+
+    if (probes.length >= PROBE_BATCH_SIZE) {
+      const dueRow = await getOne(
+        `SELECT COUNT(*)::int AS c FROM service_probes sp
+         JOIN services s ON s.id = sp.service_id
+         WHERE sp.probe_enabled = true AND s.is_active = true AND sp.next_probe_at <= NOW()`
+      );
+      const due = dueRow?.c || 0;
+      if (due > PROBE_BATCH_SIZE) {
+        logger.warn(`[ProbeService] Service probe backlog detected: ${due} probes due but only ${PROBE_BATCH_SIZE} processed this tick. Consider raising PROBE_BATCH_SIZE/PROBE_MAX_PARALLEL.`);
+      }
+    }
+
+    for (let i = 0; i < probes.length; i += PROBE_MAX_PARALLEL) {
+      const batch = probes.slice(i, i + PROBE_MAX_PARALLEL);
+      await Promise.allSettled(batch.map((probe) => _probeService(probe)));
+    }
+  } catch (err) {
+    logger.error(`[ProbeService] _runServiceProbes error: ${err.message}`);
   }
 }
 
@@ -402,6 +449,19 @@ async function probeNowByIdService(serviceId, probeId) {
 async function _probeService(probe, options = {}) {
   // Similar to _probeAsset but for services
   // Executes probe and saves result in service_probe_results table
+  const forceRun = options.forceRun === true;
+  // Skip and reschedule if paused while the service is under maintenance.
+  if (!forceRun && probe.pause_during_maintenance && probe.service_status === 'under_maintenance') {
+    await query(
+      `UPDATE service_probes
+       SET next_probe_at = NOW() + ($1::int * INTERVAL '1 second'),
+           updated_at = NOW()
+       WHERE id = $2`,
+      [probe.probe_interval_seconds || 300, probe.id]
+    );
+    return { probeId: probe.id, serviceId: probe.service_id, success: null, skipped: true };
+  }
+
   const startTime = Date.now();
   let success = false;
   let responseTime = null;
@@ -483,6 +543,15 @@ async function _probeService(probe, options = {}) {
       await query(`UPDATE service_probes SET current_state = 'major_outage' WHERE id = $1`, [probe.id]);
     }
   }
+
+  // Schedule the next run
+  await query(
+    `UPDATE service_probes
+     SET next_probe_at = NOW() + ($1::int * INTERVAL '1 second'),
+         updated_at = NOW()
+     WHERE id = $2`,
+    [probe.probe_interval_seconds || 300, probe.id]
+  );
 
   // Save probe result
   await query(
