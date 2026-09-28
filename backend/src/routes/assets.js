@@ -281,7 +281,7 @@ router.get('/:id', async (req, res) => {
      WHERE a.id=$1`,
     [req.params.id]
   );
-  if (!asset) return res.status(404).json({ error: 'Asset non trovato' });
+  if (!asset) return res.status(404).json({ error: 'Asset not found' });
 
   // Dependencies (what this asset depends on)
   const dependsOn = await getMany(
@@ -372,7 +372,7 @@ router.post('/:id/probe-configs', requireOperator, [
     }
 
     const asset = await getOne('SELECT id FROM assets WHERE id=$1 AND is_active=true', [req.params.id]);
-    if (!asset) return res.status(404).json({ error: 'Asset non trovato' });
+    if (!asset) return res.status(404).json({ error: 'Asset not found' });
 
     const r = await query(
       `INSERT INTO asset_probes (
@@ -420,7 +420,7 @@ router.put('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
       `SELECT id, legacy_slot FROM asset_probes WHERE id=$1 AND asset_id=$2`,
       [req.params.probeId, req.params.id]
     );
-    if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
+    if (!probe) return res.status(404).json({ error: 'Probe not found' });
 
     const allowed = [
       'name', 'probe_enabled', 'probe_type', 'probe_target',
@@ -436,7 +436,7 @@ router.put('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
       sets.push(`${field} = $${i++}`);
       vals.push(req.body[field]);
     }
-    if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
+    if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
     sets.push(`updated_at = NOW()`);
     vals.push(req.params.probeId, req.params.id);
 
@@ -487,7 +487,7 @@ router.put('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
       );
     }
 
-    res.json({ message: 'Probe aggiornata' });
+    res.json({ message: 'Probe updated' });
   } catch (err) {
     console.error('[PROBE] Error updating probe:', err.message);
     res.status(500).json({ error: err.message || 'Error updating probe config' });
@@ -501,11 +501,11 @@ router.delete('/:id/probe-configs/:probeId', requireOperator, async (req, res) =
       `SELECT id, legacy_slot FROM asset_probes WHERE id=$1 AND asset_id=$2`,
       [req.params.probeId, req.params.id]
     );
-    if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
-    if (probe.legacy_slot) return res.status(400).json({ error: 'La probe principale legacy non può essere eliminata' });
+    if (!probe) return res.status(404).json({ error: 'Probe not found' });
+    if (probe.legacy_slot) return res.status(400).json({ error: 'The legacy primary probe cannot be deleted' });
 
     await query(`DELETE FROM asset_probes WHERE id=$1 AND asset_id=$2`, [req.params.probeId, req.params.id]);
-    res.json({ message: 'Probe eliminata' });
+    res.json({ message: 'Probe deleted' });
   } catch (err) {
     console.error('[PROBE] Error deleting probe:', err.message);
     res.status(500).json({ error: err.message || 'Error deleting probe config' });
@@ -816,7 +816,7 @@ router.put('/:id/licenses', requireOperator, [
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const asset = await getOne('SELECT id FROM assets WHERE id=$1', [req.params.id]);
-  if (!asset) return res.status(404).json({ error: 'Asset non trovato' });
+  if (!asset) return res.status(404).json({ error: 'Asset not found' });
 
   const licenseIds = Array.isArray(req.body.license_ids) ? req.body.license_ids : [];
   await transaction(async (client) => {
@@ -913,7 +913,7 @@ router.post('/', requireOperator, [
     await auditService.log(req.user.id, req.user.username, 'asset:create', 'asset', id, `name=${req.body.name}`, req.ip, req.get('user-agent'));
     res.status(201).json({ id });
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Slug già in uso, cambia il nome' });
+    if (err.code === '23505') return res.status(409).json({ error: 'Slug already in use, change the name' });
     res.status(500).json({ error: err.message });
   }
 });
@@ -926,7 +926,7 @@ router.put('/:id', requireOperator, async (req, res) => {
      WHERE id=$1`,
     [req.params.id]
   );
-  if (!asset) return res.status(404).json({ error: 'Asset non trovato' });
+  if (!asset) return res.status(404).json({ error: 'Asset not found' });
 
   const allowed = ['name','category','criticality','description','owner_id','owner_type',
     'owner_group_id','owner_ldap_dn','owner_ldap_name','probe_enabled',
@@ -974,12 +974,12 @@ router.put('/:id', requireOperator, async (req, res) => {
       vals.push(JSON.stringify(userTargets));
     }
   }
-  if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
+  if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
   sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
   await query(`UPDATE assets SET ${sets.join(',')} WHERE id=$${i}`, vals);
   await _syncLegacyProbeConfig(req.params.id);
   await auditService.log(req.user.id, req.user.username, 'asset:update', 'asset', req.params.id, null, req.ip, req.get('user-agent'));
-  res.json({ message: 'Asset aggiornato' });
+  res.json({ message: 'Asset updated' });
 });
 
 // ─── PATCH /api/assets/:id/status ─────────────────────────────────────────────
@@ -997,14 +997,14 @@ router.patch('/:id/status', requireOperator, [
   );
   wsService.broadcast({ type: 'asset_status_changed', assetId: req.params.id, status: req.body.status });
   await auditService.log(req.user.id, req.user.username, 'asset:status_change', 'asset', req.params.id, `status=${req.body.status}`, req.ip);
-  res.json({ message: 'Stato aggiornato' });
+  res.json({ message: 'Status updated' });
 });
 
 // ─── DELETE /api/assets/:id ───────────────────────────────────────────────────
 router.delete('/:id', requireAdmin, async (req, res) => {
   await query('UPDATE assets SET is_active=false, updated_at=NOW() WHERE id=$1', [req.params.id]);
   await auditService.log(req.user.id, req.user.username, 'asset:delete', 'asset', req.params.id, null, req.ip, req.get('user-agent'));
-  res.json({ message: 'Asset disattivato' });
+  res.json({ message: 'Asset deactivated' });
 });
 
 // ─── POST /api/assets/:id/dependencies ───────────────────────────────────────
@@ -1013,19 +1013,19 @@ router.post('/:id/dependencies', requireOperator, [
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-  if (req.params.id === req.body.depends_on_id) return res.status(400).json({ error: 'Un asset non può dipendere da se stesso' });
+  if (req.params.id === req.body.depends_on_id) return res.status(400).json({ error: 'An asset cannot depend on itself' });
 
   await query(
     `INSERT INTO asset_dependencies (asset_id, depends_on_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
     [req.params.id, req.body.depends_on_id]
   );
-  res.status(201).json({ message: 'Dipendenza aggiunta' });
+  res.status(201).json({ message: 'Dependency added' });
 });
 
 // ─── DELETE /api/assets/:id/dependencies/:depId ───────────────────────────────
 router.delete('/:id/dependencies/:depId', requireOperator, async (req, res) => {
   await query('DELETE FROM asset_dependencies WHERE asset_id=$1 AND depends_on_id=$2', [req.params.id, req.params.depId]);
-  res.json({ message: 'Dipendenza rimossa' });
+  res.json({ message: 'Dependency removed' });
 });
 
 // ─── GET /api/assets/:id/graph ───────────────────────────────────────────────

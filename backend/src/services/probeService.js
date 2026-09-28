@@ -282,7 +282,7 @@ async function probeNow(assetId) {
        AND a.is_active = true`,
     [assetId]
   );
-  if (probes.length === 0) throw new Error('Asset non trovato o nessuna probe abilitata');
+  if (probes.length === 0) throw new Error('Asset not found or no probe enabled');
 
   const results = [];
   for (const probe of probes) {
@@ -319,7 +319,7 @@ async function probeNowById(assetId, probeId) {
        AND a.is_active = true`,
     [probeId, assetId]
   );
-  if (!probe) throw new Error('Probe non trovato o non abilitato');
+  if (!probe) throw new Error('Probe not found or not enabled');
 
   return await _probeAsset(probe, { forceRun: true });
 }
@@ -341,7 +341,7 @@ async function probeNowService(serviceId) {
        AND s.is_active = true`,
     [serviceId]
   );
-  if (probes.length === 0) throw new Error('Service non trovato o nessuna probe abilitata');
+  if (probes.length === 0) throw new Error('Service not found or no probe enabled');
 
   const results = [];
   for (const probe of probes) {
@@ -378,7 +378,7 @@ async function probeNowByIdService(serviceId, probeId) {
        AND s.is_active = true`,
     [probeId, serviceId]
   );
-  if (!probe) throw new Error('Probe non trovato o non abilitato');
+  if (!probe) throw new Error('Probe not found or not enabled');
 
   return await _probeService(probe, { forceRun: true });
 }

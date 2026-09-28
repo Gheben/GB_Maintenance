@@ -380,12 +380,12 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/blackout', blackoutRoutes);
 
 // ─── 404 & Error handlers ─────────────────────────────────────────────────────
-app.use((req, res) => res.status(404).json({ error: 'Endpoint non trovato' }));
+app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   logger.error(`Unhandled error: ${err.message}`, { stack: err.stack });
-  res.status(500).json({ error: 'Errore interno del server' });
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 async function runAuditAutoPurge() {

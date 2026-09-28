@@ -79,7 +79,7 @@ router.get('/:id', async (req, res) => {
      LEFT JOIN users u ON u.id=i.created_by WHERE i.id=$1`,
     [req.params.id]
   );
-  if (!incident) return res.status(404).json({ error: 'Incidente non trovato' });
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
 
   const assets = await getMany(
     `SELECT a.id, a.name, a.category, a.status, a.criticality, a.part_is_relevant
@@ -131,7 +131,7 @@ router.post('/', requireOperator, [
 
   const allowedSeverities = await getAllowedSeverities();
   if (!allowedSeverities.includes(req.body.severity)) {
-    return res.status(400).json({ error: 'Severita non valida' });
+    return res.status(400).json({ error: 'Invalid severity' });
   }
 
   const result = await query(
@@ -160,7 +160,7 @@ router.post('/', requireOperator, [
   // First update
   await query(
     `INSERT INTO incident_updates (incident_id, status, message, created_by) VALUES ($1,'investigating',$2,$3)`,
-    [id, req.body.description || 'Incidente aperto.', req.user.id]
+    [id, req.body.description || 'Incident opened.', req.user.id]
   );
 
   await notifyIncident(id, 'incident_created');
@@ -172,12 +172,12 @@ router.post('/', requireOperator, [
 // ─── PUT /api/incidents/:id ───────────────────────────────────────────────────
 router.put('/:id', requireOperator, async (req, res) => {
   const incident = await getOne('SELECT id FROM incidents WHERE id=$1', [req.params.id]);
-  if (!incident) return res.status(404).json({ error: 'Non trovato' });
+  if (!incident) return res.status(404).json({ error: 'Not found' });
 
   if (req.body.severity !== undefined) {
     const allowedSeverities = await getAllowedSeverities();
     if (!allowedSeverities.includes(req.body.severity)) {
-      return res.status(400).json({ error: 'Severita non valida' });
+      return res.status(400).json({ error: 'Invalid severity' });
     }
   }
 
@@ -204,7 +204,7 @@ router.put('/:id', requireOperator, async (req, res) => {
     sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
     await query(`UPDATE incidents SET ${sets.join(',')} WHERE id=$${i}`, vals);
   }
-  res.json({ message: 'Incidente aggiornato' });
+  res.json({ message: 'Incident updated' });
 });
 
 // ─── POST /api/incidents/:id/updates ─────────────────────────────────────────
@@ -238,13 +238,13 @@ router.post('/:id/updates', requireOperator, [
   }
 
   wsService.broadcast({ type: 'incident_updated', id: req.params.id, status: req.body.status });
-  res.status(201).json({ message: 'Aggiornamento aggiunto' });
+  res.status(201).json({ message: 'Update added' });
 });
 
 // ─── DELETE /api/incidents/:id ────────────────────────────────────────────────
 router.delete('/:id', requireAdmin, async (req, res) => {
   await query('DELETE FROM incidents WHERE id=$1', [req.params.id]);
-  res.json({ message: 'Incidente eliminato' });
+  res.json({ message: 'Incident deleted' });
 });
 
 // ─── GET /api/incidents/:id/users ────────────────────────────────────────────

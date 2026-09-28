@@ -16,7 +16,7 @@ const router = Router();
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
-  message: { error: 'Troppi tentativi di login. Riprova tra 15 minuti.' },
+  message: { error: 'Too many login attempts. Try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -66,7 +66,7 @@ router.post('/login', loginLimiter, [
 
     if (!user) {
       await auditService.log(null, username, 'auth:login_failed', 'user', null, `auth_type=${authSource}`, req.ip);
-      return res.status(401).json({ error: 'Credenziali non valide' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Check TOTP if enabled
@@ -77,7 +77,7 @@ router.post('/login', loginLimiter, [
       const valid = await totpService.validateTotp(user.id, totp_token);
       if (!valid) {
         await auditService.log(user.id, user.username, 'auth:totp_failed', 'user', user.id, null, req.ip);
-        return res.status(401).json({ error: 'Codice TOTP non valido' });
+        return res.status(401).json({ error: 'Invalid TOTP code' });
       }
     }
 
@@ -92,7 +92,7 @@ router.post('/login', loginLimiter, [
       const m = String(err.message || '');
       if (err.name === 'InvalidCredentialsError' || /invalid credentials|credentials/i.test(m)) {
         await auditService.log(null, username, 'auth:login_failed', 'user', null, 'auth_type=ldap', req.ip);
-        return res.status(401).json({ error: 'Credenziali LDAP non valide' });
+        return res.status(401).json({ error: 'Invalid LDAP credentials' });
       }
       if (/LDAP access denied|not belong|authorized LDAP group|Accesso LDAP negato|gruppo LDAP autorizzato/i.test(m)) {
         return res.status(403).json({ error: m });
@@ -103,7 +103,7 @@ router.post('/login', loginLimiter, [
     }
     if (err.code === 'ACCOUNT_LOCKED') return res.status(403).json({ error: err.message });
     logger.error(`[Auth] Login error: ${err.message}`);
-    res.status(500).json({ error: 'Errore durante il login' });
+    res.status(500).json({ error: 'Login error' });
   }
 });
 
@@ -112,7 +112,7 @@ router.post('/logout', requireAuth, async (req, res) => {
   try {
     if (req.user.jti) await authService.revokeSession(req.user.jti);
     await auditService.log(req.user.id, req.user.username, 'auth:logout', 'user', req.user.id, null, req.ip);
-    res.json({ message: 'Logout effettuato' });
+    res.json({ message: 'Logged out successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -132,13 +132,13 @@ router.get('/sessions', requireAuth, async (req, res) => {
 // ─── DELETE /api/auth/sessions/:id ───────────────────────────────────────────
 router.delete('/sessions/:jti', requireAuth, async (req, res) => {
   await authService.revokeSession(req.params.jti);
-  res.json({ message: 'Sessione revocata' });
+  res.json({ message: 'Session revoked' });
 });
 
 // ─── POST /api/auth/sessions/revoke-all ──────────────────────────────────────
 router.post('/sessions/revoke-all', requireAuth, async (req, res) => {
   await authService.revokeAllUserSessions(req.user.id);
-  res.json({ message: 'Tutte le sessioni revocate' });
+  res.json({ message: 'All sessions revoked' });
 });
 
 // ─── TOTP Setup ───────────────────────────────────────────────────────────────
@@ -155,9 +155,9 @@ router.post('/totp/verify', requireAuth, [
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   const valid = await totpService.verifyAndActivateTotp(req.user.id, req.body.token);
-  if (!valid) return res.status(400).json({ error: 'Codice TOTP non valido' });
+  if (!valid) return res.status(400).json({ error: 'Invalid TOTP code' });
   await auditService.log(req.user.id, req.user.username, 'auth:totp_enabled', 'user', req.user.id, null, req.ip);
-  res.json({ message: 'TOTP attivato con successo' });
+  res.json({ message: 'TOTP enabled successfully' });
 });
 
 router.post('/totp/disable', requireAuth, [
@@ -166,10 +166,10 @@ router.post('/totp/disable', requireAuth, [
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   const valid = await totpService.validateTotp(req.user.id, req.body.token);
-  if (!valid) return res.status(400).json({ error: 'Codice TOTP non valido' });
+  if (!valid) return res.status(400).json({ error: 'Invalid TOTP code' });
   await totpService.disableTotp(req.user.id);
   await auditService.log(req.user.id, req.user.username, 'auth:totp_disabled', 'user', req.user.id, null, req.ip);
-  res.json({ message: 'TOTP disabilitato' });
+  res.json({ message: 'TOTP disabled' });
 });
 
 // ─── SAML SSO ─────────────────────────────────────────────────────────────────
@@ -205,7 +205,7 @@ router.post('/saml/acs', handleSamlCallback);
 // ─── WebAuthn / Passkeys (fingerprint, face, security key) ──────────────────
 // Registration is restricted to local accounts: SAML/LDAP identity must remain authoritative.
 router.post('/webauthn/register/options', requireAuth, async (req, res) => {
-  if (req.user.auth_type !== 'local') return res.status(403).json({ error: 'Le passkey sono disponibili solo per account locali' });
+  if (req.user.auth_type !== 'local') return res.status(403).json({ error: 'Passkeys are only available for local accounts' });
   try {
     const options = await webauthnService.generateRegistrationOpts(req, req.user);
     res.json(options);
@@ -216,7 +216,7 @@ router.post('/webauthn/register/verify', requireAuth, [
   body('response').isObject(),
   body('name').optional().isString().trim().isLength({ max: 200 }),
 ], async (req, res) => {
-  if (req.user.auth_type !== 'local') return res.status(403).json({ error: 'Le passkey sono disponibili solo per account locali' });
+  if (req.user.auth_type !== 'local') return res.status(403).json({ error: 'Passkeys are only available for local accounts' });
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {
@@ -234,7 +234,7 @@ router.get('/webauthn/credentials', requireAuth, async (req, res) => {
 router.delete('/webauthn/credentials/:id', requireAuth, async (req, res) => {
   await webauthnService.deleteCredential(req.user.id, req.params.id);
   await auditService.log(req.user.id, req.user.username, 'auth:webauthn_removed', 'user', req.user.id, null, req.ip);
-  res.json({ message: 'Passkey rimossa' });
+  res.json({ message: 'Passkey removed' });
 });
 
 router.post('/webauthn/login/options', loginLimiter, async (req, res) => {
@@ -267,22 +267,22 @@ router.post('/webauthn/login/verify', loginLimiter, [
 router.post('/change-password', requireAuth, [
   body('current_password').isString().isLength({ min: 1 }),
   body('new_password').isString().isLength({ min: 8 })
-    .matches(/[A-Z]/).withMessage('Deve contenere almeno una maiuscola')
-    .matches(/[0-9]/).withMessage('Deve contenere almeno un numero')
-    .matches(/[^A-Za-z0-9]/).withMessage('Deve contenere almeno un carattere speciale'),
+    .matches(/[A-Z]/).withMessage('Must contain at least one uppercase letter')
+    .matches(/[0-9]/).withMessage('Must contain at least one number')
+    .matches(/[^A-Za-z0-9]/).withMessage('Must contain at least one special character'),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   try {
     const user = await authService.getUserWithHash(req.user.id);
-    if (!user || user.auth_type !== 'local') return res.status(400).json({ error: 'Solo per account locali' });
+    if (!user || user.auth_type !== 'local') return res.status(400).json({ error: 'Local accounts only' });
     const valid = authService.verifyPassword(req.body.current_password, user.password_hash);
-    if (!valid) return res.status(400).json({ error: 'Password corrente non valida' });
+    if (!valid) return res.status(400).json({ error: 'Current password is invalid' });
     await authService.updateUser(req.user.id, { password: req.body.new_password });
     await authService.revokeAllUserSessions(req.user.id);
     await auditService.log(req.user.id, req.user.username, 'auth:password_changed', 'user', req.user.id, null, req.ip);
-    res.json({ message: 'Password aggiornata. Effettua nuovamente il login.' });
+    res.json({ message: 'Password updated. Please sign in again.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

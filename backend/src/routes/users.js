@@ -49,7 +49,7 @@ router.get('/roles', requireAdmin, (req, res) => {
 // ─── GET /api/users/:id ───────────────────────────────────────────────────────
 router.get('/:id', requireAdmin, async (req, res) => {
   const user = await authService.getUserById(req.params.id);
-  if (!user) return res.status(404).json({ error: 'Utente non trovato' });
+  if (!user) return res.status(404).json({ error: 'User not found' });
 
   // Include groups
   const groups = await getMany(
@@ -65,9 +65,9 @@ router.get('/:id', requireAdmin, async (req, res) => {
 router.post('/', requireAdmin, [
   body('username').isString().trim().isLength({ min: 3, max: 100 }),
   body('password').isString().isLength({ min: 8 })
-    .matches(/[A-Z]/).withMessage('Deve contenere almeno una maiuscola')
-    .matches(/[0-9]/).withMessage('Deve contenere almeno un numero')
-    .matches(/[^A-Za-z0-9]/).withMessage('Deve contenere almeno un carattere speciale'),
+    .matches(/[A-Z]/).withMessage('Must contain at least one uppercase letter')
+    .matches(/[0-9]/).withMessage('Must contain at least one number')
+    .matches(/[^A-Za-z0-9]/).withMessage('Must contain at least one special character'),
   body('role').isString().trim().isLength({ min: 1, max: 100 }),
   body('display_name').optional().isString().trim(),
   body('email').optional().isEmail(),
@@ -80,7 +80,7 @@ router.post('/', requireAdmin, [
 
   const allowedRoles = await getAllowedRoles();
   if (!allowedRoles.has(req.body.role)) {
-    return res.status(400).json({ error: 'Ruolo non valido' });
+    return res.status(400).json({ error: 'Invalid role' });
   }
 
   try {
@@ -119,7 +119,7 @@ router.post('/', requireAdmin, [
     res.status(201).json({ id });
   } catch (err) {
     if (err.message?.includes('unique') || err.code === '23505') {
-      return res.status(409).json({ error: 'Username già in uso' });
+      return res.status(409).json({ error: 'Username already in use' });
     }
     res.status(500).json({ error: err.message });
   }
@@ -135,9 +135,9 @@ router.put('/:id', requireAdmin, [
   body('permissions').optional().isObject(),
   body('is_active').optional().isBoolean(),
   body('password').optional().isString().isLength({ min: 8 })
-    .matches(/[A-Z]/).withMessage('Deve contenere almeno una maiuscola')
-    .matches(/[0-9]/).withMessage('Deve contenere almeno un numero')
-    .matches(/[^A-Za-z0-9]/).withMessage('Deve contenere almeno un carattere speciale'),
+    .matches(/[A-Z]/).withMessage('Must contain at least one uppercase letter')
+    .matches(/[0-9]/).withMessage('Must contain at least one number')
+    .matches(/[^A-Za-z0-9]/).withMessage('Must contain at least one special character'),
   body('group_id').optional().isUUID(),
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -145,17 +145,17 @@ router.put('/:id', requireAdmin, [
 
   // Protect superadmin from being demoted by non-superadmin
   const target = await authService.getUserById(req.params.id);
-  if (!target) return res.status(404).json({ error: 'Utente non trovato' });
+  if (!target) return res.status(404).json({ error: 'User not found' });
   if (target.role === 'superadmin' && req.user.role !== 'superadmin') {
-    return res.status(403).json({ error: 'Solo il superadmin può modificare il superadmin' });
+    return res.status(403).json({ error: 'Only the superadmin can modify the superadmin' });
   }
   if (target.auth_type === 'local' && req.body.role === undefined) {
-    return res.status(400).json({ error: 'Ruolo obbligatorio per utenti locali' });
+    return res.status(400).json({ error: 'Role is required for local users' });
   }
   if (req.body.role !== undefined) {
     const allowedRoles = await getAllowedRoles();
     if (!allowedRoles.has(req.body.role)) {
-      return res.status(400).json({ error: 'Ruolo non valido' });
+      return res.status(400).json({ error: 'Invalid role' });
     }
   }
 
@@ -183,14 +183,14 @@ router.put('/:id', requireAdmin, [
 
 // ─── DELETE /api/users/:id ────────────────────────────────────────────────────
 router.delete('/:id', requireAdmin, async (req, res) => {
-  if (req.params.id === req.user.id) return res.status(400).json({ error: 'Non puoi eliminare te stesso' });
+  if (req.params.id === req.user.id) return res.status(400).json({ error: 'You cannot delete yourself' });
   const target = await authService.getUserById(req.params.id);
-  if (!target) return res.status(404).json({ error: 'Utente non trovato' });
-  if (target.role === 'superadmin') return res.status(403).json({ error: 'Non puoi eliminare il superadmin' });
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.role === 'superadmin') return res.status(403).json({ error: 'You cannot delete the superadmin' });
 
   await authService.deleteUser(req.params.id);
   await auditService.log(req.user.id, req.user.username, 'user:delete', 'user', req.params.id, `username=${target.username}`, req.ip, req.get('user-agent'));
-  res.json({ message: 'Utente eliminato' });
+  res.json({ message: 'User deleted' });
 });
 
 // ─── GET /api/users/:id/sessions ─────────────────────────────────────────────
@@ -202,7 +202,7 @@ router.get('/:id/sessions', requireAdmin, async (req, res) => {
 // ─── POST /api/users/:id/revoke-sessions ──────────────────────────────────────
 router.post('/:id/revoke-sessions', requireAdmin, async (req, res) => {
   await authService.revokeAllUserSessions(req.params.id);
-  res.json({ message: 'Tutte le sessioni revocate' });
+  res.json({ message: 'All sessions revoked' });
 });
 
 module.exports = router;

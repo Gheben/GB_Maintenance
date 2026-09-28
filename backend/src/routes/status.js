@@ -535,7 +535,7 @@ router.get('/services/:slug', async (req, res) => {
      FROM services WHERE slug=$1 AND is_active=true AND is_public=true`,
     [req.params.slug]
   );
-  if (!service) return res.status(404).json({ error: 'Servizio non trovato' });
+  if (!service) return res.status(404).json({ error: 'Service not found' });
 
   // 90-day uptime data
   const history = await getMany(

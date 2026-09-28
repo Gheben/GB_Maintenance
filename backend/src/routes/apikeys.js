@@ -49,19 +49,19 @@ router.post('/', requireAdmin, [
   await auditService.log(req.user.id, req.user.username, 'apikey:create', 'api_key', id, `name=${req.body.name}`, req.ip);
 
   // Return the plain key ONCE — never retrievable again
-  res.status(201).json({ id, key, message: 'Salva questa chiave — non sarà più visualizzabile' });
+  res.status(201).json({ id, key, message: 'Save this key now — it will not be shown again' });
 });
 
 // ─── DELETE /api/apikeys/:id ──────────────────────────────────────────────────
 router.delete('/:id', async (req, res) => {
   const key = await getOne('SELECT owner_id FROM api_keys WHERE id=$1', [req.params.id]);
-  if (!key) return res.status(404).json({ error: 'Chiave non trovata' });
+  if (!key) return res.status(404).json({ error: 'API key not found' });
   if (req.user.role !== 'superadmin' && req.user.role !== 'admin' && key.owner_id !== req.user.id) {
-    return res.status(403).json({ error: 'Non autorizzato' });
+    return res.status(403).json({ error: 'Not authorized' });
   }
   await query('DELETE FROM api_keys WHERE id=$1', [req.params.id]);
   await auditService.log(req.user.id, req.user.username, 'apikey:delete', 'api_key', req.params.id, null, req.ip);
-  res.json({ message: 'Chiave eliminata' });
+  res.json({ message: 'API key deleted' });
 });
 
 // ─── PATCH /api/apikeys/:id ───────────────────────────────────────────────────
@@ -69,10 +69,10 @@ router.patch('/:id', async (req, res) => {
   const sets=[]; const vals=[]; let i=1;
   if (req.body.is_active !== undefined) { sets.push(`is_active=$${i++}`); vals.push(req.body.is_active); }
   if (req.body.name !== undefined)      { sets.push(`name=$${i++}`); vals.push(req.body.name); }
-  if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo' });
+  if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
   vals.push(req.params.id);
   await query(`UPDATE api_keys SET ${sets.join(',')} WHERE id=$${i}`, vals);
-  res.json({ message: 'Aggiornato' });
+  res.json({ message: 'Updated' });
 });
 
 module.exports = router;

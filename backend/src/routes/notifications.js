@@ -40,7 +40,7 @@ router.post('/read', async (req, res) => {
   } else {
     await query(`UPDATE in_app_notifications SET is_read=true WHERE user_id=$1`, [req.user.id]);
   }
-  res.json({ message: 'Notifiche segnate come lette' });
+  res.json({ message: 'Notifications marked as read' });
 });
 
 // ─── DELETE /api/notifications ───────────────────────────────────────────────
@@ -48,11 +48,11 @@ router.delete('/', async (req, res) => {
   const { ids } = req.body || {};
   if (Array.isArray(ids) && ids.length > 0) {
     await query(`DELETE FROM in_app_notifications WHERE id=ANY($1::uuid[]) AND user_id=$2`, [ids, req.user.id]);
-    return res.json({ message: 'Notifiche eliminate', deleted: ids.length });
+    return res.json({ message: 'Notifications deleted', deleted: ids.length });
   }
 
   const deletedRes = await query(`DELETE FROM in_app_notifications WHERE user_id=$1`, [req.user.id]);
-  res.json({ message: 'Tutte le notifiche eliminate', deleted: deletedRes.rowCount || 0 });
+  res.json({ message: 'All notifications deleted', deleted: deletedRes.rowCount || 0 });
 });
 
 // ─── GET /api/notifications/log ──────────────────────────────────────────────
@@ -99,10 +99,10 @@ router.put('/templates/:id', requireAdmin, [
   if (req.body.subject_template !== undefined)   { sets.push(`subject_template=$${i++}`); vals.push(req.body.subject_template); }
   if (req.body.body_html_template !== undefined) { sets.push(`body_html_template=$${i++}`); vals.push(req.body.body_html_template); }
   if (req.body.is_active !== undefined)          { sets.push(`is_active=$${i++}`); vals.push(req.body.is_active); }
-  if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo' });
+  if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
   sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
   await query(`UPDATE notification_templates SET ${sets.join(',')} WHERE id=$${i}`, vals);
-  res.json({ message: 'Template aggiornato' });
+  res.json({ message: 'Template updated' });
 });
 
 module.exports = router;

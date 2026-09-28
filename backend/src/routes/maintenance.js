@@ -536,7 +536,7 @@ router.get('/', async (req, res) => {
 // ─── GET /api/maintenance/calendar ───────────────────────────────────────────
 router.get('/calendar', async (req, res) => {
   const { from, to } = req.query;
-  if (!from || !to) return res.status(400).json({ error: 'Parametri from e to richiesti' });
+  if (!from || !to) return res.status(400).json({ error: 'Parameters from and to are required' });
 
   const privilegedRoles = ['superadmin', 'admin', 'change_manager'];
   const params = [to, from];
@@ -699,7 +699,7 @@ router.post('/', requireOperator, [
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   if (new Date(req.body.scheduled_end) <= new Date(req.body.scheduled_start)) {
-    return res.status(400).json({ error: 'La data di fine deve essere successiva a quella di inizio' });
+    return res.status(400).json({ error: 'End date must be after start date' });
   }
 
   // Check blackout periods
@@ -709,7 +709,7 @@ router.post('/', requireOperator, [
     [req.body.scheduled_start, req.body.scheduled_end]
   );
   if (blackout) {
-    return res.status(400).json({ error: `Conflitto con periodo di blackout: ${blackout.name}` });
+    return res.status(400).json({ error: `Conflict with blackout period: ${blackout.name}` });
   }
 
   // Auto-set status: if high/critical impact or emergency → pending_approval, else → scheduled
@@ -944,7 +944,7 @@ router.put('/:id', requireOperator, async (req, res) => {
   const maint = await getOne('SELECT * FROM maintenance_windows WHERE id=$1', [req.params.id]);
   if (!maint) return res.status(404).json({ error: 'Maintenance not found' });
   if (['completed','cancelled'].includes(maint.status)) {
-    return res.status(400).json({ error: 'Non puoi modificare una manutenzione completata o annullata' });
+    return res.status(400).json({ error: 'You cannot modify a completed or cancelled maintenance' });
   }
 
   const allowed = ['title','description','ticket_ref','type','impact_level','scheduled_start','scheduled_end',
@@ -999,14 +999,14 @@ router.put('/:id', requireOperator, async (req, res) => {
   }
 
   await auditService.log(req.user.id, req.user.username, 'maintenance:update', 'maintenance', req.params.id, null, req.ip, req.get('user-agent'));
-  res.json({ message: 'Manutenzione aggiornata' });
+  res.json({ message: 'Maintenance updated' });
 });
 
 // ─── POST /api/maintenance/:id/approve ───────────────────────────────────────
 router.post('/:id/approve', requireChangeManager, async (req, res) => {
   const maint = await getOne('SELECT status FROM maintenance_windows WHERE id=$1', [req.params.id]);
-  if (!maint) return res.status(404).json({ error: 'Non trovata' });
-  if (maint.status !== 'pending_approval') return res.status(400).json({ error: 'Stato non valido per l\'approvazione' });
+  if (!maint) return res.status(404).json({ error: 'Not found' });
+  if (maint.status !== 'pending_approval') return res.status(400).json({ error: 'Invalid status for approval' });
 
   await query(
     `UPDATE maintenance_windows SET status='scheduled', approved_by=$1, approved_at=NOW(), updated_at=NOW() WHERE id=$2`,
@@ -1016,7 +1016,7 @@ router.post('/:id/approve', requireChangeManager, async (req, res) => {
   await auditService.log(req.user.id, req.user.username, 'maintenance:approve', 'maintenance', req.params.id, null, req.ip);
   await notifyMaintenance(req.params.id, 'maintenance_scheduled');
   wsService.broadcast({ type: 'maintenance_approved', id: req.params.id });
-  res.json({ message: 'Manutenzione approvata' });
+  res.json({ message: 'Maintenance approved' });
 });
 
 // ─── POST /api/maintenance/:id/reject ────────────────────────────────────────
@@ -1034,14 +1034,14 @@ router.post('/:id/reject', requireChangeManager, [
   await auditService.log(req.user.id, req.user.username, 'maintenance:reject', 'maintenance', req.params.id, req.body.reason, req.ip);
   await notifyMaintenance(req.params.id, 'maintenance_rejected', { reason: req.body.reason });
   wsService.broadcast({ type: 'maintenance_rejected', id: req.params.id });
-  res.json({ message: 'Manutenzione rifiutata' });
+  res.json({ message: 'Maintenance rejected' });
 });
 
 // ─── POST /api/maintenance/:id/start ─────────────────────────────────────────
 router.post('/:id/start', requireOperator, async (req, res) => {
   const maint = await getOne('SELECT status, owner_approval_required, owner_approval_status FROM maintenance_windows WHERE id=$1', [req.params.id]);
-  if (!maint) return res.status(404).json({ error: 'Non trovata' });
-  if (!['scheduled'].includes(maint.status)) return res.status(400).json({ error: 'Stato non valido' });
+  if (!maint) return res.status(404).json({ error: 'Not found' });
+  if (!['scheduled'].includes(maint.status)) return res.status(400).json({ error: 'Invalid status' });
   if (maint.owner_approval_required && maint.owner_approval_status !== 'approved') {
     return res.status(400).json({ error: 'Owner approval flow is not completed yet' });
   }
@@ -1051,7 +1051,7 @@ router.post('/:id/start', requireOperator, async (req, res) => {
   await notifyMaintenance(req.params.id, 'maintenance_started');
   wsService.broadcast({ type: 'maintenance_started', id: req.params.id });
   await auditService.log(req.user.id, req.user.username, 'maintenance:start', 'maintenance', req.params.id, null, req.ip);
-  res.json({ message: 'Manutenzione avviata' });
+  res.json({ message: 'Maintenance started' });
 });
 
 // ─── POST /api/maintenance/:id/complete ───────────────────────────────────────
@@ -1060,7 +1060,7 @@ router.post('/:id/complete', requireOperator, [
 ], async (req, res) => {
   const maint = await getOne('SELECT id, title, status FROM maintenance_windows WHERE id=$1', [req.params.id]);
   if (!maint || !['in_progress','extended'].includes(maint.status)) {
-    return res.status(400).json({ error: 'Stato non valido' });
+    return res.status(400).json({ error: 'Invalid status' });
   }
   await query(
     `UPDATE maintenance_windows SET status='completed', actual_end=NOW(), notes=$1, updated_at=NOW() WHERE id=$2`,
@@ -1077,7 +1077,7 @@ router.post('/:id/complete', requireOperator, [
   ).catch(() => {});
   wsService.broadcast({ type: 'maintenance_completed', id: req.params.id });
   await auditService.log(req.user.id, req.user.username, 'maintenance:complete', 'maintenance', req.params.id, null, req.ip);
-  res.json({ message: 'Manutenzione completata' });
+  res.json({ message: 'Maintenance completed' });
 
   // Do not block API response on email delivery.
   notifyMaintenance(req.params.id, 'maintenance_completed').catch(() => {});
@@ -1157,7 +1157,7 @@ router.post('/:id/cancel', requireOperator, [
   
   // Audit log with reason
   await auditService.log(req.user.id, req.user.username, 'maintenance:cancelled_with_reason', 'maintenance', req.params.id, req.body.reason, req.ip);
-  res.json({ message: 'Manutenzione annullata' });
+  res.json({ message: 'Maintenance cancelled' });
 });
 
 // ─── DELETE /api/maintenance/:id ─────────────────────────────────────────────
@@ -1192,7 +1192,7 @@ router.delete('/:id', requireAdmin, [
     : 'Deleted';
   await auditService.log(req.user.id, req.user.username, 'maintenance:deleted', 'maintenance', req.params.id, auditReason, req.ip);
   
-  res.json({ message: 'Manutenzione eliminata' });
+  res.json({ message: 'Maintenance deleted' });
 });
 
 // ─── GET /api/maintenance/:id/users ──────────────────────────────────────────

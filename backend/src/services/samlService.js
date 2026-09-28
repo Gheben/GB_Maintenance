@@ -30,7 +30,7 @@ function _stripPem(cert) {
 }
 
 function _getSamlInstance(cfg) {
-  if (!nodeSaml) throw new Error('@node-saml/node-saml non è installato');
+  if (!nodeSaml) throw new Error('@node-saml/node-saml is not installed');
   const appUrl = cfg.sp_base_url || process.env.APP_URL || 'http://localhost:4681';
   const entryPoint = cfg.idp_sso_url || cfg.entry_point || '';
   const issuer = cfg.sp_entity_id || cfg.issuer || 'gbmaintenance';
@@ -56,7 +56,7 @@ function _getSamlInstance(cfg) {
 
 async function getMetadata() {
   const cfg = await getSamlSettings();
-  if (!cfg || !cfg.enabled) throw new Error('SAML non abilitato');
+  if (!cfg || !cfg.enabled) throw new Error('SAML not enabled');
   const saml = _getSamlInstance(cfg);
   const appUrl = process.env.APP_URL || 'http://localhost:4681';
   return saml.generateServiceProviderMetadata(
@@ -67,7 +67,7 @@ async function getMetadata() {
 
 async function generateAuthUrl(req) {
   const cfg = await getSamlSettings();
-  if (!cfg || !cfg.enabled) throw new Error('SAML non abilitato');
+  if (!cfg || !cfg.enabled) throw new Error('SAML not enabled');
   const saml = _getSamlInstance(cfg);
   if (typeof saml.getAuthorizeUrlAsync === 'function') {
     return saml.getAuthorizeUrlAsync('', req.hostname, {});
@@ -81,7 +81,7 @@ async function generateAuthUrl(req) {
 
 async function validateCallback(req) {
   const cfg = await getSamlSettings();
-  if (!cfg || !cfg.enabled) throw new Error('SAML non abilitato');
+  if (!cfg || !cfg.enabled) throw new Error('SAML not enabled');
   const saml = _getSamlInstance(cfg);
 
   const profile = typeof saml.validatePostResponseAsync === 'function'

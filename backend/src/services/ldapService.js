@@ -286,7 +286,7 @@ function _bindPassword(cfg) {
   if (!raw) return '';
   const dec = decrypt(raw);
   if (dec === '' && raw && isEncrypted(raw)) {
-    throw new Error('LDAP: impossibile decifrare la password del service account. Reinserire in Impostazioni → LDAP.');
+    throw new Error('LDAP: unable to decrypt the service account password. Please re-enter it in Settings → LDAP.');
   }
   return dec || raw;
 }
@@ -394,7 +394,7 @@ async function _searchCachedUsers(q) {
 
 // ─── Client factory ───────────────────────────────────────────────────────────
 function _createClient(cfg) {
-  if (!ldap) throw new Error('ldapjs non è installato');
+  if (!ldap) throw new Error('ldapjs is not installed');
   const client = ldap.createClient({
     url: cfg.url,
     connectTimeout: 8000,
@@ -468,7 +468,7 @@ async function testLdapConnection(cfg) {
 // ─── Authenticate user ────────────────────────────────────────────────────────
 async function authenticateUser(username, password) {
   const cfg = await getLdapSettings();
-  if (!cfg || !cfg.enabled) throw new Error('LDAP non abilitato');
+  if (!cfg || !cfg.enabled) throw new Error('LDAP not enabled');
 
   const inputUsername = String(username || '').trim();
   const searchUsername = _normalizeUsernameInput(inputUsername);
@@ -483,7 +483,7 @@ async function authenticateUser(username, password) {
     await _bind(serviceClient, _bindPrincipal(cfg), _bindPassword(cfg));
 
     const searchBase = cfg.search_base || cfg.base_dn;
-    if (!searchBase) throw new Error('LDAP search base non configurata');
+    if (!searchBase) throw new Error('LDAP search base not configured');
     const escapedUser = _escapeLdap(searchUsername);
     const escapedUpn = _escapeLdap(resolvedDomain ? `${searchUsername}@${resolvedDomain}` : inputUsername);
     const filter = (cfg.user_filter || '(sAMAccountName={{username}})')

@@ -165,7 +165,7 @@ router.get('/:id', async (req, res) => {
      WHERE s.id=$1`,
     [req.params.id]
   );
-  if (!service) return res.status(404).json({ error: 'Servizio non trovato' });
+  if (!service) return res.status(404).json({ error: 'Service not found' });
 
   const assets = await getMany(
     `SELECT a.id, a.name, a.category, a.status, a.criticality
@@ -267,12 +267,12 @@ router.post('/', requireOperator, [
     await auditService.log(req.user.id, req.user.username, 'service:create', 'service', id, `name=${req.body.name}`, req.ip, req.get('user-agent'));
     res.status(201).json({ id });
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Nome servizio già in uso' });
+    if (err.code === '23505') return res.status(409).json({ error: 'Service name already in use' });
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── PUT /api/services/:id ────────────────────────────────────────────────────
+// ─── PUT /api/services/:id ───────────────────────────────────────────
 router.put('/:id', requireOperator, async (req, res) => {
   try {
     const service = await getOne(
@@ -281,10 +281,10 @@ router.put('/:id', requireOperator, async (req, res) => {
        WHERE id=$1`,
       [req.params.id]
     );
-    if (!service) return res.status(404).json({ error: 'Servizio non trovato' });
+    if (!service) return res.status(404).json({ error: 'Service not found' });
 
     if (req.body.criticality !== undefined && !CRITICALITIES.includes(req.body.criticality)) {
-      return res.status(400).json({ error: 'Criticality non valida' });
+      return res.status(400).json({ error: 'Invalid criticality' });
     }
 
     const hasOwnerTargets = req.body.owner_targets !== undefined;
@@ -330,14 +330,14 @@ router.put('/:id', requireOperator, async (req, res) => {
       }
     }
 
-    if (sets.length===0) return res.status(400).json({ error: 'Nessun campo' });
+    if (sets.length===0) return res.status(400).json({ error: 'No fields to update' });
     sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
     await query(`UPDATE services SET ${sets.join(',')} WHERE id=$${i}`, vals);
     await auditService.log(req.user.id, req.user.username, 'service:update', 'service', req.params.id, null, req.ip, req.get('user-agent'));
-    res.json({ message: 'Servizio aggiornato' });
+    res.json({ message: 'Service updated' });
   } catch (err) {
     if (err.code === '23514' || err.code === '22P02') {
-      return res.status(400).json({ error: 'Dati non validi per aggiornare il servizio' });
+      return res.status(400).json({ error: 'Invalid data to update the service' });
     }
     res.status(500).json({ error: err.message });
   }
@@ -357,14 +357,14 @@ router.patch('/:id/status', requireOperator, [
     [req.params.id, req.body.status, req.user.username, req.body.reason||null]
   );
   wsService.broadcast({ type: 'service_status_changed', serviceId: req.params.id, status: req.body.status });
-  res.json({ message: 'Stato aggiornato' });
+  res.json({ message: 'Status updated' });
 });
 
 // ─── DELETE /api/services/:id ─────────────────────────────────────────────────
 router.delete('/:id', requireAdmin, async (req, res) => {
   await query('UPDATE services SET is_active=false, updated_at=NOW() WHERE id=$1', [req.params.id]);
   await auditService.log(req.user.id, req.user.username, 'service:delete', 'service', req.params.id, null, req.ip, req.get('user-agent'));
-  res.json({ message: 'Servizio disattivato' });
+  res.json({ message: 'Service deactivated' });
 });
 
 // ─── GET /api/services/:id/maintenance ──────────────────────────────────────
@@ -635,29 +635,29 @@ router.post('/:id/dependencies', requireOperator, [
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-  if (req.params.id === req.body.depends_on_id) return res.status(400).json({ error: 'Un servizio non può dipendere da se stesso' });
+  if (req.params.id === req.body.depends_on_id) return res.status(400).json({ error: 'A service cannot depend on itself' });
   await query(
     `INSERT INTO service_dependencies (service_id, depends_on_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
     [req.params.id, req.body.depends_on_id]
   );
-  res.status(201).json({ message: 'Dipendenza aggiunta' });
+  res.status(201).json({ message: 'Dependency added' });
 });
 
 // ─── DELETE /api/services/:id/dependencies/:depId ────────────────────────────
 router.delete('/:id/dependencies/:depId', requireOperator, async (req, res) => {
   await query('DELETE FROM service_dependencies WHERE service_id=$1 AND depends_on_id=$2', [req.params.id, req.params.depId]);
-  res.json({ message: 'Dipendenza rimossa' });
+  res.json({ message: 'Dependency removed' });
 });
 
 // ─── POST /api/services/:id/assets ───────────────────────────────────────────
 router.post('/:id/assets', requireOperator, [body('asset_id').isUUID()], async (req, res) => {
   await query(`INSERT INTO service_assets (service_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [req.params.id, req.body.asset_id]);
-  res.status(201).json({ message: 'Asset collegato' });
+  res.status(201).json({ message: 'Asset linked' });
 });
 
 router.delete('/:id/assets/:assetId', requireOperator, async (req, res) => {
   await query('DELETE FROM service_assets WHERE service_id=$1 AND asset_id=$2', [req.params.id, req.params.assetId]);
-  res.json({ message: 'Asset scollegato' });
+  res.json({ message: 'Asset unlinked' });
 });
 
 // ─── Subscribers ─────────────────────────────────────────────────────────────
@@ -683,18 +683,18 @@ router.post('/:id/subscribe', requireAuth, [
        req.body.notify_incidents ?? true,
        req.body.notify_recovery ?? true]
     );
-    res.json({ message: 'Iscrizione effettuata' });
+    res.json({ message: 'Subscribed successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/:id/subscribe', requireAuth, async (req, res) => {
   await query('DELETE FROM service_subscribers WHERE service_id=$1 AND user_id=$2', [req.params.id, req.user.id]);
-  res.json({ message: 'Iscrizione rimossa' });
+  res.json({ message: 'Subscription removed' });
 });
 
 router.delete('/:id/subscribers/:subId', requireAdmin, async (req, res) => {
   await query('DELETE FROM service_subscribers WHERE id=$1 AND service_id=$2', [req.params.subId, req.params.id]);
-  res.json({ message: 'Iscritto rimosso' });
+  res.json({ message: 'Subscriber removed' });
 });
 
 // ─── GET /api/services/:id/licenses ─────────────────────────────────────────
@@ -724,7 +724,7 @@ router.put('/:id/licenses', requireOperator, [
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const service = await getOne('SELECT id FROM services WHERE id=$1', [req.params.id]);
-  if (!service) return res.status(404).json({ error: 'Servizio non trovato' });
+  if (!service) return res.status(404).json({ error: 'Service not found' });
 
   const licenseIds = Array.isArray(req.body.license_ids) ? req.body.license_ids : [];
   await query('DELETE FROM license_services WHERE service_id=$1', [req.params.id]);
@@ -795,7 +795,7 @@ router.post('/:id/probe-configs', requireOperator, [
     }
 
     const service = await getOne('SELECT id FROM services WHERE id=$1 AND is_active=true', [req.params.id]);
-    if (!service) return res.status(404).json({ error: 'Service non trovato' });
+    if (!service) return res.status(404).json({ error: 'Service not found' });
 
     const r = await query(
       `INSERT INTO service_probes (
@@ -842,7 +842,7 @@ router.put('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
       `SELECT id, legacy_slot FROM service_probes WHERE id=$1 AND service_id=$2`,
       [req.params.probeId, req.params.id]
     );
-    if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
+    if (!probe) return res.status(404).json({ error: 'Probe not found' });
 
     const allowed = [
       'name', 'probe_enabled', 'probe_type', 'probe_target',
@@ -858,13 +858,13 @@ router.put('/:id/probe-configs/:probeId', requireOperator, async (req, res) => {
       sets.push(`${field} = $${i++}`);
       vals.push(req.body[field]);
     }
-    if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
+    if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
     sets.push(`updated_at = NOW()`);
     vals.push(req.params.probeId, req.params.id);
 
     await query(`UPDATE service_probes SET ${sets.join(', ')} WHERE id = $${i++} AND service_id = $${i}`, vals);
 
-    res.json({ message: 'Probe aggiornata' });
+    res.json({ message: 'Probe updated' });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Error updating probe config' });
   }
@@ -877,11 +877,11 @@ router.delete('/:id/probe-configs/:probeId', requireOperator, async (req, res) =
       `SELECT id, legacy_slot FROM service_probes WHERE id=$1 AND service_id=$2`,
       [req.params.probeId, req.params.id]
     );
-    if (!probe) return res.status(404).json({ error: 'Probe non trovata' });
-    if (probe.legacy_slot) return res.status(400).json({ error: 'La probe principale legacy non può essere eliminata' });
+    if (!probe) return res.status(404).json({ error: 'Probe not found' });
+    if (probe.legacy_slot) return res.status(400).json({ error: 'The legacy primary probe cannot be deleted' });
 
     await query(`DELETE FROM service_probes WHERE id=$1 AND service_id=$2`, [req.params.probeId, req.params.id]);
-    res.json({ message: 'Probe eliminata' });
+    res.json({ message: 'Probe deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Error deleting probe config' });
   }

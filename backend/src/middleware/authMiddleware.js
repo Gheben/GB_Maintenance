@@ -7,30 +7,30 @@ async function requireAuth(req, res, next) {
   try {
     const header = req.headers['authorization'] || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-    if (!token) return res.status(401).json({ error: 'Token mancante' });
+    if (!token) return res.status(401).json({ error: 'Missing token' });
 
     let payload;
     try {
       payload = verifyToken(token);
     } catch (err) {
-      return res.status(401).json({ error: 'Token non valido o scaduto' });
+      return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
     // Check session revocation
     if (payload.jti) {
       const revoked = await isSessionRevoked(payload.jti);
-      if (revoked) return res.status(401).json({ error: 'Sessione revocata' });
+      if (revoked) return res.status(401).json({ error: 'Session revoked' });
     }
 
     // Attach fresh user data
     const user = await getUserById(payload.sub);
-    if (!user || !user.is_active) return res.status(401).json({ error: 'Utente non trovato o disabilitato' });
+    if (!user || !user.is_active) return res.status(401).json({ error: 'User not found or disabled' });
 
     req.user = { ...user, jti: payload.jti };
     next();
   } catch (err) {
     logger.error(`[AuthMiddleware] ${err.message}`);
-    res.status(500).json({ error: 'Errore di autenticazione' });
+    res.status(500).json({ error: 'Authentication error' });
   }
 }
 
@@ -69,7 +69,7 @@ const bcrypt = require('bcryptjs');
 
 async function requireApiKey(req, res, next) {
   const key = req.headers['x-api-key'] || req.query.api_key;
-  if (!key) return res.status(401).json({ error: 'API key mancante' });
+  if (!key) return res.status(401).json({ error: 'Missing API key' });
 
   const prefix = key.slice(0, 10);
   const rows = await require('../db/database').getMany(
@@ -82,7 +82,7 @@ async function requireApiKey(req, res, next) {
 
   for (const row of rows) {
     if (bcrypt.compareSync(key, row.key_hash)) {
-      if (!row.is_active) return res.status(403).json({ error: 'Utente disabilitato' });
+      if (!row.is_active) return res.status(403).json({ error: 'User disabled' });
       req.user = { id: row.owner_id, role: row.role, permissions: row.permissions };
       req.apiKeyId = row.id;
       // Update last_used_at async
@@ -90,15 +90,15 @@ async function requireApiKey(req, res, next) {
       return next();
     }
   }
-  return res.status(401).json({ error: 'API key non valida' });
+  return res.status(401).json({ error: 'Invalid API key' });
 }
 
 // ─── Role Guards ──────────────────────────────────────────────────────────────
 function requireRole(...roles) {
   return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: 'Non autenticato' });
+    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: `Ruolo richiesto: ${roles.join(' o ')}` });
+      return res.status(403).json({ error: `Role required: ${roles.join(' or ')}` });
     }
     next();
   };
@@ -112,7 +112,7 @@ const requireOperator = requireRole('superadmin', 'admin', 'change_manager', 'op
 // ─── Permission Guard ─────────────────────────────────────────────────────────
 function requirePermission(perm) {
   return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: 'Non autenticato' });
+    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
     const perms = req.user.permissions || {};
     if (req.user.role === 'superadmin' || perms[perm] === true) return next();
     return res.status(403).json({ error: `Permesso '${perm}' richiesto` });

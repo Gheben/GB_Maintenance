@@ -570,7 +570,7 @@ async function notifyIncident(incidentId, eventType) {
     }
     if (userIds.size > 0) {
       tasks.push(Promise.all([...userIds].map((uid) =>
-        sendInApp(uid, eventType, `Incidente: ${incident.title}`, incident.description, 'incident', incidentId)
+        sendInApp(uid, eventType, `Incident: ${incident.title}`, incident.description, 'incident', incidentId)
       )));
     }
     tasks.push(_dispatchWebhooks(eventType, { incident }));

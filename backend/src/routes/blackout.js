@@ -253,7 +253,7 @@ router.get('/', async (req, res) => {
 // ─── GET /api/blackout/check ──────────────────────────────────────────────────
 router.get('/check', async (req, res) => {
   const { start, end } = req.query;
-  if (!start || !end) return res.status(400).json({ error: 'start e end richiesti' });
+  if (!start || !end) return res.status(400).json({ error: 'start and end are required' });
   const row = await getOne(
     `SELECT id, name FROM blackout_periods WHERE start_date <= $2 AND end_date >= $1`,
     [start, end]
@@ -268,7 +268,7 @@ router.get('/:id', async (req, res) => {
      LEFT JOIN users u ON u.id=bp.created_by WHERE bp.id=$1`,
     [req.params.id]
   );
-  if (!row) return res.status(404).json({ error: 'Periodo non trovato' });
+  if (!row) return res.status(404).json({ error: 'Period not found' });
   const impacted = await getImpactedUsersAndOffices(row.service_ids || [], row.asset_ids || []);
   const affectedServices = await getAffectedServices(row.asset_ids || [], row.service_ids || []);
   const visibleScope = await getVisibleAffectedScope(
@@ -302,7 +302,7 @@ router.post('/', requireChangeManager, [
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   if (new Date(req.body.end_date) <= new Date(req.body.start_date)) {
-    return res.status(400).json({ error: 'end_date deve essere dopo start_date' });
+    return res.status(400).json({ error: 'end_date must be after start_date' });
   }
   const sids = req.body.service_ids || [];
   const aids = req.body.asset_ids || [];
@@ -359,17 +359,17 @@ router.put('/:id', requireChangeManager, async (req, res) => {
   }
   if (req.body.service_ids !== undefined) { sets.push(`service_ids=$${i++}`); vals.push(req.body.service_ids || []); }
   if (req.body.asset_ids   !== undefined) { sets.push(`asset_ids=$${i++}`);   vals.push(req.body.asset_ids   || []); }
-  if (sets.length===0) return res.status(400).json({ error: 'Nessun campo' });
+  if (sets.length===0) return res.status(400).json({ error: 'No fields to update' });
   vals.push(req.params.id);
   await query(`UPDATE blackout_periods SET ${sets.join(',')} WHERE id=$${i}`, vals);
-  res.json({ message: 'Periodo aggiornato' });
+  res.json({ message: 'Period updated' });
 });
 
 // ─── DELETE /api/blackout/:id ─────────────────────────────────────────────────
 router.delete('/:id', requireAdmin, async (req, res) => {
   await query('DELETE FROM blackout_periods WHERE id=$1', [req.params.id]);
   await auditService.log(req.user.id, req.user.username, 'blackout:delete', 'blackout_period', req.params.id, null, req.ip);
-  res.json({ message: 'Periodo eliminato' });
+  res.json({ message: 'Period deleted' });
 });
 
 module.exports = router;

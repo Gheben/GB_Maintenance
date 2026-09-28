@@ -78,7 +78,7 @@ async function generateRegistrationOpts(req, user) {
 async function verifyRegistration(req, user, response, credentialName) {
   const { rpID, origin } = getRpConfig(req);
   const expectedChallenge = popChallenge(`reg:${user.id}`);
-  if (!expectedChallenge) throw new Error('Registrazione scaduta, riprova');
+  if (!expectedChallenge) throw new Error('Registration expired, please try again');
 
   const verification = await verifyRegistrationResponse({
     response,
@@ -88,7 +88,7 @@ async function verifyRegistration(req, user, response, credentialName) {
   });
 
   if (!verification.verified || !verification.registrationInfo) {
-    throw new Error('Verifica della chiave di sicurezza fallita');
+    throw new Error('Security key verification failed');
   }
 
   const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
@@ -126,15 +126,15 @@ async function verifyAuthentication(req, response) {
   const { rpID, origin } = getRpConfig(req);
   const challenge = decodeChallenge(response);
   const expectedChallenge = challenge && popChallenge(challenge);
-  if (!expectedChallenge) throw new Error('Richiesta di accesso scaduta, riprova');
+  if (!expectedChallenge) throw new Error('Sign-in request expired, please try again');
 
   const credRow = await getOne('SELECT * FROM webauthn_credentials WHERE credential_id=$1', [response.id]);
-  if (!credRow) throw new Error('Passkey non riconosciuta');
+  if (!credRow) throw new Error('Passkey not recognized');
 
   const user = await getOne(`SELECT * FROM users WHERE id=$1 AND is_active=true`, [credRow.user_id]);
-  if (!user) throw new Error('Utente non trovato o disabilitato');
+  if (!user) throw new Error('User not found or disabled');
   // Guard against stale passkeys if the account was later converted to SAML/LDAP.
-  if (user.auth_type !== 'local') throw new Error('Le passkey sono disponibili solo per account locali');
+  if (user.auth_type !== 'local') throw new Error('Passkeys are only available for local accounts');
 
   const verification = await verifyAuthenticationResponse({
     response,
@@ -144,7 +144,7 @@ async function verifyAuthentication(req, response) {
     credential: toCredentialRow(credRow),
   });
 
-  if (!verification.verified) throw new Error('Verifica della passkey fallita');
+  if (!verification.verified) throw new Error('Passkey verification failed');
 
   await query(
     `UPDATE webauthn_credentials SET counter=$1, last_used_at=NOW() WHERE id=$2`,

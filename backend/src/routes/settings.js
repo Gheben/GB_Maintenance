@@ -234,14 +234,14 @@ async function createTransferBackup(groups, tables, reason) {
 }
 
 function requireLdapDirectorySearchAccess(req, res, next) {
-  if (!req.user) return res.status(401).json({ error: 'Non autenticato' });
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   if (req.user.role === 'superadmin' || req.user.role === 'admin') return next();
 
   const perms = req.user.permissions || {};
   const allowed = LDAP_DIRECTORY_SEARCH_PERMISSIONS.some((perm) => perms[perm] === true);
   if (allowed) return next();
 
-  return res.status(403).json({ error: 'Permessi insufficienti per la ricerca LDAP' });
+  return res.status(403).json({ error: 'Insufficient permissions for LDAP search' });
 }
 
 function getDefaultGeneralSettings() {
@@ -641,7 +641,7 @@ router.put('/smtp', requireAuth, requireAdmin, [
     [JSON.stringify(cfg)]
   );
   await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'smtp_config', null, req.ip);
-  res.json({ message: 'Configurazione SMTP salvata' });
+  res.json({ message: 'SMTP configuration saved' });
 });
 
 // ─── POST /api/settings/smtp/test ────────────────────────────────────────────
@@ -691,15 +691,15 @@ router.get('/ldap/enabled', requireAuth, requireLdapDirectorySearchAccess, async
 router.put('/ldap', requireAuth, requireSuperAdmin, async (req, res) => {
   await ldapService.saveLdapSettings(req.body);
   await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'ldap_config', null, req.ip);
-  res.json({ message: 'Configurazione LDAP salvata' });
+  res.json({ message: 'LDAP configuration saved' });
 });
 
 router.post('/ldap/test', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
     const cfg = req.body.url ? req.body : await ldapService.getLdapSettings();
-    if (!cfg) return res.status(400).json({ error: 'LDAP non configurato' });
+    if (!cfg) return res.status(400).json({ error: 'LDAP not configured' });
     await ldapService.testLdapConnection(cfg);
-    res.json({ message: 'Connessione LDAP riuscita' });
+    res.json({ message: 'LDAP connection successful' });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
@@ -731,7 +731,7 @@ router.get('/saml', requireAuth, requireSuperAdmin, async (req, res) => {
 router.put('/saml', requireAuth, requireSuperAdmin, async (req, res) => {
   await samlService.saveSamlSettings(req.body);
   await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'saml_config', null, req.ip);
-  res.json({ message: 'Configurazione SAML salvata' });
+  res.json({ message: 'SAML configuration saved' });
 });
 
 // ─── GET/PUT /api/settings/webhooks ──────────────────────────────────────────
@@ -750,7 +750,7 @@ router.put('/webhooks', requireAuth, requireAdmin, [
      ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`,
     [JSON.stringify(req.body)]
   );
-  res.json({ message: 'Webhook salvati' });
+  res.json({ message: 'Webhooks saved' });
 });
 
 // ─── GET/PUT /api/settings/general ───────────────────────────────────────────
@@ -766,7 +766,7 @@ router.put('/general', requireAuth, requireSuperAdmin, async (req, res) => {
     [JSON.stringify(req.body)]
   );
   await auditService.log(req.user.id, req.user.username, 'settings:update', 'settings', 'general_config', null, req.ip);
-  res.json({ message: 'Impostazioni generali salvate' });
+  res.json({ message: 'General settings saved' });
 });
 
 // ─── GET/PUT /api/settings/ntp ────────────────────────────────────────────────
@@ -1894,7 +1894,7 @@ router.get('/:key', requireAuth, requireAdmin, async (req, res) => {
   }
 
   const row = await getOne('SELECT value FROM settings WHERE key=$1', [req.params.key]);
-  if (!row) return res.status(404).json({ error: 'Chiave non trovata' });
+  if (!row) return res.status(404).json({ error: 'Setting not found' });
   try {
     const val = JSON.parse(row.value);
     if (val && typeof val === 'object') {

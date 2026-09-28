@@ -22,7 +22,7 @@ router.get('/maintenance/:id', async (req, res) => {
      LEFT JOIN users u ON u.id=mt.created_by WHERE mt.id=$1`,
     [req.params.id]
   );
-  if (!row) return res.status(404).json({ error: 'Template non trovato' });
+  if (!row) return res.status(404).json({ error: 'Template not found' });
   res.json(row);
 });
 
@@ -56,15 +56,15 @@ router.put('/maintenance/:id', requireOperator, async (req, res) => {
       vals.push(f === 'checklist' ? JSON.stringify(req.body[f]) : req.body[f]);
     }
   }
-  if (sets.length===0) return res.status(400).json({ error: 'Nessun campo' });
+  if (sets.length===0) return res.status(400).json({ error: 'No fields to update' });
   sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
   await query(`UPDATE maintenance_templates SET ${sets.join(',')} WHERE id=$${i}`, vals);
-  res.json({ message: 'Template aggiornato' });
+  res.json({ message: 'Template updated' });
 });
 
 router.delete('/maintenance/:id', requireAdmin, async (req, res) => {
   await query('DELETE FROM maintenance_templates WHERE id=$1', [req.params.id]);
-  res.json({ message: 'Template eliminato' });
+  res.json({ message: 'Template deleted' });
 });
 
 module.exports = router;

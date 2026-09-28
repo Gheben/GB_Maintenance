@@ -120,7 +120,7 @@ async function loginLocal(username, password) {
   // Check account lock
   if (user.locked_until && new Date(user.locked_until) > new Date()) {
     const unlockAt = new Date(user.locked_until).toLocaleString('it-IT');
-    throw Object.assign(new Error(`Account bloccato fino al ${unlockAt}`), { code: 'ACCOUNT_LOCKED' });
+    throw Object.assign(new Error(`Account locked until ${unlockAt}`), { code: 'ACCOUNT_LOCKED' });
   }
 
   const valid = verifyPassword(password, user.password_hash);

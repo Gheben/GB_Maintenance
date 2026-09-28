@@ -72,7 +72,7 @@ router.get('/', async (req, res) => {
 // ─── GET /api/groups/:id ──────────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   const group = await getOne('SELECT * FROM local_groups WHERE id=$1', [req.params.id]);
-  if (!group) return res.status(404).json({ error: 'Gruppo non trovato' });
+  if (!group) return res.status(404).json({ error: 'Group not found' });
 
   const members = await getMany(
     `SELECT u.id, u.username, u.display_name, u.email, u.role, u.avatar_color, u.auth_type
@@ -98,7 +98,7 @@ router.post('/', [
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const allowedRoles = await getAllowedRoles();
-  if (!allowedRoles.has(req.body.role)) return res.status(400).json({ error: 'Ruolo non valido' });
+  if (!allowedRoles.has(req.body.role)) return res.status(400).json({ error: 'Invalid role' });
 
   try {
     const result = await query(
@@ -109,7 +109,7 @@ router.post('/', [
     await auditService.log(req.user.id, req.user.username, 'group:create', 'local_group', id, `name=${req.body.name}`, req.ip);
     res.status(201).json({ id });
   } catch (err) {
-    if (err.code === '23505') return res.status(409).json({ error: 'Nome gruppo già in uso' });
+    if (err.code === '23505') return res.status(409).json({ error: 'Group name already in use' });
     res.status(500).json({ error: err.message });
   }
 });
@@ -123,29 +123,29 @@ router.put('/:id', [
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-  if (req.body.role === undefined) return res.status(400).json({ error: 'Ruolo obbligatorio' });
+  if (req.body.role === undefined) return res.status(400).json({ error: 'Role is required' });
 
   const allowedRoles = await getAllowedRoles();
-  if (!allowedRoles.has(req.body.role)) return res.status(400).json({ error: 'Ruolo non valido' });
+  if (!allowedRoles.has(req.body.role)) return res.status(400).json({ error: 'Invalid role' });
 
   const sets = []; const vals = []; let i = 1;
   if (req.body.name !== undefined)        { sets.push(`name=$${i++}`); vals.push(req.body.name); }
   if (req.body.description !== undefined) { sets.push(`description=$${i++}`); vals.push(req.body.description); }
   if (req.body.role !== undefined)        { sets.push(`role=$${i++}`); vals.push(req.body.role); }
   if (req.body.permissions !== undefined) { sets.push(`permissions=$${i++}`); vals.push(JSON.stringify(req.body.permissions)); }
-  if (sets.length === 0) return res.status(400).json({ error: 'Nessun campo da aggiornare' });
+  if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
   sets.push(`updated_at=$${i++}`); vals.push(new Date()); vals.push(req.params.id);
 
   await query(`UPDATE local_groups SET ${sets.join(',')} WHERE id=$${i}`, vals);
   await auditService.log(req.user.id, req.user.username, 'group:update', 'local_group', req.params.id, null, req.ip);
-  res.json({ message: 'Gruppo aggiornato' });
+  res.json({ message: 'Group updated' });
 });
 
 // ─── DELETE /api/groups/:id ───────────────────────────────────────────────────
 router.delete('/:id', async (req, res) => {
   await query('DELETE FROM local_groups WHERE id=$1', [req.params.id]);
   await auditService.log(req.user.id, req.user.username, 'group:delete', 'local_group', req.params.id, null, req.ip);
-  res.json({ message: 'Gruppo eliminato' });
+  res.json({ message: 'Group deleted' });
 });
 
 // ─── POST /api/groups/:id/members ─────────────────────────────────────────────
@@ -161,7 +161,7 @@ router.post('/:id/members', [
       [uid, req.params.id]
     );
   }
-  res.json({ message: 'Membri aggiunti' });
+  res.json({ message: 'Members added' });
 });
 
 // ─── DELETE /api/groups/:id/members/:userId ───────────────────────────────────
@@ -170,7 +170,7 @@ router.delete('/:id/members/:userId', async (req, res) => {
     'DELETE FROM user_group_members WHERE group_id=$1 AND user_id=$2',
     [req.params.id, req.params.userId]
   );
-  res.json({ message: 'Membro rimosso' });
+  res.json({ message: 'Member removed' });
 });
 
 // ─── LDAP Mappings ────────────────────────────────────────────────────────────
@@ -191,7 +191,7 @@ router.post('/ldap/mappings', [
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
   const allowedRoles = await getAllowedRoles();
-  if (!allowedRoles.has(req.body.role)) return res.status(400).json({ error: 'Ruolo non valido' });
+  if (!allowedRoles.has(req.body.role)) return res.status(400).json({ error: 'Invalid role' });
 
   const result = await query(
     `INSERT INTO ldap_group_mappings (ldap_group_dn, local_group_id, role) VALUES ($1,$2,$3) RETURNING id`,
@@ -202,7 +202,7 @@ router.post('/ldap/mappings', [
 
 router.delete('/ldap/mappings/:id', async (req, res) => {
   await query('DELETE FROM ldap_group_mappings WHERE id=$1', [req.params.id]);
-  res.json({ message: 'Mapping eliminato' });
+  res.json({ message: 'Mapping deleted' });
 });
 
 module.exports = router;

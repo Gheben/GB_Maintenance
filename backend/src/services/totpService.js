@@ -27,7 +27,7 @@ async function setupTotp(userId) {
 // ─── Verify and activate TOTP ─────────────────────────────────────────────────
 async function verifyAndActivateTotp(userId, token) {
   const user = await getOne('SELECT totp_secret FROM users WHERE id=$1', [userId]);
-  if (!user?.totp_secret) throw new Error('TOTP non configurato');
+  if (!user?.totp_secret) throw new Error('TOTP not configured');
 
   const secret = isEncrypted(user.totp_secret) ? decrypt(user.totp_secret) : user.totp_secret;
   const valid = authenticator.verify({ token, secret });
