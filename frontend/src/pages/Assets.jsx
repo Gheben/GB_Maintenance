@@ -374,7 +374,7 @@ export default function Assets() {
               {CRITICALITIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
             {canBulkDelete && (
               <button

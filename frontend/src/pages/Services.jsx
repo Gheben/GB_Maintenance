@@ -423,7 +423,7 @@ export default function Services() {
             <input className="input pl-9 w-48" placeholder="Search..." value={search}
               onChange={e => { setSearch(e.target.value); setPage(1) }} />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
             {canBulkDelete && (
               <button
@@ -438,7 +438,60 @@ export default function Services() {
           </div>
         </div>
 
-        <div className="card overflow-hidden">
+        {/* Mobile card list (below sm breakpoint) */}
+        <div className="sm:hidden space-y-3">
+          {canBulkDelete && services.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-gray-500 px-1">
+              <input type="checkbox" checked={allVisibleSelected} onChange={(e) => toggleSelectAllVisible(e.target.checked)} aria-label="Select all visible services" />
+              Select all visible
+            </label>
+          )}
+          {loading ? (
+            <div className="card p-6 text-center text-gray-500 text-sm">Loading...</div>
+          ) : services.length === 0 ? (
+            <div className="card p-6 text-center text-gray-500 text-sm">No services found</div>
+          ) : services.map(s => (
+            <div key={s.id} className="card p-4 space-y-2.5" onClick={canEdit ? () => openEdit(s) : undefined}>
+              <div className="flex items-start justify-between gap-2">
+                <Link to={`/services/${s.id}`} onClick={e => e.stopPropagation()} className="text-brand-600 hover:underline font-medium inline-flex items-center gap-1.5 min-w-0">
+                  {s.is_public && <Globe size={13} className="text-green-500 shrink-0" />}
+                  {s.part_is_relevant && <ShieldCheck size={13} className="text-amber-600 shrink-0" title="Part-IS Relevant" />}
+                  <span className="truncate">{s.name}</span>
+                </Link>
+                <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {canBulkDelete && (
+                    <input type="checkbox" checked={selectedServiceIds.includes(s.id)} onChange={() => toggleServiceSelection(s.id)} aria-label={`Select service ${s.name}`} />
+                  )}
+                  {canEdit && (
+                    <button onClick={() => openEdit(s)} className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">
+                      <Pencil size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <CriticalityBadge criticality={s.criticality} />
+                <StatusBadge status={s.status} />
+                <span className="text-xs text-gray-500">{s.asset_count ?? 0} asset(s)</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                <div className="min-w-0">
+                  <span className="text-gray-400">Owner: </span>
+                  <span className="text-gray-600 dark:text-gray-300">{(s.owner_label || s.owner_name || '—')}{(s.owner_count || 0) > 1 ? ` +${s.owner_count - 1}` : ''}</span>
+                </div>
+                <div className="min-w-0"><span className="text-gray-400">Probe: </span><ProbeState row={s} /></div>
+              </div>
+              {Number(s.license_count || 0) > 0 && (
+                <div className="pt-1 flex justify-start"><LicenseState row={s} /></div>
+              )}
+            </div>
+          ))}
+          <div className="card p-4">
+            <Pagination page={page} limit={limit} total={total} onChange={setPage} onLimitChange={setLimit} />
+          </div>
+        </div>
+
+        <div className="card overflow-hidden hidden sm:block">
           <div className="overflow-x-auto">
             <table className="min-w-[640px] w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50">

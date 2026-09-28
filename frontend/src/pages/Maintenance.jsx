@@ -187,7 +187,7 @@ export default function Maintenance() {
               Upcoming only
             </label>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
             {canBulkDelete && (
               <button
@@ -203,7 +203,86 @@ export default function Maintenance() {
           </div>
         </div>
 
-        <div className="card overflow-hidden">
+        {/* Mobile card list (below sm breakpoint) */}
+        <div className="sm:hidden space-y-3">
+          {canBulkDelete && items.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-gray-500 px-1">
+              <input type="checkbox" checked={allVisibleSelected} onChange={(e) => toggleSelectAllVisible(e.target.checked)} aria-label="Select all visible maintenance rows" />
+              Select all visible
+            </label>
+          )}
+          {loading ? (
+            <div className="card p-6 text-center text-gray-500 text-sm">Loading...</div>
+          ) : items.length === 0 ? (
+            <div className="card p-6 text-center text-gray-500 text-sm">No maintenance found</div>
+          ) : items.map(m => {
+            const isExpanded = expandedId === m.id
+            return (
+              <div key={m.id} className="card p-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-2" onClick={() => setExpandedId(isExpanded ? null : m.id)}>
+                  <div className="min-w-0 flex items-start gap-1.5">
+                    {canBulkDelete && (
+                      <input type="checkbox" className="mt-1 shrink-0" checked={selectedMaintenanceIds.includes(m.id)} onChange={() => toggleMaintenanceSelection(m.id)} onClick={(e) => e.stopPropagation()} aria-label={`Select maintenance ${m.title}`} />
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{m.title}</div>
+                      {m.ticket_ref && <div className="text-xs text-brand-600 font-medium">Ticket: {m.ticket_ref}</div>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button onClick={e => { e.stopPropagation(); navigate(`/maintenance/${m.id}`) }} className="action-icon-btn" title="Edit"><Pencil size={14} /></button>
+                    <ChevronDown size={16} className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-0' : '-rotate-90'}`} />
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-gray-500">{m.type}</span>
+                  <CriticalityBadge criticality={m.impact_level} />
+                  <StatusBadge status={m.status} />
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                  <div>
+                    <span className="text-gray-400">Assets: </span>
+                    {m.asset_count > 0
+                      ? <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700"><Cog size={11} />{m.asset_count}</span>
+                      : <span className="text-gray-300">—</span>}
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Services: </span>
+                    {m.service_count > 0
+                      ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700"><Server size={11} />{m.service_count}</span>
+                      : <span className="text-gray-300">—</span>}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500">{format(new Date(m.scheduled_start), 'MM/dd/yyyy HH:mm')} - {format(new Date(m.scheduled_end), 'MM/dd/yyyy HH:mm')}</div>
+                {isExpanded && (
+                  <div className="pt-2 border-t border-gray-100 dark:border-gray-700 space-y-2">
+                    {[
+                      { label: 'Created', ts: m.created_at, color: 'bg-gray-400' },
+                      { label: 'Approved', ts: m.approved_at, color: 'bg-blue-500' },
+                      { label: 'Reopened', ts: m.reopened_at, color: 'bg-amber-500' },
+                      { label: 'Started', ts: m.actual_start, color: 'bg-orange-500' },
+                      { label: 'Completed', ts: m.actual_end, color: 'bg-green-500' },
+                    ].map(step => (
+                      <div key={step.label} className="flex items-center gap-2 text-xs">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${step.ts ? step.color : 'bg-gray-200'}`} />
+                        <span className={step.ts ? 'text-gray-700 dark:text-gray-200 font-medium' : 'text-gray-300'}>{step.label}</span>
+                        {step.ts && <span className="text-gray-400">{format(new Date(step.ts), 'MM/dd HH:mm')}</span>}
+                      </div>
+                    ))}
+                    {m.reopen_reason && (
+                      <p className="text-xs text-amber-700"><strong>Reopen reason:</strong> {m.reopen_reason}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          <div className="card p-4">
+            <Pagination page={page} limit={limit} total={total} onChange={setPage} onLimitChange={setLimit} />
+          </div>
+        </div>
+
+        <div className="card overflow-hidden hidden sm:block">
           <div className="overflow-x-auto">
           <table className="min-w-[700px] w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">

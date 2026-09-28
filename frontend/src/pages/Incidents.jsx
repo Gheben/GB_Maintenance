@@ -156,7 +156,7 @@ export default function Incidents() {
             <input className="input pl-9 w-48" placeholder="Search..." value={search}
               onChange={e => { setSearch(e.target.value); setPage(1) }} />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <select className="input w-48" value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }}>
               <option value="">All statuses</option>
               {['investigating','identified','monitoring','resolved'].map(s => <option key={s} value={s}>{s}</option>)}
@@ -172,7 +172,68 @@ export default function Incidents() {
           </div>
         </div>
 
-        <div className="card overflow-hidden">
+        {/* Mobile card list (below sm breakpoint) */}
+        <div className="sm:hidden space-y-3">
+          {canBulkDelete && items.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-gray-500 px-1">
+              <input type="checkbox" checked={allVisibleSelected} onChange={(e) => toggleSelectAllVisible(e.target.checked)} aria-label="Select all visible incidents" />
+              Select all visible
+            </label>
+          )}
+          {loading ? (
+            <div className="card p-6 text-center text-gray-500 text-sm">Loading...</div>
+          ) : items.length === 0 ? (
+            <div className="card p-6 text-center text-gray-500 text-sm">No incidents found</div>
+          ) : items.map(i => (
+            <div key={i.id} className="card p-4 space-y-2.5" onClick={() => navigate(`/incidents/${i.id}`)}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex items-start gap-1.5">
+                  {canBulkDelete && (
+                    <input type="checkbox" className="mt-1 shrink-0" checked={selectedIncidentIds.includes(i.id)} onChange={() => toggleIncidentSelection(i.id)} onClick={(e) => e.stopPropagation()} aria-label={`Select incident ${i.title}`} />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{i.title}</div>
+                    {i.ticket_ref && <div className="text-xs text-brand-600 font-medium">Ticket: {i.ticket_ref}</div>}
+                  </div>
+                </div>
+                <button onClick={(e) => { e.stopPropagation(); openEdit(i) }} className="action-icon-btn shrink-0" title="Edit">
+                  <Pencil size={14} />
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span
+                  className="inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                  style={{ color: severityMeta(i.severity).color, backgroundColor: `${severityMeta(i.severity).color}22` }}
+                >
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: severityMeta(i.severity).color }} />
+                  {severityMeta(i.severity).label}
+                </span>
+                <StatusBadge status={i.status} />
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                <div>
+                  <span className="text-gray-400">Assets: </span>
+                  {i.asset_count > 0
+                    ? <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700"><Cog size={11} />{i.asset_count}</span>
+                    : <span className="text-gray-300">—</span>}
+                </div>
+                <div>
+                  <span className="text-gray-400">Services: </span>
+                  {i.service_count > 0
+                    ? <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700"><Server size={11} />{i.service_count}</span>
+                    : <span className="text-gray-300">—</span>}
+                </div>
+                <div><span className="text-gray-400">Opened: </span><span className="text-gray-600 dark:text-gray-300">{format(new Date(i.started_at), 'MM/dd HH:mm')}</span></div>
+                <div><span className="text-gray-400">Resolved: </span><span className="text-gray-600 dark:text-gray-300">{i.resolved_at ? format(new Date(i.resolved_at), 'MM/dd HH:mm') : '—'}</span></div>
+              </div>
+            </div>
+          ))}
+          <div className="card p-4">
+            <Pagination page={page} limit={limit} total={total} onChange={setPage} onLimitChange={setLimit} />
+          </div>
+        </div>
+
+        <div className="card overflow-hidden hidden sm:block">
           <div className="overflow-x-auto">
           <table className="min-w-[700px] w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
