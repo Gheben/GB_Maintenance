@@ -9,8 +9,8 @@ const logger        = require('../utils/logger');
 const wsService     = require('./wsService');
 
 const TICK_SECONDS = parseInt(process.env.PROBE_TICK_SECONDS || '60', 10);
-const PROBE_BATCH_SIZE = parseInt(process.env.PROBE_BATCH_SIZE || '200', 10);
-const PROBE_MAX_PARALLEL = parseInt(process.env.PROBE_MAX_PARALLEL || '20', 10);
+const PROBE_BATCH_SIZE = parseInt(process.env.PROBE_BATCH_SIZE || '500', 10);
+const PROBE_MAX_PARALLEL = parseInt(process.env.PROBE_MAX_PARALLEL || '30', 10);
 let _interval = null;
 
 function start() {
@@ -45,6 +45,20 @@ async function _runProbes() {
        LIMIT $1`,
       [PROBE_BATCH_SIZE]
     );
+
+    // Surface backlog in logs: if this tick's batch was already full, more probes were
+    // due than PROBE_BATCH_SIZE could cover, meaning monitoring is falling behind schedule.
+    if (probes.length >= PROBE_BATCH_SIZE) {
+      const dueRow = await getOne(
+        `SELECT COUNT(*)::int AS c FROM asset_probes ap
+         JOIN assets a ON a.id = ap.asset_id
+         WHERE ap.probe_enabled = true AND a.is_active = true AND ap.next_probe_at <= NOW()`
+      );
+      const due = dueRow?.c || 0;
+      if (due > PROBE_BATCH_SIZE) {
+        logger.warn(`[ProbeService] Backlog detected: ${due} probes due but only ${PROBE_BATCH_SIZE} processed this tick. Consider raising PROBE_BATCH_SIZE/PROBE_MAX_PARALLEL.`);
+      }
+    }
 
     for (let i = 0; i < probes.length; i += PROBE_MAX_PARALLEL) {
       const batch = probes.slice(i, i + PROBE_MAX_PARALLEL);

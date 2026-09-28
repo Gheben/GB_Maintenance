@@ -3,6 +3,7 @@ const { query, getMany, getOne } = require('../db/database');
 const { notifyMaintenance, sendEmailNotification, sendInApp } = require('./notificationService');
 const logger = require('../utils/logger');
 const wsService = require('./wsService');
+const authService = require('./authService');
 
 // ─── Reminder intervals ───────────────────────────────────────────────────────
 const REMINDERS = [
@@ -75,6 +76,16 @@ function start() {
   // Every 5 minutes: run reminders check
   cron.schedule('*/5 * * * *', async () => {
     await _checkReminders();
+  });
+
+  // Daily at 03:00: purge expired/old-revoked sessions so the table doesn't grow unbounded
+  cron.schedule('0 3 * * *', async () => {
+    try {
+      const deleted = await authService.purgeExpiredSessions();
+      if (deleted > 0) logger.info(`[Scheduler] Purged ${deleted} expired/revoked session(s)`);
+    } catch (err) {
+      logger.error(`[Scheduler] Session purge error: ${err.message}`);
+    }
   });
 
   // Every minute: probe tick handled by probeService

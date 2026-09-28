@@ -317,6 +317,16 @@ async function getUserSessions(userId) {
   );
 }
 
+// Keeps a short grace period past expiry/revocation for support/debugging before deleting.
+async function purgeExpiredSessions() {
+  const result = await query(
+    `DELETE FROM user_sessions
+     WHERE expires_at < NOW() - INTERVAL '7 days'
+        OR (revoked = true AND created_at < NOW() - INTERVAL '30 days')`
+  );
+  return result.rowCount || 0;
+}
+
 function parseExpiry(str) {
   const match = String(str).match(/^(\d+)([smhd])$/);
   if (!match) return 8 * 3600 * 1000;
@@ -334,5 +344,5 @@ module.exports = {
   seedSuperAdmin,
   loginLocal,
   getAllUsers, getUsersPage, getUserById, getUserWithHash, createUser, updateUser, deleteUser,
-  createSession, revokeSession, revokeAllUserSessions, isSessionRevoked, getUserSessions,
+  createSession, revokeSession, revokeAllUserSessions, isSessionRevoked, getUserSessions, purgeExpiredSessions,
 };

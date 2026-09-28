@@ -15,9 +15,14 @@ async function initDb() {
     database: process.env.POSTGRES_DB       || 'gbmaintenance',
     user:     process.env.POSTGRES_USER     || 'gbmaint',
     password: process.env.POSTGRES_PASSWORD || 'changeme',
-    max: 20,
+    max: parseInt(process.env.POSTGRES_POOL_MAX || '50', 10),
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
+  });
+
+  // Prevent an unexpected idle-client disconnect from crashing the whole process.
+  pool.on('error', (err) => {
+    logger.error(`[DB] Unexpected error on idle client: ${err.message}`);
   });
 
   // Test connection
