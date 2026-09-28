@@ -705,7 +705,7 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
           ))}
           {authFilter !== 'all' && <span className="text-xs text-gray-400">({filtered.length} shown)</span>}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {canBulkDelete && authFilter === 'local' && (
             <button
               className="btn-danger"
@@ -721,7 +721,65 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
         </div>
       </div>
 
-      <div className="card overflow-hidden">
+      {/* Mobile card list (below sm breakpoint) */}
+      <div className="sm:hidden space-y-3">
+        {canBulkDelete && authFilter === 'local' && visibleLocalUsers.length > 0 && (
+          <label className="flex items-center gap-2 text-xs text-gray-500 px-1">
+            <input type="checkbox" checked={allVisibleLocalSelected} onChange={(e) => toggleSelectAllVisibleLocalUsers(e.target.checked)} aria-label="Select all visible local users" />
+            Select all visible
+          </label>
+        )}
+        {filtered.length === 0 ? (
+          <div className="card p-6 text-center text-gray-500 text-sm">No users</div>
+        ) : filtered.map(u => (
+          <div key={u.id} className="card p-4 space-y-2.5" onClick={() => setDetail(u)}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex items-center gap-2">
+                {u.avatar_photo_data_url ? (
+                  <img src={u.avatar_photo_data_url} alt={u.display_name || u.username} className="w-7 h-7 rounded-full object-cover border border-gray-200 shrink-0" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                ) : (
+                  u.role === 'superadmin' ? <Shield size={16} className="text-purple-500 shrink-0" /> : <User size={16} className="text-gray-400 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{u.display_name}</div>
+                  <div className="text-xs text-gray-500 font-mono truncate">{u.username}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                {canBulkDelete && authFilter === 'local' && (
+                  <input type="checkbox" checked={selectedLocalUserIds.includes(u.id)} onChange={() => toggleUserSelection(u.id)} disabled={u.auth_type === 'ldap' || !canDeleteUser(u)} aria-label={`Select user ${u.username}`} />
+                )}
+                {u.role !== 'superadmin' && u.auth_type !== 'ldap' && (
+                  <button className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors" onClick={() => setEditTarget(u)}><Pencil size={14} /></button>
+                )}
+                {canDeleteUser(u) && (
+                  <button className="p-1.5 -m-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 transition-colors" onClick={() => setDeleteTarget(u)}><Trash2 size={14} /></button>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <AuthBadge authType={u.auth_type} />
+              <RoleBadge role={u.role} groupRole={u.group_role} groupName={u.group_name} />
+              {u.is_active
+                ? <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 text-xs font-medium">Active</span>
+                : <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-50 text-gray-500 border border-gray-200 text-xs font-medium">Disabled</span>}
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+              <div className="col-span-2 min-w-0"><span className="text-gray-400">Email: </span><span className="text-gray-600 dark:text-gray-300 break-all">{u.email || '—'}</span></div>
+              <div className="min-w-0"><span className="text-gray-400">Office: </span><span className="text-gray-600 dark:text-gray-300">{u.office || '—'}</span></div>
+              <div className="min-w-0"><span className="text-gray-400">Last login: </span><span className="text-gray-600 dark:text-gray-300">{formatLastLogin(u.last_login_at)}</span></div>
+              {u.auth_type === 'ldap' && ldapGroupLabels(u.ldap_groups) && (
+                <div className="col-span-2 min-w-0"><span className="text-gray-400">LDAP group: </span><span className="text-gray-600 dark:text-gray-300">{ldapGroupLabels(u.ldap_groups)}</span></div>
+              )}
+            </div>
+          </div>
+        ))}
+        <div className="card p-4">
+          <Pagination page={page} limit={limit} total={total} onChange={setPage} onLimitChange={setLimit} />
+        </div>
+      </div>
+
+      <div className="card overflow-hidden hidden sm:block">
           <div className="overflow-x-auto">
           <table className="min-w-[640px] w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -1097,7 +1155,7 @@ function GroupsTab({ roleOptions, roleProfiles, canBulkDelete }) {
           ))}
           <span className="text-xs text-gray-400">({filteredGroups.length} shown / {groupsWithType.length} total)</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {canBulkDelete && groupType === 'local' && (
             <button
               className="btn-danger"
@@ -1115,7 +1173,51 @@ function GroupsTab({ roleOptions, roleProfiles, canBulkDelete }) {
         </div>
       </div>
 
-      <div className="card overflow-hidden">
+      {/* Mobile card list (below sm breakpoint) */}
+      <div className="sm:hidden space-y-3">
+        {canBulkDelete && groupType === 'local' && pagedGroups.length > 0 && (
+          <label className="flex items-center gap-2 text-xs text-gray-500 px-1">
+            <input type="checkbox" checked={allVisibleLocalGroupsSelected} onChange={(e) => toggleSelectAllVisibleLocalGroups(e.target.checked)} aria-label="Select all visible local groups" />
+            Select all visible
+          </label>
+        )}
+        {pagedGroups.length === 0 ? (
+          <div className="card p-6 text-center text-gray-500 text-sm">No groups</div>
+        ) : pagedGroups.map(g => (
+          <div key={g.id} className="card p-4 space-y-2.5" onClick={() => openDetail(g.id)}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex items-center gap-2">
+                <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${g.type === 'ldap' ? 'bg-sky-500' : 'bg-emerald-500'}`} />
+                <UsersIcon size={15} className="text-gray-400 shrink-0" />
+                <span className="text-sm font-medium truncate">{g.name}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                {canBulkDelete && groupType === 'local' && (
+                  <input type="checkbox" checked={selectedLocalGroupIds.includes(g.id)} onChange={() => toggleGroupSelection(g.id)} disabled={g.type !== 'local'} aria-label={`Select group ${g.name}`} />
+                )}
+                <button className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors" onClick={() => openDetail(g.id, true)}><Pencil size={14} /></button>
+                <button className="p-1.5 -m-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 transition-colors" onClick={() => setDeleteTarget(g)}><Trash2 size={14} /></button>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <AuthBadge authType={g.type} />
+              <RoleBadge role={g.role || 'viewer'} />
+            </div>
+            {g.description && <div className="text-xs text-gray-500 pt-2 border-t border-gray-100 dark:border-gray-700">{g.description}</div>}
+          </div>
+        ))}
+        <div className="card p-4">
+          <Pagination
+            page={page}
+            limit={limit}
+            total={filteredGroups.length}
+            onChange={setPage}
+            onLimitChange={(v) => { setLimit(Math.min(25, v)); setPage(1) }}
+          />
+        </div>
+      </div>
+
+      <div className="card overflow-hidden hidden sm:block">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-700/50">
