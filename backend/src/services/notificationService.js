@@ -2,6 +2,7 @@ const { query, getOne, getMany } = require('../db/database');
 const { sendMail, renderTemplate, normalizeRecipientEmail } = require('../utils/mailer');
 const logger = require('../utils/logger');
 const axios = require('axios');
+const webpushService = require('./webpushService');
 const {
   getAffectedAssets,
   getAffectedServices,
@@ -389,6 +390,9 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
       tasks.push(Promise.all(userIds.map((uid) =>
         sendInApp(uid, eventType, titles[eventType] || maint.title, vars.description, 'maintenance', maintenanceId)
       )));
+      tasks.push(Promise.all(userIds.map((uid) =>
+        webpushService.sendToUser(uid, { title: titles[eventType] || maint.title, body: vars.description || '', url: `/maintenance/${maintenanceId}` }).catch(() => {})
+      )));
     }
     tasks.push(_dispatchWebhooks(eventType, { maintenance: maint, ...extraVars }));
 
@@ -571,6 +575,9 @@ async function notifyIncident(incidentId, eventType) {
     if (userIds.size > 0) {
       tasks.push(Promise.all([...userIds].map((uid) =>
         sendInApp(uid, eventType, `Incident: ${incident.title}`, incident.description, 'incident', incidentId)
+      )));
+      tasks.push(Promise.all([...userIds].map((uid) =>
+        webpushService.sendToUser(uid, { title: `Incident: ${incident.title}`, body: incident.description || '', url: `/incidents/${incidentId}` }).catch(() => {})
       )));
     }
     tasks.push(_dispatchWebhooks(eventType, { incident }));

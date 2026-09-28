@@ -2,9 +2,38 @@ const { Router } = require('express');
 const { body, validationResult } = require('express-validator');
 const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
+const webpushService = require('../services/webpushService');
 
 const router = Router();
 router.use(requireAuth);
+
+// ─── Web Push subscription management ─────────────────────────
+router.get('/push/public-key', async (req, res) => {
+  try {
+    const publicKey = await webpushService.getPublicKey();
+    res.json({ publicKey });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/push/subscribe', [
+  body('subscription').isObject(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    await webpushService.saveSubscription(req.user.id, req.body.subscription);
+    res.json({ message: 'Push subscription saved' });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.post('/push/unsubscribe', [
+  body('endpoint').isString().trim().isLength({ min: 1 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  await webpushService.removeSubscription(req.user.id, req.body.endpoint);
+  res.json({ message: 'Push subscription removed' });
+});
 
 // ─── GET /api/notifications ─── In-app for current user ──────────────────────
 router.get('/', async (req, res) => {

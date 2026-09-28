@@ -2284,6 +2284,35 @@ const MIGRATIONS = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credentials(user_id)`);
     }
   },
+  {
+    version: 54,
+    name: 'push_subscriptions',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          endpoint TEXT UNIQUE NOT NULL,
+          p256dh TEXT NOT NULL,
+          auth TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          last_used_at TIMESTAMPTZ
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id)`);
+    }
+  },
+  {
+    version: 55,
+    name: 'incident_rca_fields',
+    up: async (client) => {
+      await client.query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS root_cause TEXT`);
+      await client.query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolution_summary TEXT`);
+      await client.query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS preventive_actions TEXT`);
+      await client.query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS rca_completed_at TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS rca_completed_by UUID REFERENCES users(id) ON DELETE SET NULL`);
+    }
+  },
 ];
 
 async function runMigrations(pool) {

@@ -25,17 +25,19 @@ Ideal for IT departments that need to track hardware, software licenses, service
 - 📄 **License Management** — Software licenses with expiry tracking, renewal history, documents, reports, approval workflows, and email notifications
 - ✅ **Approval Workflow** — Token-based public approval page, fully brandable (logo, colors, texts) per-customer
 - 🏢 **Supplier Management** — Supplier registry with contact info, website (with favicon preview), and contract details (SLA, emergency contacts, availability, documents)
-- 🔔 **Notifications** — Configurable email templates plus in-app notifications for license workflow actors (approval, rejection, expiry reminders)
+- 🔔 **Notifications** — Configurable email templates, in-app notifications, outbound webhooks, and browser push alerts for maintenance, incidents, and license workflow events
 - 📊 **Probes** — Scheduled connectivity checks on assets/services with status history
 - 📈 **Dashboard and Reports** — KPIs, expiring licenses, pending owner approvals, maintenance PDF/CSV, uptime, asset, and license reports
 - 🗓️ **Operations Planning** — Calendar, maintenance lifecycle, owner approvals, recurring windows, blackout periods, and affected-scope tracking
-- 🔁 **Data Migration** — Superadmin-only selectable JSON export/import, dependency-aware relationships, sensitive-data opt-in, preview/dry-run, automatic pre-operation snapshots, and confirmed deletion
+- � **Incident Management** — Severities, status timeline, affected assets/services/users, and a Root Cause Analysis report (exportable as PDF)
+- �🔁 **Data Migration** — Superadmin-only selectable JSON export/import, dependency-aware relationships, sensitive-data opt-in, preview/dry-run, automatic pre-operation snapshots, and confirmed deletion
 - 🔐 **Authentication** — Local users, LDAP/Active Directory, SSO (Authentik, NetScaler), SAML 2.0
+- 🔑 **Passkeys / WebAuthn** — Passwordless, usernameless login with fingerprint, face, or a security key (local accounts)
 - 👥 **User Management** — `superadmin`, `admin`, `user` roles with per-section permissions
 - 📋 **Audit Log** — Full operation log (superadmin only)
 - 📖 **Swagger UI / API Docs** — Interactive REST API reference at `/docs`
 - 🌓 **Dark mode** — Full light/dark theme support
-- 📱 **PWA** — Installable as a progressive web app on desktop and mobile
+- 📱 **PWA** — Installable as a progressive web app on desktop and mobile, with browser push notifications for maintenance and incident alerts
 
 ---
 

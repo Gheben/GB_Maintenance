@@ -8,6 +8,12 @@ import { useAuth } from '../contexts/AuthContext'
 import { format } from 'date-fns'
 import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, Clock, RefreshCw, Pencil, GripVertical, Mail, Network, KeyRound, Tag, Cog, Bell, ChevronDown, ChevronRight, Upload, Download, Fingerprint, Lock } from 'lucide-react'
 
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)))
+}
 
 function Section({ title, children }) {
   return (
@@ -133,6 +139,9 @@ export default function Settings() {
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
   const [pwSaving, setPwSaving] = useState(false)
   const [pwResult, setPwResult] = useState(null)
+  const [pushSupported, setPushSupported] = useState(false)
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
 
   // API Keys state
   const [keys, setKeys] = useState([])
@@ -203,6 +212,13 @@ export default function Settings() {
 
   useEffect(() => {
     setPasskeySupported(browserSupportsWebAuthn())
+  }, [])
+
+  useEffect(() => {
+    const supported = 'serviceWorker' in navigator && 'PushManager' in window
+    setPushSupported(supported)
+    if (!supported) return
+    navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => setPushSubscribed(!!sub)).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -283,9 +299,9 @@ export default function Settings() {
     try {
       const optionsRes = await authApi.webauthnRegisterOptions()
       const attestation = await startRegistration({ optionsJSON: optionsRes.data })
-      const name = window.prompt('Nome per questa passkey (es. "iPhone di Mario", "Laptop lavoro")', '') || undefined
+      const name = window.prompt('Name for this passkey (e.g. "Mario\'s iPhone", "Work laptop")', '') || undefined
       await authApi.webauthnRegisterVerify({ response: attestation, name })
-      toast.success('Passkey registrata con successo')
+      toast.success('Passkey registered successfully')
       loadPasskeys()
     } catch (err) {
       if (!(err instanceof WebAuthnError) && err?.name !== 'NotAllowedError') {
@@ -300,7 +316,7 @@ export default function Settings() {
     if (!deleteTargetPasskey) return
     try {
       await authApi.webauthnDeleteCredential(deleteTargetPasskey.id)
-      toast.success('Passkey rimossa')
+      toast.success('Passkey removed')
       setPasskeys(prev => prev.filter(p => p.id !== deleteTargetPasskey.id))
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setDeleteTargetPasskey(null) }
@@ -309,20 +325,50 @@ export default function Settings() {
   const changePassword = async (e) => {
     e.preventDefault(); setPwSaving(true); setPwResult(null)
     if (pwForm.new_password !== pwForm.confirm_password) {
-      setPwResult({ success: false, message: 'Le password non coincidono.' })
+      setPwResult({ success: false, message: 'Passwords do not match.' })
       setPwSaving(false)
       return
     }
     try {
       const res = await authApi.changePassword({ current_password: pwForm.current_password, new_password: pwForm.new_password })
-      setPwResult({ success: true, message: res.data?.message || 'Password aggiornata.' })
+      setPwResult({ success: true, message: res.data?.message || 'Password updated.' })
       setPwForm({ current_password: '', new_password: '', confirm_password: '' })
     } catch (err) {
       const errs = err.response?.data?.errors
-      const msg = errs ? errs.map(e => e.msg).join(' • ') : (err.response?.data?.error || 'Errore durante il cambio password.')
+      const msg = errs ? errs.map(e => e.msg).join(' • ') : (err.response?.data?.error || 'Error changing password.')
       setPwResult({ success: false, message: msg })
     } finally {
       setPwSaving(false)
+    }
+  }
+
+  const togglePush = async () => {
+    setPushLoading(true)
+    try {
+      if (pushSubscribed) {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) {
+          await notificationsApi.pushUnsubscribe(sub.endpoint).catch(() => {})
+          await sub.unsubscribe()
+        }
+        setPushSubscribed(false)
+        toast.success('Push notifications disabled')
+      } else {
+        const reg = await navigator.serviceWorker.ready
+        const { data } = await notificationsApi.pushPublicKey()
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(data.publicKey),
+        })
+        await notificationsApi.pushSubscribe(sub.toJSON())
+        setPushSubscribed(true)
+        toast.success('Push notifications enabled')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Could not update push notification settings')
+    } finally {
+      setPushLoading(false)
     }
   }
 
@@ -730,6 +776,27 @@ export default function Settings() {
                     </ul>
                   )}
                 </>
+              )}
+            </div>
+
+            <div className="card p-5 sm:p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-2">
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <Bell size={16} /> Browser Push Notifications
+                </h2>
+                {pushSupported && (
+                  <button type="button" onClick={togglePush} disabled={pushLoading}
+                    className={`text-sm flex items-center gap-1.5 ${pushSubscribed ? 'btn-secondary' : 'btn-primary'}`}>
+                    {pushLoading ? 'Working...' : pushSubscribed ? 'Disable' : 'Enable'}
+                  </button>
+                )}
+              </div>
+              {!pushSupported ? (
+                <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertCircle size={14} /> This browser doesn't support push notifications.</p>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  Get maintenance and incident alerts as browser notifications, even when this tab isn't open. {pushSubscribed ? 'Enabled on this device.' : 'Currently disabled on this device.'}
+                </p>
               )}
             </div>
           </div>

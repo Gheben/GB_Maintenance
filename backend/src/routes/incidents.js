@@ -8,6 +8,7 @@ const wsService = require('../services/wsService');
 const { getAffectedAssets, getAffectedServices } = require('../utils/maintenanceScope');
 const { getVisibleAffectedScope } = require('../utils/entityVisibility');
 const { parsePagination } = require('../utils/pagination');
+const PDFDocument = require('pdfkit');
 
 const router = Router();
 router.use(requireAuth);
@@ -246,6 +247,79 @@ router.post('/:id/updates', requireOperator, [
 router.delete('/:id', requireAdmin, async (req, res) => {
   await query('DELETE FROM incidents WHERE id=$1', [req.params.id]);
   res.json({ message: 'Incident deleted' });
+});
+
+// ─── PUT /api/incidents/:id/rca ───────────────────────────────────────────────
+router.put('/:id/rca', requireOperator, [
+  body('root_cause').optional({ nullable: true }).isString(),
+  body('resolution_summary').optional({ nullable: true }).isString(),
+  body('preventive_actions').optional({ nullable: true }).isString(),
+  body('mark_completed').optional().isBoolean(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const incident = await getOne('SELECT id FROM incidents WHERE id=$1', [req.params.id]);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  const sets = ['root_cause=$1', 'resolution_summary=$2', 'preventive_actions=$3', 'updated_at=NOW()'];
+  const vals = [req.body.root_cause || null, req.body.resolution_summary || null, req.body.preventive_actions || null];
+  let i = 4;
+  if (req.body.mark_completed === true) {
+    sets.push(`rca_completed_at=NOW()`, `rca_completed_by=$${i++}`);
+    vals.push(req.user.id);
+  }
+  vals.push(req.params.id);
+  await query(`UPDATE incidents SET ${sets.join(',')} WHERE id=$${i}`, vals);
+  await auditService.log(req.user.id, req.user.username, 'incident:rca_updated', 'incident', req.params.id, null, req.ip, req.get('user-agent'));
+  res.json({ message: 'Root cause analysis saved' });
+});
+
+// ─── GET /api/incidents/:id/rca/export ────────────────────────────────────────
+router.get('/:id/rca/export', async (req, res) => {
+  const incident = await getOne(
+    `SELECT i.*, u.display_name AS completed_by_name FROM incidents i
+     LEFT JOIN users u ON u.id=i.rca_completed_by WHERE i.id=$1`,
+    [req.params.id]
+  );
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  const doc = new PDFDocument({ margin: 50, size: 'A4' });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename=incident-rca-${req.params.id}.pdf`);
+  doc.pipe(res);
+
+  doc.fontSize(18).fillColor('#111827').font('Helvetica-Bold').text('Root Cause Analysis Report');
+  doc.moveDown(0.3);
+  doc.fontSize(11).font('Helvetica-Bold').fillColor('#374151').text(incident.title);
+  doc.moveDown(0.5);
+
+  const meta = [
+    ['Severity', incident.severity],
+    ['Status', incident.status],
+    ['Ticket ref', incident.ticket_ref || '-'],
+    ['Started at', new Date(incident.started_at).toLocaleString('en-GB')],
+    ['Resolved at', incident.resolved_at ? new Date(incident.resolved_at).toLocaleString('en-GB') : '-'],
+    ['RCA completed', incident.rca_completed_at ? `${new Date(incident.rca_completed_at).toLocaleString('en-GB')} by ${incident.completed_by_name || '-'}` : 'Not yet completed'],
+  ];
+  doc.fontSize(9).font('Helvetica').fillColor('#4b5563');
+  meta.forEach(([label, value]) => doc.text(`${label}: ${value}`));
+  doc.moveDown(1);
+
+  const section = (heading, text) => {
+    doc.fontSize(12).font('Helvetica-Bold').fillColor('#1e40af').text(heading);
+    doc.moveDown(0.2);
+    doc.fontSize(10).font('Helvetica').fillColor('#111827').text(text || 'Not documented.', { align: 'left' });
+    doc.moveDown(1);
+  };
+
+  section('Description', incident.description);
+  section('Root Cause', incident.root_cause);
+  section('Resolution Summary', incident.resolution_summary);
+  section('Preventive Actions', incident.preventive_actions);
+
+  doc.fontSize(8).fillColor('#9ca3af').text(`Generated on ${new Date().toLocaleString('en-GB')}`, { align: 'right' });
+  doc.end();
 });
 
 // ─── GET /api/incidents/:id/users ────────────────────────────────────────────

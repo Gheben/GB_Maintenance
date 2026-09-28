@@ -310,6 +310,44 @@ API keys are created from **Settings -> API Keys**.
         responses: { 302: { description: 'Redirect to IdP' } },
       },
     },
+    '/auth/webauthn/register/options': {
+      post: { tags: ['Auth'], summary: 'Get passkey registration options (local accounts only)',
+        responses: { 200: { description: 'WebAuthn registration options' }, 403: { description: 'Not a local account' } },
+      },
+    },
+    '/auth/webauthn/register/verify': {
+      post: { tags: ['Auth'], summary: 'Verify and store a newly registered passkey',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['response'],
+          properties: { response: { type: 'object' }, name: { type: 'string', nullable: true, example: 'Work laptop' } },
+        }}}},
+        responses: { 200: { description: 'Passkey registered' }, 400: { description: 'Verification failed' } },
+      },
+    },
+    '/auth/webauthn/credentials': {
+      get: { tags: ['Auth'], summary: 'List the current user\'s registered passkeys',
+        responses: { 200: { description: 'Passkey list', content: { 'application/json': { schema: { type: 'array', items: { type: 'object' } } } } } },
+      },
+    },
+    '/auth/webauthn/credentials/{id}': {
+      delete: { tags: ['Auth'], summary: 'Remove a registered passkey', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Passkey removed' } },
+      },
+    },
+    '/auth/webauthn/login/options': {
+      post: { tags: ['Auth'], summary: 'Get passkey (usernameless) login options', security: [],
+        responses: { 200: { description: 'WebAuthn authentication options' } },
+      },
+    },
+    '/auth/webauthn/login/verify': {
+      post: { tags: ['Auth'], summary: 'Verify a passkey login assertion and issue a session token', security: [],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['response'],
+          properties: { response: { type: 'object' } },
+        }}}},
+        responses: { 200: { description: 'Login successful', content: { 'application/json': { schema: {
+          type: 'object', properties: { token: { type: 'string' }, user: { $ref: '#/components/schemas/User' } },
+        }}}}, 401: { description: 'Verification failed' } },
+      },
+    },
 
     // ─── USERS ────────────────────────────────────────────────────────────────
     '/users': {
@@ -336,6 +374,17 @@ API keys are created from **Settings -> API Keys**.
         responses: { 201: { description: 'User created', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } },
       },
     },
+    '/users/assignable': {
+      get: { tags: ['Users'], summary: 'Minimal user list for owner pickers (any authenticated user)',
+        parameters: [
+          { in: 'query', name: 'q', schema: { type: 'string' } },
+          { in: 'query', name: 'limit', schema: { type: 'integer', default: 50, maximum: 200 } },
+        ],
+        responses: { 200: { description: 'Users', content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: {
+          id: { type: 'string', format: 'uuid' }, username: { type: 'string' }, display_name: { type: 'string' }, email: { type: 'string' }, auth_type: { type: 'string' },
+        } } } } } } },
+      },
+    },
     '/users/{id}': {
       get:    { tags: ['Users'], summary: 'User details', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } }],
         responses: { 200: { description: 'User', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } } },
@@ -354,6 +403,14 @@ API keys are created from **Settings -> API Keys**.
       post: { tags: ['Groups'], summary: 'Create group',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, description: { type: 'string' } } } } } },
         responses: { 201: { description: 'Group created' } },
+      },
+    },
+    '/groups/assignable': {
+      get: { tags: ['Groups'], summary: 'Minimal local group list for owner pickers (any authenticated user)',
+        parameters: [{ in: 'query', name: 'q', schema: { type: 'string' } }],
+        responses: { 200: { description: 'Groups', content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: {
+          id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, ldap_mapping_count: { type: 'integer' },
+        } } } } } } },
       },
     },
     '/groups/{id}': {
@@ -645,8 +702,22 @@ API keys are created from **Settings -> API Keys**.
         }}}}},
         responses: { 201: { description: 'Update added - if resolved, restore asset status' } },
       },
+    },    '/incidents/{id}/rca': {
+      put: { tags: ['Incidents'], summary: 'Save the root cause analysis for an incident',
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: {
+          root_cause: { type: 'string' }, resolution_summary: { type: 'string' }, preventive_actions: { type: 'string' },
+          mark_completed: { type: 'boolean' },
+        }}}}},
+        responses: { 200: { description: 'RCA saved' }, 404: { description: 'Incident not found' } },
+      },
     },
-
+    '/incidents/{id}/rca/export': {
+      get: { tags: ['Incidents'], summary: 'Export the root cause analysis as a PDF report',
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'PDF file', content: { 'application/pdf': {} } } },
+      },
+    },
     // ─── NOTIFICATIONS ────────────────────────────────────────────────────────
     '/notifications': {
       get: { tags: ['Notifications'], summary: 'Current user in-app notifications (includes license workflow/expiry events for internal users)',
@@ -678,6 +749,23 @@ API keys are created from **Settings -> API Keys**.
         parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { subject_template: { type: 'string' }, body_html_template: { type: 'string' } } } } } },
         responses: { 200: { description: 'Template updated' } },
+      },
+    },
+    '/notifications/push/public-key': {
+      get: { tags: ['Notifications'], summary: 'Get the VAPID public key for Web Push subscriptions',
+        responses: { 200: { description: 'Public key', content: { 'application/json': { schema: { type: 'object', properties: { publicKey: { type: 'string' } } } } } } },
+      },
+    },
+    '/notifications/push/subscribe': {
+      post: { tags: ['Notifications'], summary: 'Register a browser push subscription for the current user',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['subscription'], properties: { subscription: { type: 'object' } } } } } },
+        responses: { 200: { description: 'Subscription saved' } },
+      },
+    },
+    '/notifications/push/unsubscribe': {
+      post: { tags: ['Notifications'], summary: 'Remove a browser push subscription for the current user',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['endpoint'], properties: { endpoint: { type: 'string' } } } } } },
+        responses: { 200: { description: 'Subscription removed' } },
       },
     },
 

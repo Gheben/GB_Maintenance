@@ -188,6 +188,8 @@ export const incidentsApi = {
   delete: (id) => api.delete(`/incidents/${id}`),
   addUpdate: (id, data) => api.post(`/incidents/${id}/updates`, data),
   users: (id) => api.get(`/incidents/${id}/users`),
+  saveRca: (id, data) => api.put(`/incidents/${id}/rca`, data),
+  exportRca: (id) => api.get(`/incidents/${id}/rca/export`, { responseType: 'blob' }),
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -199,6 +201,9 @@ export const notificationsApi = {
   log: (params) => api.get('/notifications/log', { params }),
   templates: () => api.get('/notifications/templates'),
   updateTemplate: (id, data) => api.put(`/notifications/templates/${id}`, data),
+  pushPublicKey: () => api.get('/notifications/push/public-key'),
+  pushSubscribe: (subscription) => api.post('/notifications/push/subscribe', { subscription }),
+  pushUnsubscribe: (endpoint) => api.post('/notifications/push/unsubscribe', { endpoint }),
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────

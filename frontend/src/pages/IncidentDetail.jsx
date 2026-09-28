@@ -5,12 +5,12 @@ import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { toast } from '../components/Toast'
 import { incidentsApi, incidentSeveritiesApi } from '../api'
 import { format } from 'date-fns'
-import { ArrowLeft, Pencil, Save, X, ShieldCheck, Cog } from 'lucide-react'
+import { ArrowLeft, Pencil, Save, X, ShieldCheck, Cog, FileText, Download, CheckCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const STATUSES = ['investigating','identified','monitoring','resolved']
 const SEVERITIES = ['critical','high','medium','low']
-const TABS = [['info','Info'],['affected','Affected'],['users','Users'],['timeline','Timeline']]
+const TABS = [['info','Info'],['affected','Affected'],['users','Users'],['timeline','Timeline'],['rca','Root Cause']]
 
 export default function IncidentDetail() {
   const { id } = useParams()
@@ -29,8 +29,19 @@ export default function IncidentDetail() {
   const [editForm, setEditForm] = useState(null)
   const [saving, setSaving] = useState(false)
   const [severityDefs, setSeverityDefs] = useState([])
+  const [rcaForm, setRcaForm] = useState({ root_cause: '', resolution_summary: '', preventive_actions: '' })
+  const [rcaSaving, setRcaSaving] = useState(false)
+  const [rcaExporting, setRcaExporting] = useState(false)
 
-  const load = () => incidentsApi.get(id).then(r => { setIncident(r.data); setUpdateForm(f => ({ ...f, status: r.data.status })) }).catch(() => navigate('/incidents'))
+  const load = () => incidentsApi.get(id).then(r => {
+    setIncident(r.data)
+    setUpdateForm(f => ({ ...f, status: r.data.status }))
+    setRcaForm({
+      root_cause: r.data.root_cause || '',
+      resolution_summary: r.data.resolution_summary || '',
+      preventive_actions: r.data.preventive_actions || '',
+    })
+  }).catch(() => navigate('/incidents'))
   useEffect(() => { load() }, [id])
 
   useEffect(() => {
@@ -92,6 +103,30 @@ export default function IncidentDetail() {
       setEditMode(false); setEditForm(null); load()
     } catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setSaving(false) }
+  }
+
+  const saveRca = async (markCompleted) => {
+    setRcaSaving(true)
+    try {
+      await incidentsApi.saveRca(id, { ...rcaForm, mark_completed: markCompleted === true })
+      toast.success(markCompleted ? 'Root cause analysis marked as completed' : 'Root cause analysis saved')
+      load()
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
+    finally { setRcaSaving(false) }
+  }
+
+  const exportRca = async () => {
+    setRcaExporting(true)
+    try {
+      const res = await incidentsApi.exportRca(id)
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `incident-rca-${id}.pdf`
+      link.click()
+      window.URL.revokeObjectURL(url)
+    } catch (err) { toast.error('Export failed') }
+    finally { setRcaExporting(false) }
   }
 
   if (!incident) return <Layout title="Incident"><div className="text-center py-16 text-gray-500">Loading...</div></Layout>
@@ -324,6 +359,53 @@ export default function IncidentDetail() {
               </div>
             )}
           </>
+        )}
+
+        {/* Root Cause Analysis tab */}
+        {tab === 'rca' && (
+          <div className="card p-5 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="font-medium">Root Cause Analysis</h3>
+              <div className="flex items-center gap-2">
+                {incident.rca_completed_at && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
+                    <CheckCircle size={12} /> Completed {format(new Date(incident.rca_completed_at), 'MM/dd/yyyy')}
+                  </span>
+                )}
+                <button type="button" className="btn-secondary flex items-center gap-1 text-sm" onClick={exportRca} disabled={rcaExporting}>
+                  <Download size={14} />{rcaExporting ? 'Exporting...' : 'Export PDF'}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Root cause</label>
+              <textarea className="input" rows={4} placeholder="What was the underlying cause of this incident?"
+                value={rcaForm.root_cause} onChange={e => setRcaForm(f => ({ ...f, root_cause: e.target.value }))}
+                disabled={!canEdit} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Resolution summary</label>
+              <textarea className="input" rows={4} placeholder="How was the incident resolved?"
+                value={rcaForm.resolution_summary} onChange={e => setRcaForm(f => ({ ...f, resolution_summary: e.target.value }))}
+                disabled={!canEdit} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Preventive actions</label>
+              <textarea className="input" rows={4} placeholder="What will prevent this from happening again?"
+                value={rcaForm.preventive_actions} onChange={e => setRcaForm(f => ({ ...f, preventive_actions: e.target.value }))}
+                disabled={!canEdit} />
+            </div>
+            {canEdit && (
+              <div className="flex justify-end gap-2">
+                <button type="button" className="btn-secondary flex items-center gap-1" disabled={rcaSaving} onClick={() => saveRca(false)}>
+                  <FileText size={14} />{rcaSaving ? 'Saving...' : 'Save draft'}
+                </button>
+                <button type="button" className="btn-primary flex items-center gap-1" disabled={rcaSaving} onClick={() => saveRca(true)}>
+                  <CheckCircle size={14} />Mark as completed
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </Layout>

@@ -77,6 +77,10 @@ Local passwords are stored as bcrypt hashes. Password changes enforce minimum le
 
 TOTP can be enabled per user. When enabled, login requires the TOTP code after password validation.
 
+### Passkeys / WebAuthn
+
+Local accounts can register one or more passkeys (fingerprint, face, or a security key) from `Settings -> Security`. Login with a passkey is usernameless: the browser's discoverable-credential prompt identifies the account, so no username field is required on the login screen. Passkeys are restricted to local accounts — SAML and LDAP identities remain the sole authority for those users, and a stale passkey stops working if an account is later converted to SAML/LDAP.
+
 ### LDAP / Active Directory
 
 LDAP supports:
@@ -163,6 +167,8 @@ Approval links are token-based and can be used from the public maintenance appro
 
 Incidents support configurable severities, status transitions, descriptions, timeline updates, affected assets/services, and impacted users/offices.
 
+Each incident also has a **Root Cause Analysis** tab: root cause, resolution summary, and preventive actions, optionally marked as completed (records who and when), exportable as a standalone PDF report.
+
 The public status page shows service availability, active incidents, planned maintenance, affected scope, and subscription actions for authenticated users.
 
 ## Licenses and Suppliers
@@ -238,7 +244,7 @@ Maintenance PDF and CSV exports use English labels and column headers.
 
 ## Notifications
 
-Notification templates are managed from Settings. The system supports email and in-app notifications for:
+Notification templates are managed from Settings. The system supports email, in-app, outbound webhook, and browser push notifications for:
 
 - Maintenance scheduled, started, completed, reopened, cancelled, rejected, and owner approval.
 - Incident opened and resolved.
@@ -246,6 +252,8 @@ Notification templates are managed from Settings. The system supports email and 
 - License approval, rejection, status updates, and expiry reminders.
 
 Notification logs keep delivery status and references. In-app notifications can be marked read individually or in bulk and can open linked detail previews.
+
+Users can enable **browser push notifications** from `Settings -> Security` — maintenance and incident alerts then arrive as native OS notifications even when the app tab isn't open. Push delivery uses per-browser VAPID subscriptions; a stale or revoked subscription is removed automatically on the next failed delivery.
 
 ## Settings
 
