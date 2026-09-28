@@ -8,7 +8,7 @@ import { toast } from '../components/Toast'
 import { assetsApi, usersApi, groupsApi, settingsApi, maintenanceApi } from '../api'
 import CorrelationGraphLoader from '../components/CorrelationGraphLoader'
 import { format } from 'date-fns'
-import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Mail, Cog, Building2, Search, Info } from 'lucide-react'
+import { Trash2, Play, ArrowLeft, Pencil, Save, X, Plus, User, Mail, Cog, Building2, Search, Info, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CATEGORIES = ['application','infrastructure','database','network','hardware','api','other']
@@ -643,7 +643,10 @@ export default function AssetDetail() {
                       {filteredDeps.slice(0, 25).map(a => (
                         <button key={a.id} type="button" onClick={() => { addDep(a.id); setAddingDep(false); setDepSearch('') }}
                           className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 dark:hover:bg-brand-900/20 flex items-center justify-between">
-                          <span>{a.name}</span>
+                          <span className="flex items-center gap-1.5">
+                            {a.part_is_relevant && <ShieldCheck size={13} className="text-amber-600 shrink-0" title="Part-IS Relevant" />}
+                            {a.name}
+                          </span>
                           <StatusBadge status={a.status} />
                         </button>
                       ))}
