@@ -179,7 +179,7 @@ export default function ServiceDetail() {
   useEffect(() => {
     if (tab !== 'deps') return undefined
     const q = depSearch.trim()
-    if (!q) { setRemoteDepResults([]); return undefined }
+    if (!q) { setRemoteDepResults([]); setDepSearching(false); return undefined }
     setDepSearching(true)
     const handle = setTimeout(() => {
       servicesApi.list({ search: q, limit: 50 }).then(r => {

@@ -96,14 +96,14 @@ export function OwnerPickerModal({
   useEffect(() => {
     const q = search.trim()
     if (tab === 'users') {
-      if (!onSearchUsers || !q) { setRemoteUsers([]); return undefined }
+      if (!onSearchUsers || !q) { setRemoteUsers([]); setLocalSearching(false); return undefined }
       setLocalSearching(true)
       const handle = setTimeout(() => {
         onSearchUsers(q).then(rows => setRemoteUsers(Array.isArray(rows) ? rows : [])).catch(() => setRemoteUsers([])).finally(() => setLocalSearching(false))
       }, 300)
       return () => clearTimeout(handle)
     }
-    if (!onSearchGroups || !q) { setRemoteGroups([]); return undefined }
+    if (!onSearchGroups || !q) { setRemoteGroups([]); setLocalSearching(false); return undefined }
     setLocalSearching(true)
     const handle = setTimeout(() => {
       onSearchGroups(q).then(rows => setRemoteGroups(Array.isArray(rows) ? rows : [])).catch(() => setRemoteGroups([])).finally(() => setLocalSearching(false))

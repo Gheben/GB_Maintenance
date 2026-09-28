@@ -19,7 +19,7 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
   useEffect(() => {
     if (!onSearch) return undefined
     const q = search.trim()
-    if (!q) { setRemoteResults([]); return undefined }
+    if (!q) { setRemoteResults([]); setSearching(false); return undefined }
     setSearching(true)
     const handle = setTimeout(() => {
       onSearch(q)
