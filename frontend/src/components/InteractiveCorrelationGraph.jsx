@@ -131,6 +131,66 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
     return () => svg.removeEventListener('wheel', handleWheel);
   }, []);
 
+  // Touch support (mobile): one-finger pan, two-finger pinch-to-zoom. Must be attached as a
+  // non-passive native listener (like the wheel handler above) for preventDefault() to work,
+  // since React's synthetic touch handlers are passive by default.
+  const touchDragRef = useRef(null);
+  const pinchRef = useRef(null);
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const touchDist = (t0, t1) => Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+
+    const handleTouchStart = (e) => {
+      if (e.touches.length === 1) {
+        touchDragRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        pinchRef.current = null;
+      } else if (e.touches.length === 2) {
+        touchDragRef.current = null;
+        pinchRef.current = { dist: touchDist(e.touches[0], e.touches[1]), zoom: 1 };
+        setZoom((z) => { pinchRef.current.zoom = z; return z; });
+      }
+    };
+
+    const handleTouchMove = (e) => {
+      if (e.touches.length === 1 && touchDragRef.current) {
+        e.preventDefault();
+        const t = e.touches[0];
+        const dx = t.clientX - touchDragRef.current.x;
+        const dy = t.clientY - touchDragRef.current.y;
+        setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+        touchDragRef.current = { x: t.clientX, y: t.clientY };
+      } else if (e.touches.length === 2 && pinchRef.current) {
+        e.preventDefault();
+        const newDist = touchDist(e.touches[0], e.touches[1]);
+        const factor = newDist / pinchRef.current.dist;
+        setZoom(Math.max(0.5, Math.min(3, pinchRef.current.zoom * factor)));
+      }
+    };
+
+    const handleTouchEnd = (e) => {
+      if (e.touches.length === 0) {
+        touchDragRef.current = null;
+        pinchRef.current = null;
+      } else if (e.touches.length === 1) {
+        touchDragRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        pinchRef.current = null;
+      }
+    };
+
+    svg.addEventListener('touchstart', handleTouchStart, { passive: false });
+    svg.addEventListener('touchmove', handleTouchMove, { passive: false });
+    svg.addEventListener('touchend', handleTouchEnd, { passive: false });
+    svg.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    return () => {
+      svg.removeEventListener('touchstart', handleTouchStart);
+      svg.removeEventListener('touchmove', handleTouchMove);
+      svg.removeEventListener('touchend', handleTouchEnd);
+      svg.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
+
   if (!graphData || !graphData.nodes || graphData.nodes.length === 0) {
     return (
       <div className="flex items-center justify-center w-full h-96 bg-slate-50 border border-slate-200 rounded-lg">
@@ -409,19 +469,20 @@ const InteractiveCorrelationGraph = ({ graphData, onNodeClick }) => {
       <div className="relative h-[600px] w-full overflow-hidden bg-gradient-to-br from-slate-50 to-white">
         <svg
           ref={svgRef}
-          width={SVG_WIDTH}
-          height={SVG_HEIGHT}
-          className="block cursor-grab active:cursor-grabbing"
+          viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="block w-full h-full cursor-grab active:cursor-grabbing"
+          style={{
+            touchAction: 'none',
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: 'center center',
+            transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+          }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
           onWheel={handleWheel}
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: 'center center',
-            transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-          }}
         >
         {/* Grid background */}
         <defs>
