@@ -179,12 +179,12 @@ router.get('/:id', async (req, res) => {
     [req.params.id]
   );
   const depends_on = await getMany(
-    `SELECT s.id, s.name, s.slug, s.status AS current_status FROM services s
+    `SELECT s.id, s.name, s.slug, s.status AS current_status, s.part_is_relevant FROM services s
      JOIN service_dependencies sd ON sd.depends_on_id=s.id WHERE sd.service_id=$1`,
     [req.params.id]
   );
   const required_by = await getMany(
-    `SELECT s.id, s.name, s.slug, s.status AS current_status FROM services s
+    `SELECT s.id, s.name, s.slug, s.status AS current_status, s.part_is_relevant FROM services s
      JOIN service_dependencies sd ON sd.service_id=s.id WHERE sd.depends_on_id=$1`,
     [req.params.id]
   );

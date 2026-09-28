@@ -285,14 +285,14 @@ router.get('/:id', async (req, res) => {
 
   // Dependencies (what this asset depends on)
   const dependsOn = await getMany(
-    `SELECT a2.id, a2.name, a2.category, a2.status, a2.criticality
+    `SELECT a2.id, a2.name, a2.category, a2.status, a2.criticality, a2.part_is_relevant
      FROM asset_dependencies ad JOIN assets a2 ON a2.id=ad.depends_on_id
      WHERE ad.asset_id=$1`,
     [req.params.id]
   );
   // Required by (who depends on this asset)
   const requiredBy = await getMany(
-    `SELECT a2.id, a2.name, a2.category, a2.status, a2.criticality
+    `SELECT a2.id, a2.name, a2.category, a2.status, a2.criticality, a2.part_is_relevant
      FROM asset_dependencies ad JOIN assets a2 ON a2.id=ad.asset_id
      WHERE ad.depends_on_id=$1`,
     [req.params.id]
