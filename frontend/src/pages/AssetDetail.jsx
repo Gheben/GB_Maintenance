@@ -541,10 +541,10 @@ export default function AssetDetail() {
           </div>
         </div>
 
-        <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0">
           {TABS.map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === key ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+              className={`px-3 py-2 sm:px-4 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0 ${tab === key ? 'border-brand-500 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
               {label}
             </button>
           ))}
@@ -601,11 +601,11 @@ export default function AssetDetail() {
             </div>
             <p className="text-gray-600 dark:text-gray-300">{asset.description || 'No description'}</p>
             {(asset.owner_label || asset.owner_name) && (
-              <div className="mt-3 flex items-center gap-2 text-sm">
-                <User size={14} className="text-gray-400" />
+              <div className="mt-3 flex items-center flex-wrap gap-2 text-sm">
+                <User size={14} className="text-gray-400 shrink-0" />
                 <span className="font-medium text-gray-700 dark:text-gray-300">Owner:</span>
-                <span>{asset.owner_label || asset.owner_name}</span>
-                {asset.owner_email && <a href={`mailto:${asset.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs"><Mail size={12} />{asset.owner_email}</a>}
+                <span className="break-all">{asset.owner_label || asset.owner_name}</span>
+                {asset.owner_email && <a href={`mailto:${asset.owner_email}`} className="flex items-center gap-1 text-brand-600 hover:underline text-xs break-all"><Mail size={12} className="shrink-0" />{asset.owner_email}</a>}
               </div>
             )}
             {impactedOffices.length > 0 && (
@@ -841,8 +841,29 @@ export default function AssetDetail() {
 
         {tab === 'maintenance' && (
           <div className="space-y-3">
-            <div className="card overflow-hidden">
-              <table className="w-full text-sm">
+            {/* Mobile card list (below sm breakpoint) */}
+            <div className="sm:hidden space-y-2">
+              {maintenance.length === 0 ? (
+                <div className="card p-6 text-center text-gray-500 text-sm">No maintenance records</div>
+              ) : maintenance.map((m) => (
+                <div key={m.id} className="card p-3 space-y-2" onClick={() => openMaintenanceDetail(m.id)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-medium truncate">{m.title}</span>
+                    {m.ticket_ref && <span className="text-xs text-brand-600 font-medium shrink-0">{m.ticket_ref}</span>}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <StatusBadge status={m.status} />
+                    <CriticalityBadge criticality={m.impact_level || 'medium'} />
+                  </div>
+                  <div className="text-xs text-gray-500">{m.scheduled_start ? format(new Date(m.scheduled_start), 'MM/dd/yyyy HH:mm') : '—'} - {m.scheduled_end ? format(new Date(m.scheduled_end), 'MM/dd/yyyy HH:mm') : '—'}</div>
+                  {m.reopened_at && <div className="text-xs text-amber-600">Reopened by {m.reopened_by_user?.display_name || 'Unknown'}</div>}
+                </div>
+              ))}
+            </div>
+
+            <div className="card overflow-hidden hidden sm:block">
+              <div className="overflow-x-auto">
+              <table className="min-w-[700px] w-full text-sm">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
                   <tr>{['Title','Status','Impact','Start','End','Ticket','Reopened by'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
                 </thead>
@@ -867,6 +888,7 @@ export default function AssetDetail() {
                       ))}
                 </tbody>
               </table>
+              </div>
             </div>
             {maintenanceTotal > 25 && (
               <div className="flex items-center justify-end gap-2 text-sm">
