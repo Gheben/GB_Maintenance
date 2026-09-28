@@ -418,9 +418,9 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
         sendInApp(uid, eventType, titles[eventType] || maint.title, vars.description, 'maintenance', maintenanceId)
       )));
       tasks.push((async () => {
-        const urlByUser = await _resolvePushUrls(userIds, 'maintenance', `/maintenance/${maintenanceId}`);
+        const urlByUser = await _resolvePushUrls(userIds, 'maintenance', `/maintenance/${maintenanceId}`, `/status?maintenance=${maintenanceId}`);
         await Promise.all(userIds.map((uid) =>
-          webpushService.sendToUser(uid, { title: titles[eventType] || maint.title, body: maint.description || '', url: urlByUser.get(uid) || '/status' })
+          webpushService.sendToUser(uid, { title: titles[eventType] || maint.title, body: maint.description || '', url: urlByUser.get(uid) || `/status?maintenance=${maintenanceId}` })
             .catch((err) => logger.warn(`[Notifications] Web push failed for user ${uid}: ${err.message}`))
         ));
       })());
@@ -620,9 +620,9 @@ async function notifyIncident(incidentId, eventType) {
         sendInApp(uid, eventType, `Incident: ${incident.title}`, incident.description, 'incident', incidentId)
       )));
       tasks.push((async () => {
-        const urlByUser = await _resolvePushUrls([...userIds], 'incidents', `/incidents/${incidentId}`);
+        const urlByUser = await _resolvePushUrls([...userIds], 'incidents', `/incidents/${incidentId}`, `/status?incident=${incidentId}`);
         await Promise.all([...userIds].map((uid) =>
-          webpushService.sendToUser(uid, { title: `Incident: ${incident.title}`, body: incident.description || '', url: urlByUser.get(uid) || '/status' })
+          webpushService.sendToUser(uid, { title: `Incident: ${incident.title}`, body: incident.description || '', url: urlByUser.get(uid) || `/status?incident=${incidentId}` })
             .catch((err) => logger.warn(`[Notifications] Web push failed for user ${uid}: ${err.message}`))
         ));
       })());

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { statusApi } from '../api'
 import { format } from 'date-fns'
 import { CheckCircle, AlertTriangle, XCircle, Clock, Wrench, Users, ChevronDown, ChevronUp, Search, Ban, Bell, Building2, Server, ShieldCheck, Cog } from 'lucide-react'
@@ -204,7 +204,7 @@ function MaintenanceCard({ m, colorClass }) {
   const hasHistory = steps.some(s => s.ts)
 
   return (
-    <div className="px-4 sm:px-5 py-4">
+    <div id={`maintenance-${m.id}`} className="px-4 sm:px-5 py-4 transition-shadow">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <p className="font-medium text-sm">{m.title}</p>
         <div className="flex flex-col items-end gap-1 shrink-0">
@@ -607,7 +607,7 @@ function IncidentCard({ incident }) {
   const [expanded, setExpanded] = useState(false)
   const updates = incident.updates || []
   return (
-    <div className="px-4 sm:px-5 py-4">
+    <div id={`incident-${incident.id}`} className="px-4 sm:px-5 py-4 transition-shadow">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <p className="font-medium text-sm">{incident.title}</p>
         <span className={`text-xs badge shrink-0 ${SEV_BADGE[incident.severity] || 'bg-gray-100 text-gray-700'}`}>
@@ -668,12 +668,30 @@ export default function StatusPage() {
   const [data, setData] = useState(null)
   const [expandedService, setExpandedService] = useState(null)
   const isLoggedIn = !!user || !!localStorage.getItem('token')
+  const [searchParams] = useSearchParams()
 
   useEffect(() => {
     statusApi.overview().then(r => setData(r.data)).catch(() => {})
     const timer = setInterval(() => statusApi.overview().then(r => setData(r.data)).catch(() => {}), 60000)
     return () => clearInterval(timer)
   }, [])
+
+  // Deep-link support: a push notification (or shared link) can point straight at one
+  // maintenance/incident/blackout item via ?maintenance=/?incident=/?blackout=<id>.
+  useEffect(() => {
+    if (!data) return undefined
+    const targetId = searchParams.get('maintenance') ? `maintenance-${searchParams.get('maintenance')}`
+      : searchParams.get('incident') ? `incident-${searchParams.get('incident')}`
+      : searchParams.get('blackout') ? `blackout-${searchParams.get('blackout')}`
+      : null
+    if (!targetId) return undefined
+    const el = document.getElementById(targetId)
+    if (!el) return undefined
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('ring-2', 'ring-brand-500', 'ring-offset-2', 'rounded-xl')
+    const timer = setTimeout(() => el.classList.remove('ring-2', 'ring-brand-500', 'ring-offset-2', 'rounded-xl'), 4000)
+    return () => clearTimeout(timer)
+  }, [data, searchParams])
 
   if (!data) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -741,7 +759,7 @@ export default function StatusPage() {
 
         {/* Active blackout — full red alert above everything */}
         {activeBlackouts.map(b => (
-          <div key={b.id} className="rounded-xl bg-red-600 text-white p-4 sm:p-5 flex items-start gap-3 shadow-lg">
+          <div key={b.id} id={`blackout-${b.id}`} className="rounded-xl bg-red-600 text-white p-4 sm:p-5 flex items-start gap-3 shadow-lg transition-shadow">
             <Ban size={22} className="flex-shrink-0 mt-0.5" />
             <div>
               <p className="font-bold text-base">Blackout period active: {b.name}</p>
@@ -758,7 +776,7 @@ export default function StatusPage() {
 
         {/* Upcoming blackout — amber warning */}
         {upcomingBlackouts.map(b => (
-          <div key={b.id} className="rounded-xl bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 p-4 sm:p-5 flex items-start gap-3">
+          <div key={b.id} id={`blackout-${b.id}`} className="rounded-xl bg-amber-50 dark:bg-amber-900/30 border border-amber-300 dark:border-amber-700 p-4 sm:p-5 flex items-start gap-3 transition-shadow">
             <AlertTriangle size={20} className="flex-shrink-0 text-amber-600 mt-0.5" />
             <div>
               <p className="font-semibold text-amber-800 dark:text-amber-300">Upcoming blackout: {b.name}</p>
@@ -859,7 +877,7 @@ export default function StatusPage() {
             icon={<Ban size={16} />}
             headerClass="text-red-600"
             renderItem={(b) => (
-              <div key={b.id} className="px-4 sm:px-5 py-4">
+              <div key={b.id} id={`blackout-${b.id}`} className="px-4 sm:px-5 py-4 transition-shadow">
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <p className="font-medium text-sm">{b.name}</p>
                   <span className="text-xs badge bg-red-100 text-red-800 shrink-0">blackout</span>

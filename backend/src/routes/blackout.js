@@ -3,7 +3,9 @@ const { body, validationResult } = require('express-validator');
 const { requireAuth, requireChangeManager, requireAdmin } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
-const { sendEmailNotification } = require('../services/notificationService');
+const { sendEmailNotification, sendInApp } = require('../services/notificationService');
+const webpushService = require('../services/webpushService');
+const logger = require('../utils/logger');
 const { getAffectedAssets, getAffectedServices } = require('../utils/maintenanceScope');
 const { getVisibleAffectedScope, PRIVILEGED_ROLES } = require('../utils/entityVisibility');
 
@@ -327,6 +329,12 @@ router.post('/', requireChangeManager, [
         ...impacted.users.map((user) => String(user.email || '').trim()),
         ...emailSubscribers.map((subscriber) => String(subscriber.email || '').trim()),
       ].filter(Boolean))];
+      // Local users only (LDAP-only entries have no local users.id to notify in-app/push).
+      const userIds = [...new Set(
+        impacted.users
+          .filter((user) => user.auth_type !== 'ldap' && /^[0-9a-f-]{36}$/i.test(String(user.id || '')))
+          .map((user) => user.id)
+      )];
       if (emails.length > 0) {
         const affectedServices = await getAffectedServices(aids, sids);
         const scope = { assets: impacted.affected_assets, services: affectedServices };
@@ -343,6 +351,18 @@ router.post('/', requireChangeManager, [
           ),
         });
         await query(`UPDATE blackout_periods SET notified_at=NOW() WHERE id=$1`, [result.rows[0].id]);
+      }
+      if (userIds.length > 0) {
+        // No privileged deep-link exists for a single blackout period, so everyone lands on the
+        // status page item — same destination the maintenance/incident notifications fall back to.
+        const url = `/status?blackout=${result.rows[0].id}`;
+        await Promise.all(userIds.map((uid) =>
+          sendInApp(uid, 'blackout_scheduled', `Blackout period: ${req.body.name}`, req.body.description || '', 'blackout_period', result.rows[0].id)
+        ));
+        await Promise.all(userIds.map((uid) =>
+          webpushService.sendToUser(uid, { title: `Blackout period: ${req.body.name}`, body: req.body.description || '', url })
+            .catch((err) => logger.warn(`[Notifications] Web push failed for user ${uid}: ${err.message}`))
+        ));
       }
     } catch { /* notification failures should not affect the API response */ }
   })();
