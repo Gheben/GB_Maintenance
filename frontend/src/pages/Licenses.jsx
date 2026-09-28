@@ -3,6 +3,7 @@ import { Layout } from '../components/Layout'
 import { licensesApi, suppliersApi, assetsApi, servicesApi, settingsApi, uploadsApi, usersApi } from '../api'
 import { Pagination } from '../components/Pagination'
 import { Modal, ConfirmDialog } from '../components/Modal'
+import { ItemPicker } from '../components/ItemPicker'
 import { toast } from '../components/Toast'
 import { format } from 'date-fns'
 import {
@@ -963,12 +964,8 @@ export default function Licenses() {
   const [suppliersLimit, setSuppliersLimit] = useState(25)
   const [suppliersQ, setSuppliersQ] = useState('')
 
-  const [assetQ, setAssetQ] = useState('')
-  const [serviceQ, setServiceQ] = useState('')
-
   const [assets, setAssets] = useState([])
   const [services, setServices] = useState([])
-  const [localUsers, setLocalUsers] = useState([])
   const [formLookupsLoaded, setFormLookupsLoaded] = useState(false)
   const [loadingFormLookups, setLoadingFormLookups] = useState(false)
 
@@ -1067,13 +1064,11 @@ export default function Licenses() {
     Promise.all([
       assetsApi.list({ limit: 300 }).catch(() => ({ data: [] })),
       servicesApi.list({ limit: 300 }).catch(() => ({ data: [] })),
-      usersApi.list({ limit: 500 }).catch(() => ({ data: [] })),
       suppliersApi.list({ page: 1, limit: 200 }).catch(() => ({ data: { data: [] } })),
     ])
-      .then(([assetsRes, servicesRes, usersRes, suppliersRes]) => {
+      .then(([assetsRes, servicesRes, suppliersRes]) => {
         setAssets(Array.isArray(assetsRes.data) ? assetsRes.data : (assetsRes.data?.data || []))
         setServices(Array.isArray(servicesRes.data) ? servicesRes.data : (servicesRes.data?.data || []))
-        setLocalUsers(Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.data || []))
         setSupplierLookup(suppliersRes.data?.data || [])
         setFormLookupsLoaded(true)
       })
@@ -1103,24 +1098,10 @@ export default function Licenses() {
     return supplierOptions.filter(s => s.label.toLowerCase().includes(q))
   }, [supplierOptions, supplierPickerQ])
 
-  const filteredAssets = useMemo(() => {
-    const q = assetQ.trim().toLowerCase()
-    const base = q ? assets.filter(a => String(a.name || '').toLowerCase().includes(q)) : assets
-    return base.slice(0, 25)
-  }, [assets, assetQ])
-
-  const filteredServices = useMemo(() => {
-    const q = serviceQ.trim().toLowerCase()
-    const base = q ? services.filter(s => String(s.name || '').toLowerCase().includes(q)) : services
-    return base.slice(0, 25)
-  }, [services, serviceQ])
-
   const openCreateLicense = () => {
     setEditingLicense(null)
     setLicenseForm(emptyLicenseForm)
     setRenewalHistory([])
-    setAssetQ('')
-    setServiceQ('')
     setShowLicenseForm(true)
   }
 
@@ -1163,8 +1144,6 @@ export default function Licenses() {
         asset_ids: Array.isArray(d.assets) ? d.assets.map(a => a.id) : [],
         service_ids: Array.isArray(d.services) ? d.services.map(s => s.id) : [],
       })
-      setAssetQ('')
-      setServiceQ('')
       setShowLicenseForm(true)
     } catch (err) {
       toast.error(err.response?.data?.error || 'Error loading license')
@@ -1508,17 +1487,12 @@ export default function Licenses() {
     }
     setOwnerSearching(true)
     try {
-      const local = localUsers
-        .filter(u => {
-          const qq = q.toLowerCase()
-          return String(u.username || '').toLowerCase().includes(qq)
-            || String(u.display_name || '').toLowerCase().includes(qq)
-            || String(u.email || '').toLowerCase().includes(qq)
-        })
-        .slice(0, 25)
-        .map(u => ({ type: 'local', id: u.id, name: u.display_name || u.username, email: u.email, username: u.username }))
-
-      const r = await settingsApi.searchLdapUsers(q).catch(() => ({ data: [] }))
+      const [localRes, r] = await Promise.all([
+        usersApi.assignable({ q, limit: 25 }).catch(() => ({ data: [] })),
+        settingsApi.searchLdapUsers(q).catch(() => ({ data: [] })),
+      ])
+      const localRows = Array.isArray(localRes.data) ? localRes.data : (localRes.data?.data || [])
+      const local = localRows.map(u => ({ type: 'local', id: u.id, name: u.display_name || u.username, email: u.email, username: u.username }))
       const ldap = (r.data || []).map(u => ({ type: 'ldap', name: u.name, email: u.email, dn: u.dn, username: u.username }))
       setOwnerResults(mergeUniqueContacts(local, ldap))
     } catch {
@@ -1536,19 +1510,13 @@ export default function Licenses() {
     }
     setLoading(true)
     try {
-      const [ldapRes, supRes] = await Promise.all([
+      const [localRes, ldapRes, supRes] = await Promise.all([
+        usersApi.assignable({ q, limit: 25 }).catch(() => ({ data: [] })),
         settingsApi.searchLdapUsers(q).catch(() => ({ data: [] })),
         suppliersApi.list({ q, page: 1, limit: 25 }).catch(() => ({ data: { data: [] } })),
       ])
-      const local = localUsers
-        .filter(u => {
-          const qq = q.toLowerCase()
-          return String(u.username || '').toLowerCase().includes(qq)
-            || String(u.display_name || '').toLowerCase().includes(qq)
-            || String(u.email || '').toLowerCase().includes(qq)
-        })
-        .slice(0, 25)
-        .map(u => ({ type: 'local', id: u.id, name: u.display_name || u.username, email: u.email, username: u.username }))
+      const localRows = Array.isArray(localRes.data) ? localRes.data : (localRes.data?.data || [])
+      const local = localRows.map(u => ({ type: 'local', id: u.id, name: u.display_name || u.username, email: u.email, username: u.username }))
       const ldap = (ldapRes.data || []).map(u => ({ type: 'ldap', name: u.name, email: u.email, dn: u.dn, username: u.username }))
       const sups = (supRes.data?.data || []).map(s => ({
         type: 'supplier',
@@ -2057,43 +2025,28 @@ export default function Licenses() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-sm font-medium">Assign assets</label>
-                  <span className="text-xs text-gray-400">{licenseForm.asset_ids.length} selected</span>
-                </div>
-                <div className="relative">
-                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input className="input pl-8" placeholder="Search assets..." value={assetQ} onChange={e => setAssetQ(e.target.value)} />
-                </div>
-                <div className="max-h-44 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2 space-y-1">
-                  {filteredAssets.map(a => (
-                    <label key={a.id} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={licenseForm.asset_ids.includes(a.id)} onChange={() => setLicenseForm(f => ({ ...f, asset_ids: toggleMulti(f.asset_ids, a.id) }))} />
-                      <span>{a.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-sm font-medium">Assign services</label>
-                  <span className="text-xs text-gray-400">{licenseForm.service_ids.length} selected</span>
-                </div>
-                <div className="relative">
-                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input className="input pl-8" placeholder="Search services..." value={serviceQ} onChange={e => setServiceQ(e.target.value)} />
-                </div>
-                <div className="max-h-44 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2 space-y-1">
-                  {filteredServices.map(s => (
-                    <label key={s.id} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={licenseForm.service_ids.includes(s.id)} onChange={() => setLicenseForm(f => ({ ...f, service_ids: toggleMulti(f.service_ids, s.id) }))} />
-                      <span>{s.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <ItemPicker
+                label="Assign assets"
+                allItems={assets}
+                selectedIds={licenseForm.asset_ids}
+                onToggle={id => setLicenseForm(f => ({ ...f, asset_ids: toggleMulti(f.asset_ids, id) }))}
+                badgeKey="category"
+                useModal
+                filterKey="category"
+                maxResults={120}
+                onSearch={(q) => assetsApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
+              />
+              <ItemPicker
+                label="Assign services"
+                allItems={services}
+                selectedIds={licenseForm.service_ids}
+                onToggle={id => setLicenseForm(f => ({ ...f, service_ids: toggleMulti(f.service_ids, id) }))}
+                badgeKey="criticality"
+                useModal
+                filterKey="criticality"
+                maxResults={120}
+                onSearch={(q) => servicesApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
+              />
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
