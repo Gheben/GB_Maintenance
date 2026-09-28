@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Wrench, Eye, EyeOff, Coffee, Download } from 'lucide-react'
 import { toast } from '../components/Toast'
-import { settingsApi, reportsApi, maintenanceApi, assetsApi, servicesApi, notificationsApi } from '../api'
+import { authApi, settingsApi, reportsApi, maintenanceApi, assetsApi, servicesApi, notificationsApi } from '../api'
 
 let warmupDone = false
 
@@ -22,8 +22,9 @@ function warmupAfterLogin() {
 }
 
 export default function Login() {
-  const { login } = useAuth()
+  const { login, setUser } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [form, setForm] = useState({ username: '', password: '', totp_code: '' })
   const [needTotp, setNeedTotp] = useState(false)
@@ -44,6 +45,24 @@ export default function Login() {
       })
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    const token = searchParams.get('token')
+    if (!token) return
+
+    localStorage.setItem('token', token)
+    authApi.me()
+      .then((response) => {
+        localStorage.setItem('user', JSON.stringify(response.data))
+        setUser(response.data)
+        navigate('/', { replace: true })
+      })
+      .catch(() => {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        toast.error('SAML authentication failed')
+      })
+  }, [navigate, searchParams, setUser])
 
   useEffect(() => {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true

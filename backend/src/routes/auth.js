@@ -186,17 +186,20 @@ router.get('/saml/login', async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
-router.post('/saml/acs', async (req, res) => {
+async function handleSamlCallback(req, res) {
   try {
     const user = await samlService.validateCallback(req);
     const { token } = authService.signToken(user);
     const frontendUrl = process.env.APP_URL || 'http://localhost:4681';
-    res.redirect(`${frontendUrl}/auth/sso?token=${encodeURIComponent(token)}`);
+    res.redirect(`${frontendUrl}/login?token=${encodeURIComponent(token)}`);
   } catch (err) {
     logger.error(`[Auth] SAML ACS error: ${err.message}`);
     res.redirect(`${process.env.APP_URL || 'http://localhost:4681'}/login?error=saml`);
   }
-});
+}
+
+router.post('/saml/callback', handleSamlCallback);
+router.post('/saml/acs', handleSamlCallback);
 
 // ─── Change Password ──────────────────────────────────────────────────────────
 router.post('/change-password', requireAuth, [

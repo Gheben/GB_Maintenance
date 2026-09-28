@@ -38,14 +38,18 @@ function _getSamlInstance(cfg) {
   // accept full PEM or raw base64
   const idpCert = rawCert.includes('-----BEGIN') ? _stripPem(rawCert) : rawCert.replace(/\s/g, '');
   return new nodeSaml.SAML({
-    callbackUrl: `${appUrl}/api/auth/saml/acs`,
+    callbackUrl: `${appUrl}/api/auth/saml/callback`,
     entryPoint,
     issuer,
     idpCert,
     privateKey: cfg.sp_private_key || undefined,
     decryptionPvk: cfg.sp_private_key || undefined,
     logoutUrl: cfg.idp_slo_url || undefined,
+    wantAuthnResponseSigned: false,
     wantAssertionsSigned: false,
+    disableRequestedAuthnContext: true,
+    acceptedClockSkewMs: 5000,
+    identifierFormat: null,
     signatureAlgorithm: 'sha256',
   });
 }
@@ -65,6 +69,9 @@ async function generateAuthUrl(req) {
   const cfg = await getSamlSettings();
   if (!cfg || !cfg.enabled) throw new Error('SAML non abilitato');
   const saml = _getSamlInstance(cfg);
+  if (typeof saml.getAuthorizeUrlAsync === 'function') {
+    return saml.getAuthorizeUrlAsync('', req.hostname, {});
+  }
   return new Promise((resolve, reject) => {
     saml.getAuthorizeUrl(req, {}, (err, url) => {
       if (err) reject(err); else resolve(url);
@@ -77,11 +84,13 @@ async function validateCallback(req) {
   if (!cfg || !cfg.enabled) throw new Error('SAML non abilitato');
   const saml = _getSamlInstance(cfg);
 
-  const profile = await new Promise((resolve, reject) => {
-    saml.validatePostResponse(req.body, (err, profile) => {
-      if (err) reject(err); else resolve(profile);
+  const profile = typeof saml.validatePostResponseAsync === 'function'
+    ? (await saml.validatePostResponseAsync(req.body)).profile
+    : await new Promise((resolve, reject) => {
+      saml.validatePostResponse(req.body, (err, result) => {
+        if (err) reject(err); else resolve(result);
+      });
     });
-  });
 
   const usernameAttr = cfg.username_attribute || cfg.username_attr;
   const username = (usernameAttr && profile[usernameAttr]) || profile.nameID;
