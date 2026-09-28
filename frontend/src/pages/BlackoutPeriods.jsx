@@ -182,7 +182,7 @@ export default function BlackoutPeriods() {
             <input className="input pl-9 w-48" placeholder="Search..." value={search}
               onChange={e => { setSearch(e.target.value); setPage(1) }} />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button className="btn-secondary" onClick={load}><RefreshCw size={15} /></button>
           {canBulkDelete && (
             <button className="btn-danger" disabled={selectedPeriodIds.length === 0 || bulkDeleting} onClick={() => setConfirmBulkDelete(true)}>
@@ -193,7 +193,46 @@ export default function BlackoutPeriods() {
           </div>
         </div>
 
-        <div className="card overflow-hidden">
+        {/* Mobile card list (below sm breakpoint) */}
+        <div className="sm:hidden space-y-3">
+          {canBulkDelete && pagedPeriods.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-gray-500 px-1">
+              <input type="checkbox" checked={allVisibleSelected} onChange={event => toggleSelectAllVisible(event.target.checked)} aria-label="Select all visible blackout periods" />
+              Select all visible
+            </label>
+          )}
+          {loading ? (
+            <div className="card p-6 text-center text-gray-500 text-sm">Loading...</div>
+          ) : pagedPeriods.length === 0 ? (
+            <div className="card p-6 text-center text-gray-500 text-sm">No blackout periods</div>
+          ) : pagedPeriods.map(period => (
+            <div key={period.id} className="card p-4 space-y-2.5" onClick={() => openEdit(period)}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{period.name}</p>
+                  {period.ticket_ref && <p className="mt-0.5 text-xs text-brand-600">Ticket: {period.ticket_ref}</p>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0" onClick={event => event.stopPropagation()}>
+                  {canBulkDelete && (
+                    <input type="checkbox" checked={selectedPeriodIds.includes(period.id)} onChange={() => togglePeriodSelection(period.id)} aria-label={`Select blackout period ${period.name}`} />
+                  )}
+                  <button onClick={() => openEdit(period)} className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors"><Pencil size={14} /></button>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <StatusBadge status={blackoutStatus(period)} />
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700"><Cog size={11} />{period.services?.length || 0}</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700"><Server size={11} />{period.assets?.length || 0}{period.assets?.some(asset => asset.part_is_relevant) && <ShieldCheck size={11} className="text-amber-600" title="Part-IS Relevant" />}</span>
+              </div>
+              <div className="text-xs text-gray-500 pt-2 border-t border-gray-100 dark:border-gray-700">{format(new Date(period.start_date), 'MM/dd/yyyy')} - {format(new Date(period.end_date), 'MM/dd/yyyy')}</div>
+            </div>
+          ))}
+          <div className="card p-4">
+            <Pagination page={currentPage} limit={limit} total={total} onChange={setPage} onLimitChange={setLimit} />
+          </div>
+        </div>
+
+        <div className="card overflow-hidden hidden sm:block">
           <div className="overflow-x-auto">
             <table className="min-w-[700px] w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-700/50"><tr>

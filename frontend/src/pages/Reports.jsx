@@ -158,7 +158,22 @@ export default function Reports() {
               )
             })()}
 
-            <div className="card overflow-hidden">
+            <div className="sm:hidden space-y-2">
+              {data.length === 0 ? (
+                <div className="card p-6 text-center text-gray-500 text-sm">No data</div>
+              ) : data.map(m => (
+                <div key={m.id} className="card p-3 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-medium truncate">{m.title}</span>
+                    <StatusBadge status={m.status} />
+                  </div>
+                  <div className="text-xs text-gray-500">{m.type} · {m.impact_level}</div>
+                  <div className="text-xs text-gray-500 pt-1.5 border-t border-gray-100 dark:border-gray-700">{format(new Date(m.scheduled_start), 'MM/dd HH:mm')} · {Math.round(m.duration_minutes || 0)} min</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="card overflow-hidden hidden sm:block">
               <div className="overflow-auto" style={{ maxHeight: '62.5rem' }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -199,7 +214,27 @@ export default function Reports() {
                 </ResponsiveContainer>
               </div>
             )}
-            <div className="card overflow-hidden">
+            <div className="sm:hidden space-y-2">
+              {uptimeData.length === 0 ? (
+                <div className="card p-6 text-center text-gray-500 text-sm">No data</div>
+              ) : uptimeData.map(s => (
+                <div key={s.id} className="card p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium truncate">{s.name}</span>
+                    <StatusBadge status={s.status} />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500 pt-1.5 border-t border-gray-100 dark:border-gray-700">
+                    <span>SLA: {s.sla_uptime_percent}%</span>
+                    <span>{s.outage_events || 0} outage(s) (30d)</span>
+                  </div>
+                </div>
+              ))}
+              <div className="card p-4">
+                <Pagination page={uptimePage} limit={25} total={uptimeTotal} onChange={setUptimePage} />
+              </div>
+            </div>
+
+            <div className="card overflow-hidden hidden sm:block">
               <div className="overflow-auto" style={{ maxHeight: '62.5rem' }}>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
@@ -243,7 +278,28 @@ function AssetReport({ exportFormat, setExportFormat, onExport }) {
   return (
     <div className="card overflow-hidden">
       <div className="flex justify-end gap-2 p-4 border-b border-gray-100 dark:border-gray-700"><select className="input w-32" value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option></select><button className="btn-secondary" onClick={onExport}><Download size={14} />Export</button></div>
-      <div className="overflow-auto" style={{ maxHeight: '62.5rem' }}>
+      <div className="sm:hidden p-3 space-y-2">
+        {data.length === 0 ? (
+          <div className="text-center text-gray-500 text-sm py-4">No data</div>
+        ) : data.map(a => (
+          <div key={a.id} className="card p-3 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium truncate inline-flex items-center gap-1.5">
+                {a.name}
+                {a.part_is_relevant && <ShieldCheck size={13} className="text-amber-600 shrink-0" title="Part-IS Relevant" />}
+              </span>
+              <StatusBadge status={a.status} />
+            </div>
+            <div className="text-xs text-gray-500">{a.category} · {a.criticality}</div>
+            <div className="grid grid-cols-3 gap-x-2 text-xs pt-1.5 border-t border-gray-100 dark:border-gray-700">
+              <div><span className="text-gray-400">Maint.: </span>{a.maintenance_count}</div>
+              <div><span className="text-gray-400">Inc.: </span>{a.incident_count}</div>
+              <div><span className="text-gray-400">Fails: </span>{a.failed_probes_30d}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="overflow-auto hidden sm:block" style={{ maxHeight: '62.5rem' }}>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700/50">
             <tr>{['Name','Part-IS','Category','Criticality','Status','Maintenances','Incidents','Probe fails (30d)'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr>
@@ -282,7 +338,28 @@ function ServiceReport({ exportFormat, setExportFormat, onExport }) {
   return (
     <div className="card overflow-hidden">
       <div className="flex justify-end gap-2 p-4 border-b border-gray-100 dark:border-gray-700"><select className="input w-32" value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option></select><button className="btn-secondary" onClick={onExport}><Download size={14} />Export</button></div>
-      <div className="overflow-auto" style={{ maxHeight: '62.5rem' }}>
+      <div className="sm:hidden p-3 space-y-2">
+        {data.length === 0 ? (
+          <div className="text-center text-gray-500 text-sm py-4">No data</div>
+        ) : data.map(s => (
+          <div key={s.id} className="card p-3 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium truncate inline-flex items-center gap-1.5">
+                {s.name}
+                {s.part_is_relevant && <ShieldCheck size={13} className="text-amber-600 shrink-0" title="Part-IS Relevant" />}
+              </span>
+              <StatusBadge status={s.status} />
+            </div>
+            <div className="text-xs text-gray-500">{s.criticality} · SLA {s.sla_uptime_percent}%</div>
+            <div className="grid grid-cols-3 gap-x-2 text-xs pt-1.5 border-t border-gray-100 dark:border-gray-700">
+              <div><span className="text-gray-400">Assets: </span>{s.asset_count}</div>
+              <div><span className="text-gray-400">Maint.: </span>{s.maintenance_count}</div>
+              <div><span className="text-gray-400">Inc.: </span>{s.incident_count}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="overflow-auto hidden sm:block" style={{ maxHeight: '62.5rem' }}>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-700/50"><tr>{['Name','Part-IS','Criticality','Status','SLA %','Assets','Maintenances','Incidents'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">{data.map(s => <tr key={s.id}><td className="px-4 py-2 font-medium">{s.name}</td><td className="px-4 py-2">{s.part_is_relevant ? <ShieldCheck size={17} className="text-amber-600" title="Part-IS Relevant" /> : <span className="text-gray-300">—</span>}</td><td className="px-4 py-2">{s.criticality}</td><td className="px-4 py-2"><StatusBadge status={s.status} /></td><td className="px-4 py-2">{s.sla_uptime_percent}%</td><td className="px-4 py-2">{s.asset_count}</td><td className="px-4 py-2">{s.maintenance_count}</td><td className="px-4 py-2">{s.incident_count}</td></tr>)}</tbody>
@@ -304,5 +381,29 @@ function licenseExpiryMeta(expiryDate, reminderDays = 30) {
 }
 
 function LicenseReport({ data, total, page, onPageChange, exportFormat, setExportFormat, onExport }) {
-  return <div className="card overflow-hidden"><div className="flex justify-end gap-2 p-4 border-b border-gray-100 dark:border-gray-700"><select className="input w-32" value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option></select><button className="btn-secondary" onClick={onExport}><Download size={14} />Export</button></div><div className="overflow-auto"><table className="w-full text-sm"><thead className="bg-gray-50 dark:bg-gray-700/50"><tr>{['Name','Approval status','Expiry date','Renewal date','Supplier','Cost','Assets','Services'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr></thead><tbody className="divide-y divide-gray-100 dark:divide-gray-700">{data.map(row => { const expiry = licenseExpiryMeta(row.expiry_date, row.reminder_days); return <tr key={`${row.name}-${row.expiry_date}`}><td className="px-4 py-2 font-medium">{row.name}</td><td className="px-4 py-2">{row.approval_status}</td><td className="px-4 py-2"><span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${expiry.className}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{row.expiry_date || expiry.label}</span></td><td className="px-4 py-2">{row.renewal_date || '—'}</td><td className="px-4 py-2">{row.supplier || row.supplier_company || '—'}</td><td className="px-4 py-2">{row.estimated_cost || '—'} {row.currency || ''}</td><td className="px-4 py-2">{row.asset_count || 0}</td><td className="px-4 py-2">{row.service_count || 0}</td></tr> })}</tbody></table></div><div className="p-4 border-t border-gray-100 dark:border-gray-700"><Pagination page={page} limit={25} total={total} onChange={onPageChange} /></div></div>
+  return <div className="card overflow-hidden">
+    <div className="flex justify-end gap-2 p-4 border-b border-gray-100 dark:border-gray-700"><select className="input w-32" value={exportFormat} onChange={e => setExportFormat(e.target.value)}><option value="csv">CSV</option><option value="xlsx">Excel</option><option value="pdf">PDF</option></select><button className="btn-secondary" onClick={onExport}><Download size={14} />Export</button></div>
+    <div className="sm:hidden p-3 space-y-2">
+      {data.length === 0 ? (
+        <div className="text-center text-gray-500 text-sm py-4">No data</div>
+      ) : data.map(row => { const expiry = licenseExpiryMeta(row.expiry_date, row.reminder_days); return (
+        <div key={`${row.name}-${row.expiry_date}`} className="card p-3 space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium truncate">{row.name}</span>
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold shrink-0 ${expiry.className}`}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />{row.expiry_date || expiry.label}
+            </span>
+          </div>
+          <div className="text-xs text-gray-500">{row.approval_status} · {row.supplier || row.supplier_company || '—'}</div>
+          <div className="grid grid-cols-3 gap-x-2 text-xs pt-1.5 border-t border-gray-100 dark:border-gray-700">
+            <div><span className="text-gray-400">Cost: </span>{row.estimated_cost || '—'} {row.currency || ''}</div>
+            <div><span className="text-gray-400">Assets: </span>{row.asset_count || 0}</div>
+            <div><span className="text-gray-400">Services: </span>{row.service_count || 0}</div>
+          </div>
+        </div>
+      ) })}
+    </div>
+    <div className="overflow-auto hidden sm:block"><table className="w-full text-sm"><thead className="bg-gray-50 dark:bg-gray-700/50"><tr>{['Name','Approval status','Expiry date','Renewal date','Supplier','Cost','Assets','Services'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}</tr></thead><tbody className="divide-y divide-gray-100 dark:divide-gray-700">{data.map(row => { const expiry = licenseExpiryMeta(row.expiry_date, row.reminder_days); return <tr key={`${row.name}-${row.expiry_date}`}><td className="px-4 py-2 font-medium">{row.name}</td><td className="px-4 py-2">{row.approval_status}</td><td className="px-4 py-2"><span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${expiry.className}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{row.expiry_date || expiry.label}</span></td><td className="px-4 py-2">{row.renewal_date || '—'}</td><td className="px-4 py-2">{row.supplier || row.supplier_company || '—'}</td><td className="px-4 py-2">{row.estimated_cost || '—'} {row.currency || ''}</td><td className="px-4 py-2">{row.asset_count || 0}</td><td className="px-4 py-2">{row.service_count || 0}</td></tr> })}</tbody></table></div>
+    <div className="p-4 border-t border-gray-100 dark:border-gray-700"><Pagination page={page} limit={25} total={total} onChange={onPageChange} /></div>
+  </div>
 }
