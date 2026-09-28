@@ -1,7 +1,11 @@
 import { ShieldCheck } from 'lucide-react'
 
 export function PartIsServiceNotice({ services = [], selectedIds = [] }) {
-  const selectedServices = services.filter(service => selectedIds.includes(service.id) && service.part_is_relevant)
+  const selectedIdSet = new Set(selectedIds.map(id => String(id)))
+  const selectedServices = services.filter(service => (
+    selectedIdSet.has(String(service.id))
+    && (service.part_is_relevant === true || String(service.part_is_relevant).toLowerCase() === 'true')
+  ))
 
   if (selectedServices.length === 0) return null
 
