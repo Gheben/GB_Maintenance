@@ -49,8 +49,6 @@ function PageFallback() {
 
 export default function App() {
   useEffect(() => {
-    let dynamicManifestUrl = null
-
     const getCachedBranding = () => {
       try {
         const raw = localStorage.getItem('public_branding_cache')
@@ -70,7 +68,7 @@ export default function App() {
       }
     }
 
-    const applyPwaBranding = async ({ appName, appImage }) => {
+    const applyPwaBranding = async ({ appName }) => {
       if (!appName) return
 
       let appleTitleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
@@ -81,55 +79,6 @@ export default function App() {
       }
       appleTitleMeta.setAttribute('content', appName)
 
-      const manifestLink = document.querySelector('link[rel="manifest"]')
-      if (!manifestLink) return
-
-      const savedOriginalHref = manifestLink.getAttribute('data-original-href')
-      const currentHref = manifestLink.getAttribute('href') || '/manifest.json'
-      const originalHref = savedOriginalHref || currentHref
-      if (!savedOriginalHref) manifestLink.setAttribute('data-original-href', originalHref)
-
-      try {
-        const response = await fetch(originalHref, { cache: 'no-store' })
-        if (!response.ok) return
-        const manifest = await response.json()
-        const imageWithTs = appImage
-          ? `${appImage}${appImage.includes('?') ? '&' : '?'}v=${Date.now()}`
-          : ''
-
-        const updatedManifest = {
-          ...manifest,
-          name: appName,
-          short_name: appName,
-          ...(imageWithTs
-            ? {
-              icons: [
-                {
-                  src: imageWithTs,
-                  sizes: '192x192',
-                  type: 'image/png',
-                  purpose: 'any maskable',
-                },
-                {
-                  src: imageWithTs,
-                  sizes: '512x512',
-                  type: 'image/png',
-                  purpose: 'any maskable',
-                },
-              ],
-            }
-            : {}),
-        }
-
-        const blob = new Blob([JSON.stringify(updatedManifest)], { type: 'application/manifest+json' })
-        const nextManifestUrl = URL.createObjectURL(blob)
-        manifestLink.setAttribute('href', nextManifestUrl)
-
-        if (dynamicManifestUrl) URL.revokeObjectURL(dynamicManifestUrl)
-        dynamicManifestUrl = nextManifestUrl
-      } catch {
-        // Keep the static manifest if dynamic generation fails.
-      }
     }
 
     const applyBrandingFromPayload = (b) => {
@@ -182,7 +131,6 @@ export default function App() {
     window.addEventListener('app-branding-updated', onBrandingUpdate)
     return () => {
       window.removeEventListener('app-branding-updated', onBrandingUpdate)
-      if (dynamicManifestUrl) URL.revokeObjectURL(dynamicManifestUrl)
     }
   }, [])
 
