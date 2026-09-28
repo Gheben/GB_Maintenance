@@ -62,8 +62,8 @@ const CorrelationGraphLoader = ({ entityId, entityType, onNodeClick }) => {
   return (
     <div className="space-y-3">
       {/* Depth control and Legend */}
-      <div className="flex flex-wrap items-center justify-between px-4 py-2 bg-slate-50 rounded-lg border border-slate-200 gap-4">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-start sm:items-center justify-between px-4 py-2 bg-slate-50 rounded-lg border border-slate-200 gap-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 w-full sm:w-auto">
           <label htmlFor="graph-depth" className="text-sm font-medium text-slate-700 whitespace-nowrap">
             Expansion depth:
           </label>
@@ -71,7 +71,7 @@ const CorrelationGraphLoader = ({ entityId, entityType, onNodeClick }) => {
             id="graph-depth"
             value={depth}
             onChange={(e) => setDepth(parseInt(e.target.value, 10))}
-            className="px-3 py-1 text-sm border border-slate-300 rounded bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full sm:w-auto px-3 py-1 text-sm border border-slate-300 rounded bg-white hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value={1}>1 level (direct relationships)</option>
             <option value={2}>2 levels (direct + indirect)</option>
