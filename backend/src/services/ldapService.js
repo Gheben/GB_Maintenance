@@ -1,7 +1,7 @@
 let ldap;
 try { ldap = require('ldapjs'); } catch { ldap = null; }
 
-const { query, getOne } = require('../db/database');
+const { query, getOne, getMany } = require('../db/database');
 const logger = require('../utils/logger');
 const { encrypt, decrypt, isEncrypted } = require('../utils/encryption');
 const { ROLE_DEFAULTS } = require('./authService');
@@ -692,12 +692,66 @@ module.exports = {
   getLdapSettings,
   saveLdapSettings,
   authenticateUser,
+  resolveSamlRole,
   testLdapConnection,
   findUserAvatarFromLdap,
   searchUsers,
   searchGroups,
   countUsersInGroups,
 };
+
+async function resolveSamlRole(username, email, upn, profileGroups = []) {
+  const resolveFromGroups = async (groups) => {
+    const values = Array.isArray(groups) ? groups.filter(Boolean) : [];
+    if (values.length === 0) return null;
+    const mappings = await getMany('SELECT ldap_group_dn, role FROM ldap_group_mappings WHERE role IS NOT NULL');
+    const groupDns = new Set(values.map(group => String(group).toLowerCase().trim()));
+    const groupCns = new Set(values.map(group => _extractCn(group)).filter(Boolean));
+    const priorities = ['superadmin', 'admin', 'change_manager', 'operator', 'viewer', 'subscriber'];
+    let selected = null;
+    for (const mapping of mappings) {
+      const mapped = String(mapping.ldap_group_dn || '').toLowerCase().trim();
+      if (!mapped) continue;
+      if (groupDns.has(mapped) || (groupCns.has(_extractCn(mapped)) && _extractCn(mapped))) {
+        if (!selected || priorities.indexOf(mapping.role) < priorities.indexOf(selected)) selected = mapping.role;
+      }
+    }
+    return selected;
+  };
+
+  const profileRole = await resolveFromGroups(profileGroups);
+  const cfg = await getLdapSettings();
+  if (!cfg || !cfg.enabled || !ldap) return profileRole;
+
+  const searchBase = cfg.search_base || cfg.base_dn;
+  if (!searchBase) return profileRole;
+  const client = _createClient(cfg);
+  try {
+    await _bind(client, _bindPrincipal(cfg), _bindPassword(cfg));
+    const candidates = [];
+    const normalizedUsername = _normalizeUsernameInput(username);
+    if (normalizedUsername) candidates.push(`(sAMAccountName=${_escapeLdap(normalizedUsername)})`);
+    if (email) candidates.push(`(mail=${_escapeLdap(email)})`);
+    if (upn) candidates.push(`(userPrincipalName=${_escapeLdap(upn)})`);
+    if (candidates.length === 0) return profileRole;
+    const entries = await _search(client, searchBase, {
+      filter: `(|${candidates.join('')})`,
+      scope: 'sub',
+      attributes: ['dn', 'memberOf', 'sAMAccountName', 'userPrincipalName', 'mail'],
+      sizeLimit: 1,
+    });
+    const entry = entries[0];
+    if (!entry?.dn) return profileRole;
+    const memberOf = Array.isArray(entry.memberOf) ? entry.memberOf : (entry.memberOf ? [entry.memberOf] : []);
+    const ldapRole = await _resolveRoleFromGroups(memberOf, client, cfg, entry.dn);
+    return ldapRole || profileRole;
+  } catch (err) {
+    logger.warn(`[LDAP] SAML group-role lookup failed: ${err.message}`);
+    return profileRole;
+  } finally {
+    client.destroy();
+  }
+}
 
 async function findUserAvatarFromLdap({ username, email, upn } = {}) {
   const cfg = await getLdapSettings();

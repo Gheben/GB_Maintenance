@@ -98,7 +98,16 @@ async function validateCallback(req) {
   const email    = (emailAttr && profile[emailAttr]) || profile['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] || null;
   const displayAttr = cfg.display_name_attribute || cfg.display_name_attr;
   const display  = (displayAttr && profile[displayAttr]) || profile['http://schemas.microsoft.com/identity/claims/displayname'] || username;
-  const role     = cfg.default_role || 'viewer';
+  const rawGroups = profile.memberOf || profile['http://schemas.microsoft.com/ws/2008/06/identity/claims/groups'] || [];
+  const profileGroups = Array.isArray(rawGroups) ? rawGroups : (rawGroups ? [rawGroups] : []);
+  const mappedRole = await ldapService.resolveSamlRole(
+    username,
+    email,
+    profile.userPrincipalName || profile['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn'] || null,
+    profileGroups
+  );
+  if (cfg.require_group_match && !mappedRole) throw new Error('SAML user is not in an authorized LDAP group');
+  const role     = mappedRole || cfg.default_role || 'viewer';
   const perms    = JSON.stringify(ROLE_DEFAULTS[role] || {});
   const avatarPhotoDataUrl = await ldapService.findUserAvatarFromLdap({
     username,
