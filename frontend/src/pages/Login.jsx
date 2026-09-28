@@ -114,7 +114,7 @@ export default function Login() {
     } catch (err) {
       const cancelled = err instanceof WebAuthnError && ['ERROR_CEREMONY_ABORTED', 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED'].includes(err.code)
       if (!cancelled && err?.name !== 'NotAllowedError') {
-        toast.error(err.response?.data?.error || 'Accesso con impronta/volto non riuscito')
+        toast.error(err.response?.data?.error || 'Passkey sign-in failed')
       }
     } finally {
       setPasskeyLoading(false)
@@ -135,7 +135,7 @@ export default function Login() {
       warmupAfterLogin()
       navigate('/', { replace: true })
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Credenziali non valide')
+      toast.error(err.response?.data?.error || 'Invalid credentials')
     } finally {
       setLoading(false)
     }
@@ -183,7 +183,7 @@ export default function Login() {
               </>
             ) : (
               <div>
-                <label className="block text-sm font-medium text-slate-100 mb-1">Codice TOTP</label>
+                <label className="block text-sm font-medium text-slate-100 mb-1">TOTP code</label>
                 <input className="input bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400 text-center text-2xl tracking-widest focus:border-brand-400 focus:ring-brand-400/50" maxLength={6}
                   value={form.totp_code} onChange={e => set('totp_code', e.target.value)}
                   autoFocus required placeholder="000000" />
@@ -191,12 +191,12 @@ export default function Login() {
             )}
 
             <button type="submit" disabled={loading} className="btn-primary w-full justify-center mt-2 bg-brand-600 hover:bg-brand-700 text-white shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5">
-              {loading ? 'Accesso...' : needTotp ? 'Verifica' : 'Accedi'}
+              {loading ? 'Signing in...' : needTotp ? 'Verify' : 'Sign in'}
             </button>
 
             {needTotp && (
               <button type="button" className="text-xs text-slate-400 hover:text-slate-200 w-full text-center transition-colors"
-                onClick={() => setNeedTotp(false)}>← Torna al login</button>
+                onClick={() => setNeedTotp(false)}>← Back to login</button>
             )}
           </form>
 
@@ -206,7 +206,7 @@ export default function Login() {
                 className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg text-center text-slate-100 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 transition-all transform hover:-translate-y-0.5 shadow-md disabled:opacity-60"
               >
                 <Fingerprint size={17} className="text-brand-300" />
-                {passkeyLoading ? 'Verifica in corso...' : 'Accedi con impronta o volto'}
+                {passkeyLoading ? 'Verifying...' : 'Sign in with passkey'}
               </button>
             </div>
           )}
@@ -215,7 +215,7 @@ export default function Login() {
             <a href="/api/auth/saml/login"
               className="block w-full px-4 py-2 rounded-lg text-center text-slate-100 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 transition-all transform hover:-translate-y-0.5 shadow-md"
             >
-              Accedi con SSO / SAML
+              Sign in with SSO / SAML
             </a>
           </div>
 
