@@ -88,7 +88,9 @@ async function _probeAsset(probe, options = {}) {
 
   try {
     if (probe.probe_type === 'http' || probe.probe_type === 'https') {
-      const result = await _httpProbe(probe.probe_target, (probe.probe_timeout_seconds || 10) * 1000);
+      // Tolerate a bare hostname (e.g. "google.com") by adding the scheme implied by the probe type.
+      const target = /^https?:\/\//i.test(probe.probe_target) ? probe.probe_target : `${probe.probe_type}://${probe.probe_target}`;
+      const result = await _httpProbe(target, (probe.probe_timeout_seconds || 10) * 1000);
       statusCode = result.statusCode;
       success = statusCode === (probe.expected_status_code || 200);
       if (!success) errorMsg = `HTTP ${statusCode}`;
@@ -409,26 +411,42 @@ async function _probeService(probe, options = {}) {
   let dnsResponse = null;
 
   try {
-    switch (probe.probe_type) {
-      case 'http':
-      case 'https':
-        ({ success, responseTime, statusCode, errorMessage } = await _httpProbe(probe));
-        break;
-      case 'tcp':
-        ({ success, responseTime, errorMessage } = await _tcpProbe(probe));
-        break;
-      case 'icmp':
-        ({ success, responseTime, errorMessage } = await _icmpProbe(probe));
-        break;
-      case 'dns':
-        ({ success, responseTime, errorMessage, dnsResponse } = await _dnsProbe(probe));
-        break;
-      case 'tls':
-        ({ success, responseTime, errorMessage, sslCertExpiry } = await _tlsProbe(probe));
-        break;
-      default:
-        throw new Error(`Probe type ${probe.probe_type} not supported`);
+    const timeoutMs = (probe.probe_timeout_seconds || 10) * 1000;
+    if (probe.probe_type === 'http' || probe.probe_type === 'https') {
+      // Tolerate a bare hostname (e.g. "google.com") by adding the scheme implied by the probe type.
+      const target = /^https?:\/\//i.test(probe.probe_target) ? probe.probe_target : `${probe.probe_type}://${probe.probe_target}`;
+      const result = await _httpProbe(target, timeoutMs);
+      statusCode = result.statusCode;
+      success = statusCode === (probe.expected_status_code || 200);
+      if (!success) errorMessage = `HTTP ${statusCode}`;
+    } else if (probe.probe_type === 'tcp') {
+      success = await _tcpProbe(probe.probe_target, timeoutMs);
+      if (!success) errorMessage = 'TCP connection failed';
+    } else if (probe.probe_type === 'icmp') {
+      success = await _icmpProbe(probe.probe_target, timeoutMs);
+      if (!success) errorMessage = 'Host unreachable';
+    } else if (probe.probe_type === 'dns') {
+      const r = await _dnsProbe(probe.probe_target, probe.dns_record_type || 'A', probe.dns_expected_value || null, timeoutMs);
+      success = r.success;
+      dnsResponse = r.response;
+      if (!success) errorMessage = r.error;
+    } else if (probe.probe_type === 'tls') {
+      const r = await _tlsProbe(probe.probe_target, timeoutMs);
+      sslCertExpiry = r.expiryDate || null;
+      if (!r.connected) {
+        success = false; errorMessage = r.error || 'TLS connection failed';
+      } else if (r.daysUntilExpiry !== null && r.daysUntilExpiry <= 0) {
+        success = false; errorMessage = 'Certificate expired';
+      } else {
+        success = true;
+        if (r.daysUntilExpiry !== null && r.daysUntilExpiry <= (probe.ssl_expiry_warning_days || 30)) {
+          errorMessage = `Certificate expires in ${r.daysUntilExpiry} day(s)`;
+        }
+      }
+    } else {
+      throw new Error(`Probe type ${probe.probe_type} not supported`);
     }
+    responseTime = Date.now() - startTime;
   } catch (err) {
     success = false;
     errorMessage = err.message;
