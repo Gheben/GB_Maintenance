@@ -1615,7 +1615,7 @@ export default function Licenses() {
               {licenses.length === 0 ? (
                 <div className="card p-6 text-center text-gray-500 text-sm">No licenses</div>
               ) : licenses.map(l => (
-                <div key={l.id} className="card p-4 space-y-2.5" onClick={() => openEditLicense(l)}>
+                <div key={l.id} className="card p-4 space-y-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-sm font-medium inline-flex items-center gap-2 min-w-0">
                       <span className="truncate">{l.name}</span>
@@ -1731,7 +1731,7 @@ export default function Licenses() {
                     <Trash2 size={15} />Delete selected ({selectedSupplierIds.length})
                   </button>
                 )}
-                <button className="btn-secondary" onClick={openCreateSupplier}><Plus size={15} />New Supplier</button>
+                <button className="btn-primary" onClick={openCreateSupplier}><Plus size={15} />New Supplier</button>
               </div>
             </div>
 
@@ -1746,7 +1746,7 @@ export default function Licenses() {
               {suppliers.length === 0 ? (
                 <div className="card p-6 text-center text-gray-500 text-sm">No suppliers</div>
               ) : suppliers.map(s => (
-                <div key={s.id} className="card p-4 space-y-2.5" onClick={() => openEditSupplier(s)}>
+                <div key={s.id} className="card p-4 space-y-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex items-center gap-2">
                       <span className="text-sm font-medium truncate">{s.company}</span>
@@ -1768,7 +1768,6 @@ export default function Licenses() {
                         <input type="checkbox" checked={selectedSupplierIds.includes(s.id)} onChange={() => toggleSupplierSelection(s.id)} aria-label={`Select supplier ${s.company}`} />
                       )}
                       <button onClick={() => openEditSupplier(s)} className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors"><Pencil size={14} /></button>
-                      <button onClick={() => setSupplierDeleteTarget(s)} className="p-1.5 -m-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 transition-colors"><Trash2 size={14} /></button>
                     </div>
                   </div>
                   {(s.first_name || s.last_name) && <div className="text-xs text-gray-500">{s.first_name} {s.last_name}</div>}
