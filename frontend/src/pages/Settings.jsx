@@ -1255,7 +1255,27 @@ export default function Settings() {
             <div className="flex justify-end">
               <button className="btn-primary" onClick={() => setShowCreateKey(true)}><Plus size={15} />New API Key</button>
             </div>
-            <div className="card overflow-hidden">
+
+            {/* Mobile card list (below sm breakpoint) */}
+            <div className="sm:hidden space-y-3">
+              {keys.length === 0 ? (
+                <div className="card p-6 text-center text-gray-500 text-sm">No API keys</div>
+              ) : keys.map(k => (
+                <div key={k.id} className="card p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-medium truncate">{k.name}</span>
+                    <button className="p-1.5 -m-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 transition-colors shrink-0" onClick={() => setDeleteTargetKey(k)}><Trash2 size={14} /></button>
+                  </div>
+                  <div className="text-xs font-mono text-gray-500">{k.key_prefix}...</div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                    <div><span className="text-gray-400">Expires: </span><span className="text-gray-600 dark:text-gray-300">{k.expires_at ? format(new Date(k.expires_at), 'MM/dd/yyyy') : '∞'}</span></div>
+                    <div><span className="text-gray-400">Last used: </span><span className="text-gray-600 dark:text-gray-300">{k.last_used_at ? format(new Date(k.last_used_at), 'MM/dd HH:mm') : '—'}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="card overflow-hidden hidden sm:block">
               <div className="overflow-x-auto">
                 <table className="min-w-[500px] w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
