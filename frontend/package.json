@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^14.0.0",
     "axios": "^1.7.2",
     "date-fns": "^3.6.0",
     "lucide-react": "^0.400.0",

@@ -2262,6 +2262,28 @@ const MIGRATIONS = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_users_ldap_groups ON users USING GIN (ldap_groups)`);
     }
   },
+  {
+    version: 53,
+    name: 'webauthn_credentials',
+    up: async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS webauthn_credentials (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          credential_id TEXT UNIQUE NOT NULL,
+          public_key TEXT NOT NULL,
+          counter BIGINT NOT NULL DEFAULT 0,
+          device_type VARCHAR(20),
+          backed_up BOOLEAN DEFAULT FALSE,
+          transports JSONB DEFAULT '[]',
+          name VARCHAR(200),
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          last_used_at TIMESTAMPTZ
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credentials(user_id)`);
+    }
+  },
 ];
 
 async function runMigrations(pool) {

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Layout } from '../components/Layout'
 import { Modal, ConfirmDialog } from '../components/Modal'
-import { settingsApi, apikeysApi, maintenanceTypesApi, assetCategoriesApi, notificationsApi, uploadsApi } from '../api'
+import { settingsApi, apikeysApi, maintenanceTypesApi, assetCategoriesApi, notificationsApi, uploadsApi, authApi } from '../api'
+import { startRegistration, browserSupportsWebAuthn, WebAuthnError } from '@simplewebauthn/browser'
 import { toast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 import { format } from 'date-fns'
-import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, Clock, RefreshCw, Pencil, GripVertical, Mail, Network, KeyRound, Tag, Cog, Bell, ChevronDown, ChevronRight, Upload, Download } from 'lucide-react'
+import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, Clock, RefreshCw, Pencil, GripVertical, Mail, Network, KeyRound, Tag, Cog, Bell, ChevronDown, ChevronRight, Upload, Download, Fingerprint, Lock } from 'lucide-react'
 
 
 function Section({ title, children }) {
@@ -123,6 +124,16 @@ export default function Settings() {
   const [ntpSyncing, setNtpSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState(null)
 
+  // Security tab: passkeys + change password
+  const [passkeys, setPasskeys] = useState([])
+  const [passkeysLoading, setPasskeysLoading] = useState(false)
+  const [passkeyRegistering, setPasskeyRegistering] = useState(false)
+  const [passkeySupported, setPasskeySupported] = useState(false)
+  const [deleteTargetPasskey, setDeleteTargetPasskey] = useState(null)
+  const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwResult, setPwResult] = useState(null)
+
   // API Keys state
   const [keys, setKeys] = useState([])
   const [showCreateKey, setShowCreateKey] = useState(false)
@@ -191,8 +202,13 @@ export default function Settings() {
   }, [isSuperAdmin, tab])
 
   useEffect(() => {
+    setPasskeySupported(browserSupportsWebAuthn())
+  }, [])
+
+  useEffect(() => {
     if (tab === 'apikeys') apikeysApi.list().then(r => setKeys(r.data)).catch(() => {})
     if (tab === 'emailtpl') notificationsApi.templates().then(r => setEmailTemplates(r.data)).catch(() => {})
+    if (tab === 'security') loadPasskeys()
     if (tab === 'general' && isSuperAdmin) {
       setDemoLoading(true)
       settingsApi.getDemoStatus()
@@ -251,6 +267,63 @@ export default function Settings() {
     }
     catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setLoading(false) }
+  }
+
+  const loadPasskeys = async () => {
+    setPasskeysLoading(true)
+    try {
+      const res = await authApi.webauthnCredentials()
+      setPasskeys(res.data || [])
+    } catch { /* ignore */ }
+    finally { setPasskeysLoading(false) }
+  }
+
+  const registerPasskey = async () => {
+    setPasskeyRegistering(true)
+    try {
+      const optionsRes = await authApi.webauthnRegisterOptions()
+      const attestation = await startRegistration({ optionsJSON: optionsRes.data })
+      const name = window.prompt('Nome per questa passkey (es. "iPhone di Mario", "Laptop lavoro")', '') || undefined
+      await authApi.webauthnRegisterVerify({ response: attestation, name })
+      toast.success('Passkey registrata con successo')
+      loadPasskeys()
+    } catch (err) {
+      if (!(err instanceof WebAuthnError) && err?.name !== 'NotAllowedError') {
+        toast.error(err.response?.data?.error || 'Registrazione passkey non riuscita')
+      }
+    } finally {
+      setPasskeyRegistering(false)
+    }
+  }
+
+  const deletePasskey = async () => {
+    if (!deleteTargetPasskey) return
+    try {
+      await authApi.webauthnDeleteCredential(deleteTargetPasskey.id)
+      toast.success('Passkey rimossa')
+      setPasskeys(prev => prev.filter(p => p.id !== deleteTargetPasskey.id))
+    } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    finally { setDeleteTargetPasskey(null) }
+  }
+
+  const changePassword = async (e) => {
+    e.preventDefault(); setPwSaving(true); setPwResult(null)
+    if (pwForm.new_password !== pwForm.confirm_password) {
+      setPwResult({ success: false, message: 'Le password non coincidono.' })
+      setPwSaving(false)
+      return
+    }
+    try {
+      const res = await authApi.changePassword({ current_password: pwForm.current_password, new_password: pwForm.new_password })
+      setPwResult({ success: true, message: res.data?.message || 'Password aggiornata.' })
+      setPwForm({ current_password: '', new_password: '', confirm_password: '' })
+    } catch (err) {
+      const errs = err.response?.data?.errors
+      const msg = errs ? errs.map(e => e.msg).join(' • ') : (err.response?.data?.error || 'Errore durante il cambio password.')
+      setPwResult({ success: false, message: msg })
+    } finally {
+      setPwSaving(false)
+    }
   }
 
   const testLdap = async () => {
@@ -546,6 +619,7 @@ export default function Settings() {
   ]
 
   const TABS = [
+    { id: 'security', label: 'Security',         icon: Fingerprint },
     { id: 'smtp',     label: 'SMTP & Email',      icon: Mail },
     { id: 'emailtpl', label: 'Templates',          icon: Bell },
     ...(isSuperAdmin ? [{ id: 'ldap', label: 'LDAP / AD', icon: Network }] : []),
@@ -572,6 +646,86 @@ export default function Settings() {
             })}
           </nav>
         </div>
+
+        {tab === 'security' && (
+          <div className="space-y-6">
+            {user?.auth_type === 'local' && (
+              <div className="card p-5 sm:p-6 space-y-4">
+                <h2 className="font-semibold text-base border-b border-gray-100 dark:border-gray-700 pb-2 flex items-center gap-2">
+                  <Lock size={16} /> Change Password
+                </h2>
+                <form onSubmit={changePassword} className="space-y-3 max-w-sm">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Current password</label>
+                    <input type="password" className="input" required autoComplete="current-password"
+                      value={pwForm.current_password} onChange={e => setPwForm(f => ({ ...f, current_password: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">New password</label>
+                    <input type="password" className="input" required autoComplete="new-password"
+                      value={pwForm.new_password} onChange={e => setPwForm(f => ({ ...f, new_password: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Confirm new password</label>
+                    <input type="password" className="input" required autoComplete="new-password"
+                      value={pwForm.confirm_password} onChange={e => setPwForm(f => ({ ...f, confirm_password: e.target.value }))} />
+                  </div>
+                  {pwResult && (
+                    <p className={`text-sm flex items-center gap-1.5 ${pwResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                      {pwResult.success ? <CheckCircle size={14} /> : <AlertCircle size={14} />}{pwResult.message}
+                    </p>
+                  )}
+                  <button type="submit" disabled={pwSaving} className="btn-primary flex items-center gap-1.5">
+                    <Save size={14} />{pwSaving ? 'Saving...' : 'Update password'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            <div className="card p-5 sm:p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-2">
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <Fingerprint size={16} /> Fingerprint / Face Login (Passkeys)
+                </h2>
+                {passkeySupported && (
+                  <button type="button" onClick={registerPasskey} disabled={passkeyRegistering}
+                    className="btn-primary text-sm flex items-center gap-1.5">
+                    <Plus size={14} />{passkeyRegistering ? 'Registering...' : 'Add passkey'}
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-gray-500">
+                Register your device's fingerprint, face recognition, or a security key to sign in without typing a password, on both mobile and desktop.
+              </p>
+              {!passkeySupported && (
+                <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertCircle size={14} /> This browser doesn't support passkeys.</p>
+              )}
+              {passkeysLoading ? (
+                <p className="text-sm text-gray-400">Loading...</p>
+              ) : passkeys.length === 0 ? (
+                <p className="text-sm text-gray-400">No passkeys registered yet.</p>
+              ) : (
+                <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {passkeys.map(pk => (
+                    <li key={pk.id} className="py-2.5 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{pk.name || 'Unnamed passkey'}</p>
+                        <p className="text-xs text-gray-500">
+                          {pk.device_type === 'multiDevice' ? 'Synced passkey' : 'Device-bound'} · Added {format(new Date(pk.created_at), 'dd/MM/yyyy')}
+                          {pk.last_used_at ? ` · Last used ${format(new Date(pk.last_used_at), 'dd/MM/yyyy HH:mm')}` : ''}
+                        </p>
+                      </div>
+                      <button type="button" onClick={() => setDeleteTargetPasskey(pk)}
+                        className="text-gray-400 hover:text-red-600 shrink-0" title="Remove passkey">
+                        <Trash2 size={16} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
 
         {tab === 'smtp' && (
           <div className="space-y-6">
@@ -1985,6 +2139,10 @@ export default function Settings() {
       {deleteTargetKey && (
         <ConfirmDialog title="Delete API Key" message={`Delete "${deleteTargetKey.name}"?`} danger confirmLabel="Delete"
           onConfirm={handleDeleteKey} onCancel={() => setDeleteTargetKey(null)} />
+      )}
+      {deleteTargetPasskey && (
+        <ConfirmDialog title="Remove Passkey" message={`Remove "${deleteTargetPasskey.name || 'Unnamed passkey'}"? You won't be able to use it to sign in anymore.`} danger confirmLabel="Remove"
+          onConfirm={deletePasskey} onCancel={() => setDeleteTargetPasskey(null)} />
       )}
     </Layout>
   )

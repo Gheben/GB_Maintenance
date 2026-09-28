@@ -6,6 +6,7 @@ const authService = require('../services/authService');
 const ldapService = require('../services/ldapService');
 const samlService = require('../services/samlService');
 const totpService = require('../services/totpService');
+const webauthnService = require('../services/webauthnService');
 const auditService = require('../services/auditService');
 const logger = require('../utils/logger');
 const { getOne } = require('../db/database');
@@ -200,6 +201,64 @@ async function handleSamlCallback(req, res) {
 
 router.post('/saml/callback', handleSamlCallback);
 router.post('/saml/acs', handleSamlCallback);
+
+// ─── WebAuthn / Passkeys (fingerprint, face, security key) ──────────────────
+router.post('/webauthn/register/options', requireAuth, async (req, res) => {
+  try {
+    const options = await webauthnService.generateRegistrationOpts(req, req.user);
+    res.json(options);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.post('/webauthn/register/verify', requireAuth, [
+  body('response').isObject(),
+  body('name').optional().isString().trim().isLength({ max: 200 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  try {
+    await webauthnService.verifyRegistration(req, req.user, req.body.response, req.body.name);
+    await auditService.log(req.user.id, req.user.username, 'auth:webauthn_registered', 'user', req.user.id, null, req.ip);
+    res.json({ verified: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.get('/webauthn/credentials', requireAuth, async (req, res) => {
+  const credentials = await webauthnService.listCredentials(req.user.id);
+  res.json(credentials);
+});
+
+router.delete('/webauthn/credentials/:id', requireAuth, async (req, res) => {
+  await webauthnService.deleteCredential(req.user.id, req.params.id);
+  await auditService.log(req.user.id, req.user.username, 'auth:webauthn_removed', 'user', req.user.id, null, req.ip);
+  res.json({ message: 'Passkey rimossa' });
+});
+
+router.post('/webauthn/login/options', loginLimiter, async (req, res) => {
+  try {
+    const options = await webauthnService.generateAuthenticationOpts(req);
+    res.json(options);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.post('/webauthn/login/verify', loginLimiter, [
+  body('response').isObject(),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  const { response } = req.body;
+  try {
+    const user = await webauthnService.verifyAuthentication(req, response);
+    const { token, jti } = authService.signToken(user);
+    const expires = process.env.JWT_EXPIRES_IN || '8h';
+    await authService.createSession(user.id, jti, req.ip, req.get('user-agent'), expires);
+    await auditService.log(user.id, user.username, 'auth:login', 'user', user.id, 'auth_type=webauthn', req.ip, req.get('user-agent'));
+    res.json({ token, user: authService.safeUser(user) });
+  } catch (err) {
+    await auditService.log(null, null, 'auth:login_failed', 'user', null, 'auth_type=webauthn', req.ip);
+    res.status(401).json({ error: err.message });
+  }
+});
 
 // ─── Change Password ──────────────────────────────────────────────────────────
 router.post('/change-password', requireAuth, [

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Wrench, Eye, EyeOff, Coffee, Download } from 'lucide-react'
+import { Wrench, Eye, EyeOff, Coffee, Download, Fingerprint } from 'lucide-react'
+import { startAuthentication, browserSupportsWebAuthn, WebAuthnError } from '@simplewebauthn/browser'
 import { toast } from '../components/Toast'
 import { authApi, settingsApi, reportsApi, maintenanceApi, assetsApi, servicesApi, notificationsApi } from '../api'
 
@@ -22,7 +23,7 @@ function warmupAfterLogin() {
 }
 
 export default function Login() {
-  const { login, setUser } = useAuth()
+  const { login, setUser, setSession } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
@@ -33,6 +34,12 @@ export default function Login() {
   const [branding, setBranding] = useState({ app_name: 'GB Maintenance', app_brand_image_url: '' })
   const [installPrompt, setInstallPrompt] = useState(null)
   const [showInstallHint, setShowInstallHint] = useState(false)
+  const [passkeySupported, setPasskeySupported] = useState(false)
+  const [passkeyLoading, setPasskeyLoading] = useState(false)
+
+  useEffect(() => {
+    setPasskeySupported(browserSupportsWebAuthn())
+  }, [])
 
   useEffect(() => {
     settingsApi.publicBranding()
@@ -94,6 +101,25 @@ export default function Login() {
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handlePasskeyLogin = async () => {
+    setPasskeyLoading(true)
+    try {
+      const optionsRes = await authApi.webauthnLoginOptions()
+      const assertion = await startAuthentication({ optionsJSON: optionsRes.data })
+      const verifyRes = await authApi.webauthnLoginVerify(assertion)
+      setSession(verifyRes.data.token, verifyRes.data.user)
+      warmupAfterLogin()
+      navigate('/', { replace: true })
+    } catch (err) {
+      const cancelled = err instanceof WebAuthnError && ['ERROR_CEREMONY_ABORTED', 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED'].includes(err.code)
+      if (!cancelled && err?.name !== 'NotAllowedError') {
+        toast.error(err.response?.data?.error || 'Accesso con impronta/volto non riuscito')
+      }
+    } finally {
+      setPasskeyLoading(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -173,6 +199,17 @@ export default function Login() {
                 onClick={() => setNeedTotp(false)}>← Torna al login</button>
             )}
           </form>
+
+          {passkeySupported && (
+            <div className="mt-4">
+              <button type="button" onClick={handlePasskeyLogin} disabled={passkeyLoading}
+                className="flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg text-center text-slate-100 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 transition-all transform hover:-translate-y-0.5 shadow-md disabled:opacity-60"
+              >
+                <Fingerprint size={17} className="text-brand-300" />
+                {passkeyLoading ? 'Verifica in corso...' : 'Accedi con impronta o volto'}
+              </button>
+            </div>
+          )}
 
           <div className="mt-4 border-t border-slate-700 pt-4">
             <a href="/api/auth/saml/login"

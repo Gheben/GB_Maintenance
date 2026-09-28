@@ -40,6 +40,12 @@ export const authApi = {
   totpVerify: (data) => api.post('/auth/totp/verify', data),
   totpDisable: () => api.post('/auth/totp/disable'),
   samlLogin: () => { window.location.href = '/api/auth/saml/login' },
+  webauthnRegisterOptions: () => api.post('/auth/webauthn/register/options'),
+  webauthnRegisterVerify: (data) => api.post('/auth/webauthn/register/verify', data),
+  webauthnCredentials: () => api.get('/auth/webauthn/credentials'),
+  webauthnDeleteCredential: (id) => api.delete(`/auth/webauthn/credentials/${id}`),
+  webauthnLoginOptions: () => api.post('/auth/webauthn/login/options'),
+  webauthnLoginVerify: (response) => api.post('/auth/webauthn/login/verify', { response }),
 }
 
 // ─── Users ────────────────────────────────────────────────────────────────────

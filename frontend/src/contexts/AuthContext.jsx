@@ -28,6 +28,12 @@ export function AuthProvider({ children }) {
     return res.data
   }
 
+  const setSession = (token, u) => {
+    localStorage.setItem('token', token)
+    localStorage.setItem('user', JSON.stringify(u))
+    setUser(u)
+  }
+
   const logout = async () => {
     try { await authApi.logout() } catch { /* ignore */ }
     localStorage.removeItem('token')
@@ -44,7 +50,7 @@ export function AuthProvider({ children }) {
   const hasRole = (...roles) => user && roles.includes(user.role)
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasPermission, hasRole, setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, hasPermission, hasRole, setUser, setSession }}>
       {children}
     </AuthContext.Provider>
   )
