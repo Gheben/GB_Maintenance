@@ -644,7 +644,7 @@ export default function AssetDetail() {
                         <button key={a.id} type="button" onClick={() => { addDep(a.id); setAddingDep(false); setDepSearch('') }}
                           className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 dark:hover:bg-brand-900/20 flex items-center justify-between">
                           <span className="flex items-center gap-1.5">
-                            {a.part_is_relevant && <ShieldCheck size={13} className="text-amber-600 shrink-0" title="Part-IS Relevant" />}
+                            {(a.part_is_relevant === true || String(a.part_is_relevant).toLowerCase() === 'true') && <ShieldCheck size={13} className="text-amber-600 shrink-0" title="Part-IS Relevant" />}
                             {a.name}
                           </span>
                           <StatusBadge status={a.status} />

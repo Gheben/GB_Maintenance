@@ -625,7 +625,7 @@ export default function ServiceDetail() {
                         <button key={s.id} type="button" onClick={() => { addDep(s.id); setAddingDep(false); setDepSearch('') }}
                           className="w-full text-left px-3 py-2 text-sm hover:bg-brand-50 dark:hover:bg-brand-900/20 flex items-center justify-between">
                           <span className="flex items-center gap-1.5">
-                            {s.part_is_relevant && <ShieldCheck size={13} className="text-amber-600 shrink-0" title="Part-IS Relevant" />}
+                            {(s.part_is_relevant === true || String(s.part_is_relevant).toLowerCase() === 'true') && <ShieldCheck size={13} className="text-amber-600 shrink-0" title="Part-IS Relevant" />}
                             {s.name}
                           </span>
                           <StatusBadge status={s.current_status} />
