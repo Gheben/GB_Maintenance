@@ -403,7 +403,7 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
         sendInApp(uid, eventType, titles[eventType] || maint.title, vars.description, 'maintenance', maintenanceId)
       )));
       tasks.push(Promise.all(userIds.map((uid) =>
-        webpushService.sendToUser(uid, { title: titles[eventType] || maint.title, body: vars.description || '', url: `/maintenance/${maintenanceId}` })
+        webpushService.sendToUser(uid, { title: titles[eventType] || maint.title, body: maint.description || '', url: `/maintenance/${maintenanceId}` })
           .catch((err) => logger.warn(`[Notifications] Web push failed for user ${uid}: ${err.message}`))
       )));
     }

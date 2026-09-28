@@ -26,6 +26,14 @@ async function main() {
   // Also generate favicon.ico (32x32 PNG used as favicon)
   await sharp(svgBuf).resize(32, 32).png().toFile(join(__dir, 'public', 'favicon-32.png'))
   console.log('favicon-32.png generated')
+
+  // Monochrome (white-on-transparent) badge used for Android's push-notification status bar icon.
+  // Must be generated from a dedicated silhouette SVG (no background fill), otherwise Android
+  // renders the notification badge as a solid white square.
+  const badgeSvgPath = join(__dir, 'public', 'icons', 'badge-mono.svg')
+  const badgeSvgBuf = readFileSync(badgeSvgPath)
+  await sharp(badgeSvgBuf).resize(96, 96).png().toFile(join(__dir, 'public', 'icons', 'badge-96.png'))
+  console.log('badge-96.png generated')
 }
 
 main()

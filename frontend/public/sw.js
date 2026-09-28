@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gb-maintenance-shell-v1'
+const CACHE_NAME = 'gb-maintenance-shell-v2'
 const APP_SHELL = ['/', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
@@ -29,7 +29,9 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.body || '',
     icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    // Android renders this as a monochrome silhouette (alpha channel only), so it must be a
+    // white-on-transparent image — the full-color app icon shows as a solid white square instead.
+    badge: '/icons/badge-96.png',
     data: { url: data.url || '/' },
   }
   event.waitUntil(self.registration.showNotification(title, options))
