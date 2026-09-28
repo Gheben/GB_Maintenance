@@ -249,15 +249,29 @@ async function _refreshAssetStatus(assetId, reason) {
   }
 }
 
-function _httpProbe(url, timeoutMs) {
+function _httpProbe(url, timeoutMs, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
-    const mod = url.startsWith('https') ? https : http;
-    const req = mod.get(url, { timeout: timeoutMs }, (res) => {
-      res.resume(); // consume response
-      resolve({ statusCode: res.statusCode });
-    });
-    req.on('timeout', () => { req.destroy(); reject(new Error('HTTP timeout')); });
-    req.on('error', reject);
+    const attempt = (currentUrl, redirectsLeft) => {
+      const mod = currentUrl.startsWith('https') ? https : http;
+      const req = mod.get(currentUrl, { timeout: timeoutMs }, (res) => {
+        const { statusCode, headers } = res;
+        // Follow redirects (e.g. apex domains like google.com routinely 301 to www.*) instead
+        // of reporting the intermediate 3xx as a failure against the expected status code.
+        if (statusCode >= 300 && statusCode < 400 && headers.location && redirectsLeft > 0) {
+          res.resume();
+          let nextUrl;
+          try { nextUrl = new URL(headers.location, currentUrl).toString(); }
+          catch (err) { reject(err); return; }
+          attempt(nextUrl, redirectsLeft - 1);
+          return;
+        }
+        res.resume(); // consume response
+        resolve({ statusCode });
+      });
+      req.on('timeout', () => { req.destroy(); reject(new Error('HTTP timeout')); });
+      req.on('error', reject);
+    };
+    attempt(url, maxRedirects);
   });
 }
 
