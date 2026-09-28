@@ -8,7 +8,7 @@ import { toast } from '../components/Toast'
 import { servicesApi, usersApi, groupsApi, settingsApi, maintenanceApi } from '../api'
 import CorrelationGraphLoader from '../components/CorrelationGraphLoader'
 import { format } from 'date-fns'
-import { Trash2, ArrowLeft, Pencil, Save, X, Plus, ExternalLink, User, Mail, Cog, Building2, Search, Play, Info, ShieldCheck } from 'lucide-react'
+import { Trash2, ArrowLeft, Pencil, Save, X, Plus, ExternalLink, User, Mail, Cog, Building2, Search, Play, Info, ShieldCheck, Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const CRITICALITIES = ['critical','high','medium','low']
@@ -103,6 +103,7 @@ export default function ServiceDetail() {
   const [pickerTarget, setPickerTarget] = useState('owner')
   const [depSearch, setDepSearch] = useState('')
   const [remoteDepResults, setRemoteDepResults] = useState([])
+  const [depSearching, setDepSearching] = useState(false)
   const [addingDep, setAddingDep] = useState(false)
   const [depDeleteTarget, setDepDeleteTarget] = useState(null)
   const [userSearch, setUserSearch] = useState('')
@@ -179,21 +180,22 @@ export default function ServiceDetail() {
     if (tab !== 'deps') return undefined
     const q = depSearch.trim()
     if (!q) { setRemoteDepResults([]); return undefined }
+    setDepSearching(true)
     const handle = setTimeout(() => {
       servicesApi.list({ search: q, limit: 50 }).then(r => {
         const list = Array.isArray(r.data) ? r.data : (r.data.data || [])
         setRemoteDepResults(list.filter(s => s.id !== id))
-      }).catch(() => setRemoteDepResults([]))
+      }).catch(() => setRemoteDepResults([])).finally(() => setDepSearching(false))
     }, 300)
     return () => clearTimeout(handle)
   }, [tab, id, depSearch])
 
   const loadOwnerData = () => {
-    usersApi.list({ limit: 500 }).then(r => {
+    usersApi.assignable({ limit: 200 }).then(r => {
       const list = Array.isArray(r.data) ? r.data : (r.data.data || [])
       setOwnerUsers(list.filter(u => u.is_active !== false))
     }).catch(() => {})
-    groupsApi.list().then(r => setLocalGroups(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    groupsApi.assignable().then(r => setLocalGroups(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     settingsApi.getLdapEnabled().then(r => setLdapEnabled(r.data?.enabled || false)).catch(() => {})
   }
 
@@ -635,8 +637,9 @@ export default function ServiceDetail() {
                 </button>
                 {addingDep && (
                   <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
-                    <div className="p-2 bg-gray-50 dark:bg-gray-700/50">
-                      <input className="input py-1 text-sm" placeholder="Search service..." value={depSearch} onChange={e => setDepSearch(e.target.value)} />
+                    <div className="p-2 bg-gray-50 dark:bg-gray-700/50 relative">
+                      <input className="input py-1 text-sm pr-7" placeholder="Search service..." value={depSearch} onChange={e => setDepSearch(e.target.value)} />
+                      {depSearching && <Loader2 size={13} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />}
                     </div>
                     <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
                       {filteredServices.slice(0, 25).map(s => (
@@ -1210,6 +1213,8 @@ export default function ServiceDetail() {
         users={ownerUsers}
         localGroups={localGroups}
         ldapEnabled={ldapEnabled}
+        onSearchUsers={(q) => usersApi.assignable({ q, limit: 50 }).then(r => r.data)}
+        onSearchGroups={(q) => groupsApi.assignable({ q }).then(r => r.data)}
       />
     </Layout>
   )

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Modal } from './Modal'
-import { Search, User, Users, X } from 'lucide-react'
+import { Search, User, Users, X, Loader2 } from 'lucide-react'
 import { settingsApi } from '../api'
 import { QuickCreateLocalGroupModal, QuickCreateUserModal } from './QuickCreateModals'
 
@@ -49,6 +49,8 @@ export function OwnerPickerModal({
   users,
   localGroups,
   ldapEnabled,
+  onSearchUsers,
+  onSearchGroups,
 }) {
   const [tab, setTab] = useState('users')
   const [search, setSearch] = useState('')
@@ -58,6 +60,9 @@ export function OwnerPickerModal({
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [pickerUsers, setPickerUsers] = useState(users || [])
   const [pickerGroups, setPickerGroups] = useState(localGroups || [])
+  const [remoteUsers, setRemoteUsers] = useState([])
+  const [remoteGroups, setRemoteGroups] = useState([])
+  const [localSearching, setLocalSearching] = useState(false)
 
   const selected = useMemo(() => {
     const list = Array.isArray(value) ? value.map(normalizeOwner).filter(Boolean) : []
@@ -86,6 +91,25 @@ export function OwnerPickerModal({
   useEffect(() => {
     setPickerGroups(localGroups || [])
   }, [localGroups])
+
+  // Live server-side search so local users/groups beyond the initial batch remain findable.
+  useEffect(() => {
+    const q = search.trim()
+    if (tab === 'users') {
+      if (!onSearchUsers || !q) { setRemoteUsers([]); return undefined }
+      setLocalSearching(true)
+      const handle = setTimeout(() => {
+        onSearchUsers(q).then(rows => setRemoteUsers(Array.isArray(rows) ? rows : [])).catch(() => setRemoteUsers([])).finally(() => setLocalSearching(false))
+      }, 300)
+      return () => clearTimeout(handle)
+    }
+    if (!onSearchGroups || !q) { setRemoteGroups([]); return undefined }
+    setLocalSearching(true)
+    const handle = setTimeout(() => {
+      onSearchGroups(q).then(rows => setRemoteGroups(Array.isArray(rows) ? rows : [])).catch(() => setRemoteGroups([])).finally(() => setLocalSearching(false))
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [tab, search, onSearchUsers, onSearchGroups])
 
   useEffect(() => {
     let cancelled = false
@@ -137,7 +161,10 @@ export function OwnerPickerModal({
   const localCandidates = useMemo(() => {
     const q = String(search || '').trim().toLowerCase()
     if (tab === 'users') {
-      return (pickerUsers || [])
+      const combined = q
+        ? [...new Map([...(pickerUsers || []), ...remoteUsers].map(u => [u.id, u])).values()]
+        : (pickerUsers || [])
+      return combined
         .filter(u => {
           if (!q) return true
           return String(u.display_name || u.username || '').toLowerCase().includes(q)
@@ -153,7 +180,10 @@ export function OwnerPickerModal({
         }))
     }
 
-    return (pickerGroups || [])
+    const combinedGroups = q
+      ? [...new Map([...(pickerGroups || []), ...remoteGroups].map(g => [g.id, g])).values()]
+      : (pickerGroups || [])
+    return combinedGroups
       .filter(g => {
         if (!q) return true
         return String(g.name || '').toLowerCase().includes(q)
@@ -169,7 +199,7 @@ export function OwnerPickerModal({
           source: isLdapGroup ? 'ldap' : 'local',
         }
       })
-  }, [tab, search, pickerUsers, pickerGroups])
+  }, [tab, search, pickerUsers, pickerGroups, remoteUsers, remoteGroups])
 
   const mergedCandidates = useMemo(() => {
     const map = new Map()
@@ -215,11 +245,12 @@ export function OwnerPickerModal({
         <div className="relative">
           <Search size={15} className="absolute left-3 top-2.5 text-gray-400" />
           <input
-            className="input pl-9"
+            className="input pl-9 pr-9"
               placeholder={ldapEnabled ? 'Search local + LDAP owners...' : 'Search local owners...'}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+          {(loading || localSearching) && <Loader2 size={15} className="absolute right-3 top-2.5 text-gray-400 animate-spin" />}
         </div>
 
         <div className="flex flex-wrap gap-2">

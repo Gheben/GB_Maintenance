@@ -6,6 +6,29 @@ const auditService = require('../services/auditService');
 const ldapService = require('../services/ldapService');
 
 const router = Router();
+
+// Minimal projection open to any authenticated user, for owner pickers.
+// Registered before the admin-only guard below so it bypasses it.
+router.get('/assignable', requireAuth, async (req, res) => {
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const params = [];
+  const where = q ? `WHERE LOWER(lg.name) LIKE $1` : '';
+  if (q) params.push(`%${q}%`);
+  const groups = await getMany(
+    `SELECT lg.id, lg.name, COALESCE(map.ldap_mapping_count, 0) AS ldap_mapping_count
+     FROM local_groups lg
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS ldap_mapping_count
+       FROM ldap_group_mappings lgm
+       WHERE lgm.local_group_id = lg.id
+     ) map ON TRUE
+     ${where}
+     ORDER BY lg.name LIMIT 200`,
+    params
+  );
+  res.json(groups);
+});
+
 router.use(requireAuth, requireAdmin);
 
 async function getAllowedRoles() {

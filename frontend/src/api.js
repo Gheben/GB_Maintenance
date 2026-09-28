@@ -51,6 +51,7 @@ export const authApi = {
 // ─── Users ────────────────────────────────────────────────────────────────────
 export const usersApi = {
   list: (params) => api.get('/users', { params }),
+  assignable: (params) => api.get('/users/assignable', { params }),
   get: (id) => api.get(`/users/${id}`),
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
@@ -64,6 +65,7 @@ export const usersApi = {
 // ─── Groups ───────────────────────────────────────────────────────────────────
 export const groupsApi = {
   list: () => api.get('/groups'),
+  assignable: (params) => api.get('/groups/assignable', { params }),
   get: (id) => api.get(`/groups/${id}`),
   create: (data) => api.post('/groups', data),
   update: (id, data) => api.put(`/groups/${id}`, data),

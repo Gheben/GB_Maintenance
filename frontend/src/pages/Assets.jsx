@@ -156,8 +156,8 @@ export default function Assets() {
   }, [assets])
 
   useEffect(() => {
-    usersApi.list({ limit: 200 }).then(r => setUsers(Array.isArray(r.data) ? r.data : (r.data.data || []))).catch(() => {})
-    groupsApi.list().then(r => {
+    usersApi.assignable({ limit: 200 }).then(r => setUsers(Array.isArray(r.data) ? r.data : (r.data.data || []))).catch(() => {})
+    groupsApi.assignable().then(r => {
       const rows = Array.isArray(r.data) ? r.data : []
       setLocalGroups(rows.map(g => ({
         ...g,
@@ -604,6 +604,8 @@ export default function Assets() {
         users={users}
         localGroups={localGroups}
         ldapEnabled={ldapEnabled}
+        onSearchUsers={(q) => usersApi.assignable({ q, limit: 50 }).then(r => r.data)}
+        onSearchGroups={(q) => groupsApi.assignable({ q }).then(r => r.data)}
       />
 
       {confirmBulkDelete && (

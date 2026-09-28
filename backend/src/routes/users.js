@@ -46,6 +46,32 @@ router.get('/roles', requireAdmin, (req, res) => {
   res.json(Object.keys(authService.ROLE_DEFAULTS));
 });
 
+// ─── GET /api/users/assignable ────────────────────────────────────────────────
+// Minimal projection open to any authenticated user, for owner/user pickers.
+// Does not expose role, permissions, or session data like the admin-only GET /.
+router.get('/assignable', [
+  qv('q').optional().isString(),
+  qv('limit').optional().isInt({ min: 1, max: 200 }),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const limit = Math.min(200, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
+  const params = []; let i = 1;
+  const filters = ['is_active = true'];
+  if (q) {
+    filters.push(`(LOWER(username) LIKE $${i} OR LOWER(COALESCE(display_name, '')) LIKE $${i} OR LOWER(COALESCE(email, '')) LIKE $${i})`);
+    params.push(`%${q}%`); i++;
+  }
+  const rows = await getMany(
+    `SELECT id, username, display_name, email, auth_type, avatar_color
+     FROM users WHERE ${filters.join(' AND ')} ORDER BY username LIMIT $${i}`,
+    [...params, limit]
+  );
+  res.json(rows);
+});
+
 // ─── GET /api/users/:id ───────────────────────────────────────────────────────
 router.get('/:id', requireAdmin, async (req, res) => {
   const user = await authService.getUserById(req.params.id);
