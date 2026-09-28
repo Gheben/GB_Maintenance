@@ -132,6 +132,21 @@ function authAccentClass(authType) {
   return authType === 'ldap' ? 'bg-sky-500' : 'bg-emerald-500'
 }
 
+function normalizeLdapDn(value) {
+  return String(value || '').trim().replace(/\\([0-9a-fA-F]{2}|.)/g, (_, part) => {
+    return /^[0-9a-fA-F]{2}$/.test(part) ? String.fromCharCode(parseInt(part, 16)) : part
+  }).replace(/\s*,\s*/g, ',').toLowerCase()
+}
+
+function ldapGroupLabels(value) {
+  const groups = Array.isArray(value) ? value : []
+  return groups.map(group => {
+    const normalized = normalizeLdapDn(group)
+    const cn = normalized.match(/^cn=([^,]+)/i)
+    return cn ? cn[1] : normalized
+  }).filter(Boolean).join(', ')
+}
+
 function RoleBadge({ role, groupRole, groupName }) {
   if (groupRole) {
     return (
@@ -721,7 +736,7 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
                   />
                 </th>
               )}
-              {['Username','Display name','Email','Office','Auth','Role','Active','Last login','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
+              {['Username','Display name','Email','Office','Auth','LDAP Group','Role','Active','Last login','Actions'].map(h => <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -761,6 +776,7 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
                 <td className="px-4 py-3 text-gray-500 text-xs">{u.email}</td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{u.office || '—'}</td>
                 <td className="px-4 py-3"><AuthBadge authType={u.auth_type} /></td>
+                <td className="px-4 py-3 text-gray-500 text-xs max-w-xs truncate" title={ldapGroupLabels(u.ldap_groups)}>{ldapGroupLabels(u.ldap_groups) || '—'}</td>
                 <td className="px-4 py-3"><RoleBadge role={u.role} groupRole={u.group_role} groupName={u.group_name} /></td>
                 <td className="px-4 py-3 text-xs">
                   {u.is_active
@@ -781,7 +797,7 @@ function UsersTab({ roleOptions, roleProfiles, canBulkDelete }) {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={(canBulkDelete && authFilter === 'local') ? 10 : 9} className="text-center py-8 text-gray-500">No users</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={(canBulkDelete && authFilter === 'local') ? 11 : 10} className="text-center py-8 text-gray-500">No users</td></tr>}
           </tbody>
         </table>
         </div>

@@ -552,24 +552,26 @@ async function authenticateUser(username, password) {
     }
 
     // Determine role from group mappings (direct + nested)
-    const role = await _resolveRoleFromGroups(memberOf, serviceClient, cfg, entry.dn) || 'viewer';
+    const groupResolution = await resolveSamlRole(searchUsername, email, entry.userPrincipalName, memberOf);
+    const role = groupResolution.role || 'viewer';
+    const ldapGroups = groupResolution.groups;
     const permissions = JSON.stringify(ROLE_DEFAULTS[role] || {});
 
     const existing = await getOne("SELECT id FROM users WHERE username=$1 AND auth_type='ldap'", [searchUsername]);
     if (existing) {
       await query(
-        `UPDATE users SET display_name=$1, email=$2, office=$3, role=$4, permissions=$5, avatar_photo_data_url=$6, last_login_at=NOW(), updated_at=NOW(), is_active=true
-         WHERE id=$7`,
-        [displayName, email, office, role, permissions, avatarPhotoDataUrl, existing.id]
+        `UPDATE users SET display_name=$1, email=$2, office=$3, role=$4, permissions=$5, ldap_groups=$6, avatar_photo_data_url=$7, last_login_at=NOW(), updated_at=NOW(), is_active=true
+         WHERE id=$8`,
+        [displayName, email, office, role, permissions, JSON.stringify(ldapGroups), avatarPhotoDataUrl, existing.id]
       );
       return await getOne('SELECT * FROM users WHERE id=$1', [existing.id]);
     } else {
       const colors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6'];
       const color = colors[Math.floor(Math.random() * colors.length)];
       const result = await query(
-        `INSERT INTO users (username, display_name, email, office, role, auth_type, permissions, avatar_color, avatar_photo_data_url, last_login_at)
-         VALUES ($1, $2, $3, $4, $5, 'ldap', $6, $7, $8, NOW()) RETURNING id`,
-        [searchUsername, displayName, email, office, role, permissions, color, avatarPhotoDataUrl]
+        `INSERT INTO users (username, display_name, email, office, role, auth_type, permissions, ldap_groups, avatar_color, avatar_photo_data_url, last_login_at)
+         VALUES ($1, $2, $3, $4, $5, 'ldap', $6, $7, $8, $9, NOW()) RETURNING id`,
+        [searchUsername, displayName, email, office, role, permissions, JSON.stringify(ldapGroups), color, avatarPhotoDataUrl]
       );
       return await getOne('SELECT * FROM users WHERE id=$1', [result.rows[0].id]);
     }
@@ -720,11 +722,12 @@ async function resolveSamlRole(username, email, upn, profileGroups = []) {
   };
 
   const profileRole = await resolveFromGroups(profileGroups);
+  const profileResult = { role: profileRole, groups: profileGroups };
   const cfg = await getLdapSettings();
-  if (!cfg || !cfg.enabled || !ldap) return profileRole;
+  if (!cfg || !cfg.enabled || !ldap) return profileResult;
 
   const searchBase = cfg.search_base || cfg.base_dn;
-  if (!searchBase) return profileRole;
+  if (!searchBase) return profileResult;
   const client = _createClient(cfg);
   try {
     await _bind(client, _bindPrincipal(cfg), _bindPassword(cfg));
@@ -733,7 +736,7 @@ async function resolveSamlRole(username, email, upn, profileGroups = []) {
     if (normalizedUsername) candidates.push(`(sAMAccountName=${_escapeLdap(normalizedUsername)})`);
     if (email) candidates.push(`(mail=${_escapeLdap(email)})`);
     if (upn) candidates.push(`(userPrincipalName=${_escapeLdap(upn)})`);
-    if (candidates.length === 0) return profileRole;
+    if (candidates.length === 0) return profileResult;
     const entries = await _search(client, searchBase, {
       filter: `(|${candidates.join('')})`,
       scope: 'sub',
@@ -741,13 +744,13 @@ async function resolveSamlRole(username, email, upn, profileGroups = []) {
       sizeLimit: 1,
     });
     const entry = entries[0];
-    if (!entry?.dn) return profileRole;
+    if (!entry?.dn) return profileResult;
     const memberOf = Array.isArray(entry.memberOf) ? entry.memberOf : (entry.memberOf ? [entry.memberOf] : []);
     const ldapRole = await _resolveRoleFromGroups(memberOf, client, cfg, entry.dn);
-    return ldapRole || profileRole;
+    return { role: ldapRole || profileRole, groups: [...new Set([...profileGroups, ...memberOf])] };
   } catch (err) {
     logger.warn(`[LDAP] SAML group-role lookup failed: ${err.message}`);
-    return profileRole;
+    return profileResult;
   } finally {
     client.destroy();
   }

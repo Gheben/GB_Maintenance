@@ -100,15 +100,16 @@ async function validateCallback(req) {
   const display  = (displayAttr && profile[displayAttr]) || profile['http://schemas.microsoft.com/identity/claims/displayname'] || username;
   const rawGroups = profile.memberOf || profile['http://schemas.microsoft.com/ws/2008/06/identity/claims/groups'] || [];
   const profileGroups = Array.isArray(rawGroups) ? rawGroups : (rawGroups ? [rawGroups] : []);
-  const mappedRole = await ldapService.resolveSamlRole(
+  const mapped = await ldapService.resolveSamlRole(
     username,
     email,
     profile.userPrincipalName || profile['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn'] || null,
     profileGroups
   );
-  if (cfg.require_group_match && !mappedRole) throw new Error('SAML user is not in an authorized LDAP group');
-  const role     = mappedRole || cfg.default_role || 'viewer';
+  if (cfg.require_group_match && !mapped.role) throw new Error('SAML user is not in an authorized LDAP group');
+  const role     = mapped.role || cfg.default_role || 'viewer';
   const perms    = JSON.stringify(ROLE_DEFAULTS[role] || {});
+  const ldapGroups = JSON.stringify(mapped.groups || []);
   const avatarPhotoDataUrl = await ldapService.findUserAvatarFromLdap({
     username,
     email,
@@ -118,18 +119,22 @@ async function validateCallback(req) {
     return null;
   });
 
-  const existing = await getOne("SELECT id FROM users WHERE username=$1 AND auth_type='saml'", [username]);
+  const existing = await getOne('SELECT id FROM users WHERE username=$1', [username]);
   if (existing) {
     await query(
       `UPDATE users
        SET display_name=$1,
-           email=$2,
-           avatar_photo_data_url=COALESCE($3, avatar_photo_data_url),
-           last_login_at=NOW(),
+             email=$2,
+             auth_type='saml',
+             role=$3,
+             permissions=$4,
+             ldap_groups=$5,
+             avatar_photo_data_url=COALESCE($6, avatar_photo_data_url),
+             last_login_at=NOW(),
            updated_at=NOW(),
            is_active=true
-       WHERE id=$4`,
-      [display, email, avatarPhotoDataUrl, existing.id]
+           WHERE id=$7`,
+          [display, email, role, perms, ldapGroups, avatarPhotoDataUrl, existing.id]
     );
     return getOne('SELECT * FROM users WHERE id=$1', [existing.id]);
   } else {
@@ -137,8 +142,8 @@ async function validateCallback(req) {
     const color = colors[Math.floor(Math.random() * colors.length)];
     const result = await query(
       `INSERT INTO users (username, display_name, email, role, auth_type, permissions, avatar_color, avatar_photo_data_url, last_login_at)
-       VALUES ($1, $2, $3, $4, 'saml', $5, $6, $7, NOW()) RETURNING id`,
-      [username, display, email, role, perms, color, avatarPhotoDataUrl]
+      VALUES ($1, $2, $3, $4, 'saml', $5, $6, $7, $8, NOW()) RETURNING id`,
+          [username, display, email, role, perms, ldapGroups, color, avatarPhotoDataUrl]
     );
     return getOne('SELECT * FROM users WHERE id=$1', [result.rows[0].id]);
   }

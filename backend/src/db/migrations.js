@@ -2254,6 +2254,14 @@ const MIGRATIONS = [
       await client.query(`CREATE INDEX IF NOT EXISTS idx_services_part_is_relevant ON services(part_is_relevant) WHERE part_is_relevant = true`);
     }
   },
+  {
+    version: 52,
+    name: 'ldap_groups_on_users',
+    up: async (client) => {
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ldap_groups JSONB NOT NULL DEFAULT '[]'::jsonb`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_users_ldap_groups ON users USING GIN (ldap_groups)`);
+    }
+  },
 ];
 
 async function runMigrations(pool) {
