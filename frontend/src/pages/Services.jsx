@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
@@ -110,6 +110,7 @@ function ProbeState({ row }) {
 }
 
 export default function Services() {
+  const navigate = useNavigate()
   const { hasPermission, hasRole } = useAuth()
   const canEdit = hasPermission('services')
   const canBulkDelete = hasRole('superadmin', 'admin')
@@ -451,7 +452,7 @@ export default function Services() {
           ) : services.length === 0 ? (
             <div className="card p-6 text-center text-gray-500 text-sm">No services found</div>
           ) : services.map(s => (
-            <div key={s.id} className="card p-4 space-y-2.5" onClick={canEdit ? () => openEdit(s) : undefined}>
+            <div key={s.id} className="card p-4 space-y-2.5" onClick={() => navigate(`/services/${s.id}`)}>
               <div className="flex items-start justify-between gap-2">
                 <Link to={`/services/${s.id}`} onClick={e => e.stopPropagation()} className="text-brand-600 hover:underline font-medium inline-flex items-center gap-1.5 min-w-0">
                   {s.is_public && <Globe size={13} className="text-green-500 shrink-0" />}
@@ -463,7 +464,7 @@ export default function Services() {
                     <input type="checkbox" checked={selectedServiceIds.includes(s.id)} onChange={() => toggleServiceSelection(s.id)} aria-label={`Select service ${s.name}`} />
                   )}
                   {canEdit && (
-                    <button onClick={() => openEdit(s)} className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); openEdit(s) }} className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">
                       <Pencil size={14} />
                     </button>
                   )}

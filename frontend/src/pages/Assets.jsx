@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Layout } from '../components/Layout'
 import { StatusBadge, CriticalityBadge } from '../components/StatusBadge'
 import { Pagination } from '../components/Pagination'
@@ -111,6 +111,7 @@ function ProbeState({ row }) {
 }
 
 export default function Assets() {
+  const navigate = useNavigate()
   const { hasPermission, hasRole } = useAuth()
   const canEdit = hasPermission('assets')
   const canBulkDelete = hasRole('superadmin', 'admin')
@@ -403,7 +404,7 @@ export default function Assets() {
           ) : assets.length === 0 ? (
             <div className="card p-6 text-center text-gray-500 text-sm">No assets found</div>
           ) : assets.map(a => (
-            <div key={a.id} className="card p-4 space-y-2.5" onClick={canEdit ? () => openEdit(a) : undefined}>
+            <div key={a.id} className="card p-4 space-y-2.5" onClick={() => navigate(`/assets/${a.id}`)}>
               <div className="flex items-start justify-between gap-2">
                 <Link to={`/assets/${a.id}`} onClick={e => e.stopPropagation()} className="text-brand-600 hover:underline font-medium inline-flex items-center gap-1.5 min-w-0">
                   {a.part_is_relevant && <ShieldAlert size={14} className="text-amber-500 shrink-0" title="Part-IS Relevant" />}
@@ -414,7 +415,7 @@ export default function Assets() {
                     <input type="checkbox" checked={selectedAssetIds.includes(a.id)} onChange={() => toggleAssetSelection(a.id)} aria-label={`Select asset ${a.name}`} />
                   )}
                   {canEdit && (
-                    <button onClick={() => openEdit(a)} className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">
+                    <button onClick={(e) => { e.stopPropagation(); openEdit(a) }} className="p-1.5 -m-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-400 hover:text-brand-600 transition-colors">
                       <Pencil size={14} />
                     </button>
                   )}
