@@ -110,6 +110,7 @@ export default function AssetDetail() {
   // deps
   const [allAssets, setAllAssets] = useState([])
   const [depSearch, setDepSearch] = useState('')
+  const [remoteDepResults, setRemoteDepResults] = useState([])
   const [addingDep, setAddingDep] = useState(false)
   const [depDeleteTarget, setDepDeleteTarget] = useState(null)
   // owner
@@ -178,6 +179,20 @@ export default function AssetDetail() {
       assetsApi.licenses(id).then(r => setLicenseRows(Array.isArray(r.data) ? r.data : [])).catch(() => setLicenseRows([]))
     }
   }, [tab, id])
+
+  // Live server-side search so assets beyond the initial batch remain findable as dependencies.
+  useEffect(() => {
+    if (tab !== 'deps') return undefined
+    const q = depSearch.trim()
+    if (!q) { setRemoteDepResults([]); return undefined }
+    const handle = setTimeout(() => {
+      assetsApi.list({ search: q, limit: 50 }).then(r => {
+        const list = Array.isArray(r.data) ? r.data : (r.data.data || [])
+        setRemoteDepResults(list.filter(a => a.id !== id))
+      }).catch(() => setRemoteDepResults([]))
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [tab, id, depSearch])
 
   const loadOwnerData = () => {
     usersApi.list({ limit: 500 }).then(r => {
@@ -430,7 +445,10 @@ export default function AssetDetail() {
 
   const canEdit = hasRole('superadmin','admin')
   const existingDepIds = new Set((asset.dependsOn || []).map(d => d.id))
-  const filteredDeps = allAssets.filter(a =>
+  const mergedDepCandidates = depSearch.trim()
+    ? [...new Map([...allAssets, ...remoteDepResults].map(a => [a.id, a])).values()]
+    : allAssets
+  const filteredDeps = mergedDepCandidates.filter(a =>
     a.name.toLowerCase().includes(depSearch.toLowerCase()) && !existingDepIds.has(a.id)
   )
   const q = userSearch.toLowerCase()

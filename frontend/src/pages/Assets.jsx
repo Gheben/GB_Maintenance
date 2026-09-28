@@ -509,6 +509,7 @@ export default function Assets() {
               badgeKey="supplier_name"
               useModal
               maxResults={120}
+              onSearch={(q) => licensesApi.list({ q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
             />
             <ItemPicker
               label="Depends on (assets)"
@@ -519,6 +520,7 @@ export default function Assets() {
               useModal
               filterKey="category"
               maxResults={120}
+              onSearch={(q) => assetsApi.list({ search: q, limit: 50 }).then(r => (Array.isArray(r.data) ? r.data : (r.data.data || [])).filter(a => a.id !== editTarget?.id))}
             />
             <div className="flex justify-end gap-3">
               <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
@@ -573,6 +575,7 @@ export default function Assets() {
               badgeKey="supplier_name"
               useModal
               maxResults={120}
+              onSearch={(q) => licensesApi.list({ q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
             />
             <ItemPicker
               label="Depends on (assets)"
@@ -583,6 +586,7 @@ export default function Assets() {
               useModal
               filterKey="category"
               maxResults={120}
+              onSearch={(q) => assetsApi.list({ search: q, limit: 50 }).then(r => (Array.isArray(r.data) ? r.data : (r.data.data || [])).filter(a => a.id !== editTarget?.id))}
             />
             <div className="flex justify-end gap-3">
               <button type="button" className="btn-secondary" onClick={() => setEditTarget(null)}>Cancel</button>

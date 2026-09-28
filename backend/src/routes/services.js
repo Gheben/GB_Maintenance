@@ -6,6 +6,7 @@ const auditService = require('../services/auditService');
 const wsService = require('../services/wsService');
 const ldapService = require('../services/ldapService');
 const { buildServiceGraph } = require('../utils/correlationGraph');
+const { parsePagination } = require('../utils/pagination');
 
 const router = Router();
 router.use(requireAuth);
@@ -76,8 +77,8 @@ function primaryOwnerFieldsFromTargets(targets) {
 
 // ─── GET /api/services ────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
-  const { search, criticality, status, page = 1, limit = 50 } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const { search, criticality, status } = req.query;
+  const { page, limit, offset } = parsePagination(req.query);
   const params = []; let i = 1;
   const filters = ['s.is_active=true'];
 
@@ -133,7 +134,7 @@ router.get('/', async (req, res) => {
        LIMIT 1
      ) prim ON TRUE
      ${where} ORDER BY s.system_name NULLS LAST, s.name LIMIT $${i++} OFFSET $${i}`,
-    [...params, parseInt(limit), offset]
+    [...params, limit, offset]
   );
   res.json({
     data: rows.map((row) => ({
@@ -141,8 +142,8 @@ router.get('/', async (req, res) => {
       next_license_expiry: formatDateForPublicApi(row.next_license_expiry),
     })),
     total,
-    page: parseInt(page),
-    limit: parseInt(limit),
+    page,
+    limit,
   });
 });
 

@@ -8,6 +8,7 @@ const { notifyMaintenance, sendEmailNotification, sendInApp } = require('../serv
 const wsService = require('../services/wsService');
 const { getMaintenanceAffectedAssets, getMaintenanceAffectedServices } = require('../utils/maintenanceScope');
 const { getVisibleAffectedScope } = require('../utils/entityVisibility');
+const { parsePagination } = require('../utils/pagination');
 
 const router = Router();
 
@@ -438,8 +439,8 @@ router.use(requireAuth);
 
 // ─── GET /api/maintenance ─────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
-  const { status, type, impact_level, asset_id, from, to, page = 1, limit = 50, upcoming, search } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const { status, type, impact_level, asset_id, from, to, upcoming, search } = req.query;
+  const { page, limit, offset } = parsePagination(req.query);
   const params = []; let i = 1;
   const filters = [];
 
@@ -528,9 +529,9 @@ router.get('/', async (req, res) => {
        WHERE ms.maintenance_id=mw.id
      ) svc ON TRUE
      ${where} ORDER BY mw.scheduled_start DESC LIMIT $${i++} OFFSET $${i}`,
-    [...params, parseInt(limit), offset]
+    [...params, limit, offset]
   );
-  res.json({ data: rows, total, page: parseInt(page), limit: parseInt(limit) });
+  res.json({ data: rows, total, page, limit });
 });
 
 // ─── GET /api/maintenance/calendar ───────────────────────────────────────────

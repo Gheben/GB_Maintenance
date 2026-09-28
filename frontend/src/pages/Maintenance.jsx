@@ -360,6 +360,7 @@ export default function Maintenance() {
                 badgeKey="category"
                 useModal
                 filterKey="category"
+                onSearch={(q) => assetsApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
               />
               <ItemPicker
                 label="Services"
@@ -369,6 +370,7 @@ export default function Maintenance() {
                 badgeKey="criticality"
                 useModal
                 filterKey="criticality"
+                onSearch={(q) => servicesApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
               />
             </div>
 

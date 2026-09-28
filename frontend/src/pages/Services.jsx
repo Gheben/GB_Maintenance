@@ -371,6 +371,7 @@ export default function Services() {
         badgeKey="supplier_name"
         useModal
         maxResults={120}
+        onSearch={(q) => licensesApi.list({ q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
       />
       {extraContent}
       <div className="flex justify-end gap-3">
@@ -513,6 +514,7 @@ export default function Services() {
               onToggle={id => setCreateDepIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])}
               useModal
               maxResults={120}
+              onSearch={(q) => servicesApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
             />
           )}
         </Modal>
@@ -527,6 +529,7 @@ export default function Services() {
               onToggle={id => setEditDepIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id])}
               useModal
               maxResults={120}
+              onSearch={(q) => servicesApi.list({ search: q, limit: 50 }).then(r => (Array.isArray(r.data) ? r.data : (r.data.data || [])).filter(s => s.id !== editTarget?.id))}
             />
           )}
         </Modal>

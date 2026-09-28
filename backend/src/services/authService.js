@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { query, getOne, getMany } = require('../db/database');
 const logger = require('../utils/logger');
+const { parsePagination } = require('../utils/pagination');
 
 const JWT_SECRET  = process.env.JWT_SECRET  || 'changeme-insecure-default';
 const JWT_EXPIRES = process.env.JWT_EXPIRES_IN || '8h';
@@ -167,9 +168,7 @@ async function getAllUsers() {
 }
 
 async function getUsersPage({ page = 1, limit = 50, q = '' } = {}) {
-  const pageNum = Math.max(1, Number.parseInt(page, 10) || 1);
-  const limitNum = Math.min(500, Math.max(1, Number.parseInt(limit, 10) || 50));
-  const offset = (pageNum - 1) * limitNum;
+  const { page: pageNum, limit: limitNum, offset } = parsePagination({ page, limit });
   const qText = String(q || '').trim();
 
   const params = [];

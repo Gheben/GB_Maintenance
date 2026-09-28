@@ -1,19 +1,49 @@
-import { useState } from 'react'
-import { Search, X, ChevronUp, ChevronDown, ShieldCheck } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { Search, X, ChevronUp, ChevronDown, ShieldCheck, Loader2 } from 'lucide-react'
 import { Modal } from './Modal'
 
-export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = 'name', badgeKey, useModal = false, filterKey, maxResults }) {
+// `onSearch(query)` is optional: when provided, typing queries the backend (debounced)
+// so items beyond the initially loaded batch (allItems) remain findable and selectable.
+export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = 'name', badgeKey, useModal = false, filterKey, maxResults, onSearch }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [filter, setFilter] = useState('all')
+  const [remoteResults, setRemoteResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const knownItemsRef = useRef(new Map())
+
+  for (const item of allItems) knownItemsRef.current.set(item.id, item)
+  for (const item of remoteResults) knownItemsRef.current.set(item.id, item)
+
+  useEffect(() => {
+    if (!onSearch) return undefined
+    const q = search.trim()
+    if (!q) { setRemoteResults([]); return undefined }
+    setSearching(true)
+    const handle = setTimeout(() => {
+      onSearch(q)
+        .then(items => setRemoteResults(Array.isArray(items) ? items : []))
+        .catch(() => setRemoteResults([]))
+        .finally(() => setSearching(false))
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [search, onSearch])
 
   const activeFilterKey = filterKey || badgeKey || null
   const filterOptions = activeFilterKey
     ? [...new Set(allItems.map(item => String(item?.[activeFilterKey] || '').trim()).filter(Boolean))]
     : []
 
-  const filtered = allItems.filter(item => {
+  const combinedItems = useMemo(() => {
+    if (!onSearch || !search.trim()) return allItems
+    const map = new Map()
+    for (const item of allItems) map.set(item.id, item)
+    for (const item of remoteResults) map.set(item.id, item)
+    return [...map.values()]
+  }, [allItems, remoteResults, search, onSearch])
+
+  const filtered = combinedItems.filter(item => {
     const byText = String(item?.[nameKey] || '').toLowerCase().includes(search.toLowerCase())
     const byFilter = filter === 'all' || !activeFilterKey || String(item?.[activeFilterKey] || '') === filter
     return byText && byFilter
@@ -22,7 +52,7 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
     ? Number(maxResults)
     : (useModal ? 120 : 50)
   const visible = filtered.slice(0, visibleLimit)
-  const selected = allItems.filter(i => selectedIds.includes(i.id))
+  const selected = selectedIds.map(id => knownItemsRef.current.get(id)).filter(Boolean)
 
   const renderList = () => (
     <>
@@ -35,6 +65,7 @@ export function ItemPicker({ label, allItems, selectedIds, onToggle, nameKey = '
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+          {searching && <Loader2 size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />}
         </div>
         {filterOptions.length > 0 && (
           <select className="input py-1 text-sm" value={filter} onChange={e => setFilter(e.target.value)}>

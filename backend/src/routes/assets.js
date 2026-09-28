@@ -7,6 +7,7 @@ const probeService = require('../services/probeService');
 const wsService = require('../services/wsService');
 const ldapService = require('../services/ldapService');
 const { buildAssetGraph } = require('../utils/correlationGraph');
+const { parsePagination } = require('../utils/pagination');
 
 const router = Router();
 router.use(requireAuth);
@@ -154,8 +155,8 @@ function primaryOwnerFieldsFromTargets(targets) {
 
 // ─── GET /api/assets ──────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
-  const { search, category, criticality, status, page = 1, limit = 50 } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const { search, category, criticality, status } = req.query;
+  const { page, limit, offset } = parsePagination(req.query);
   const params = []; let i = 1;
   const filters = [`a.is_active = true`];
 
@@ -245,7 +246,7 @@ router.get('/', async (req, res) => {
       WHERE ap.asset_id = a.id
          ) aps ON TRUE
      ${where} ORDER BY a.name LIMIT $${i++} OFFSET $${i}`,
-    [...params, parseInt(limit), offset]
+    [...params, limit, offset]
   );
   res.json({
     data: rows.map((row) => ({
@@ -253,8 +254,8 @@ router.get('/', async (req, res) => {
       next_license_expiry: formatDateForPublicApi(row.next_license_expiry),
     })),
     total,
-    page: parseInt(page),
-    limit: parseInt(limit),
+    page,
+    limit,
   });
 });
 

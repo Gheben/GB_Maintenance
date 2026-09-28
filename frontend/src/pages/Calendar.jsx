@@ -292,6 +292,7 @@ export default function Calendar() {
                 badgeKey="category"
                 useModal
                 filterKey="category"
+                onSearch={(q) => assetsApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
               />
               <ItemPicker
                 label={`Services (${form.service_ids.length} selected)`}
@@ -301,6 +302,7 @@ export default function Calendar() {
                 badgeKey="criticality"
                 useModal
                 filterKey="criticality"
+                onSearch={(q) => servicesApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
               />
             </div>
 

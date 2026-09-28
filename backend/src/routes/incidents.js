@@ -7,6 +7,7 @@ const { notifyIncident } = require('../services/notificationService');
 const wsService = require('../services/wsService');
 const { getAffectedAssets, getAffectedServices } = require('../utils/maintenanceScope');
 const { getVisibleAffectedScope } = require('../utils/entityVisibility');
+const { parsePagination } = require('../utils/pagination');
 
 const router = Router();
 router.use(requireAuth);
@@ -22,8 +23,8 @@ async function getAllowedSeverities() {
 
 // ─── GET /api/incidents ───────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
-  const { status, severity, search, page = 1, limit = 50 } = req.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const { status, severity, search } = req.query;
+  const { page, limit, offset } = parsePagination(req.query);
   const params = []; let i = 1;
   const filters = [];
 
@@ -57,9 +58,9 @@ router.get('/', async (req, res) => {
        WHERE is2.incident_id=i.id
      ) isvc ON TRUE
      ${where} ORDER BY i.started_at DESC LIMIT $${i++} OFFSET $${i}`,
-    [...params, parseInt(limit), offset]
+    [...params, limit, offset]
   );
-  res.json({ data: rows, total, page: parseInt(page), limit: parseInt(limit) });
+  res.json({ data: rows, total, page, limit });
 });
 
 // ─── GET /api/incidents/active ────────────────────────────────────────────────

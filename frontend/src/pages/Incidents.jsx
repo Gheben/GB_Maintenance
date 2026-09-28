@@ -279,6 +279,7 @@ export default function Incidents() {
               filterKey="category"
               useModal
               maxResults={120}
+              onSearch={(q) => assetsApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
             />
             <ItemPicker
               label="Affected Services"
@@ -289,6 +290,7 @@ export default function Incidents() {
               filterKey="criticality"
               useModal
               maxResults={120}
+              onSearch={(q) => servicesApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
             />
             <div className="flex justify-end gap-3">
               <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
@@ -330,6 +332,7 @@ export default function Incidents() {
               filterKey="category"
               useModal
               maxResults={120}
+              onSearch={(q) => assetsApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
             />
             <ItemPicker
               label="Affected Services"
@@ -340,6 +343,7 @@ export default function Incidents() {
               filterKey="criticality"
               useModal
               maxResults={120}
+              onSearch={(q) => servicesApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
             />
             <div className="flex justify-end gap-3">
               <button type="button" className="btn-secondary" onClick={() => setEditTarget(null)}>Cancel</button>

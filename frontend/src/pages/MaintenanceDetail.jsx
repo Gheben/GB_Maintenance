@@ -353,6 +353,7 @@ export default function MaintenanceDetail() {
                 badgeKey="criticality"
                 useModal
                 filterKey="criticality"
+                onSearch={(q) => assetsApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
               />
               <ItemPicker
                 label={`Services (${editForm.service_ids.length} selected)`}
@@ -362,6 +363,7 @@ export default function MaintenanceDetail() {
                 badgeKey="criticality"
                 useModal
                 filterKey="criticality"
+                onSearch={(q) => servicesApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
               />
             </div>
           </div>

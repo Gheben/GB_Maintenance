@@ -139,6 +139,7 @@ export default function BlackoutPeriods() {
         badgeKey="status"
         useModal
         filterKey="status"
+        onSearch={(q) => servicesApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
       />
       <ItemPicker
         label="Affected Assets"
@@ -149,6 +150,7 @@ export default function BlackoutPeriods() {
         badgeKey="category"
         useModal
         filterKey="category"
+        onSearch={(q) => assetsApi.list({ search: q, limit: 50 }).then(r => Array.isArray(r.data) ? r.data : (r.data.data || []))}
       />
       <div className="flex justify-end gap-3 pt-1">
         <button type="button" className="btn-secondary" onClick={onCancel}>Cancel</button>

@@ -102,6 +102,7 @@ export default function ServiceDetail() {
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false)
   const [pickerTarget, setPickerTarget] = useState('owner')
   const [depSearch, setDepSearch] = useState('')
+  const [remoteDepResults, setRemoteDepResults] = useState([])
   const [addingDep, setAddingDep] = useState(false)
   const [depDeleteTarget, setDepDeleteTarget] = useState(null)
   const [userSearch, setUserSearch] = useState('')
@@ -172,6 +173,20 @@ export default function ServiceDetail() {
       servicesApi.users(id).then(r => setServiceUsers(Array.isArray(r.data) ? r.data : [])).catch(() => setServiceUsers([]))
     }
   }, [tab, id])
+
+  // Live server-side search so services beyond the initial batch remain findable as dependencies.
+  useEffect(() => {
+    if (tab !== 'deps') return undefined
+    const q = depSearch.trim()
+    if (!q) { setRemoteDepResults([]); return undefined }
+    const handle = setTimeout(() => {
+      servicesApi.list({ search: q, limit: 50 }).then(r => {
+        const list = Array.isArray(r.data) ? r.data : (r.data.data || [])
+        setRemoteDepResults(list.filter(s => s.id !== id))
+      }).catch(() => setRemoteDepResults([]))
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [tab, id, depSearch])
 
   const loadOwnerData = () => {
     usersApi.list({ limit: 500 }).then(r => {
@@ -395,7 +410,10 @@ export default function ServiceDetail() {
 
   const canEdit = hasRole('superadmin', 'admin')
   const existingDepIds = new Set((service.depends_on || []).map(d => d.id))
-  const filteredServices = allServices.filter(s =>
+  const mergedDepCandidates = depSearch.trim()
+    ? [...new Map([...allServices, ...remoteDepResults].map(s => [s.id, s])).values()]
+    : allServices
+  const filteredServices = mergedDepCandidates.filter(s =>
     s.name.toLowerCase().includes(depSearch.toLowerCase()) && !existingDepIds.has(s.id)
   )
   const qU = userSearch.toLowerCase()
