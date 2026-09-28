@@ -142,6 +142,7 @@ export default function Settings() {
   const [pushSupported, setPushSupported] = useState(false)
   const [pushSubscribed, setPushSubscribed] = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
+  const [iosNeedsInstall, setIosNeedsInstall] = useState(false)
 
   // API Keys state
   const [keys, setKeys] = useState([])
@@ -217,6 +218,11 @@ export default function Settings() {
   useEffect(() => {
     const supported = 'serviceWorker' in navigator && 'PushManager' in window
     setPushSupported(supported)
+    // iOS Safari only allows Web Push for apps installed to the Home Screen (iOS 16.4+);
+    // inside a regular Safari tab, subscribe() either fails or silently never delivers.
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+    setIosNeedsInstall(isIOS && !isStandalone)
     if (!supported) return
     navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => setPushSubscribed(!!sub)).catch(() => {})
   }, [])
@@ -784,14 +790,16 @@ export default function Settings() {
                 <h2 className="font-semibold text-base flex items-center gap-2">
                   <Bell size={16} /> Browser Push Notifications
                 </h2>
-                {pushSupported && (
+                {pushSupported && !iosNeedsInstall && (
                   <button type="button" onClick={togglePush} disabled={pushLoading}
                     className={`text-sm flex items-center gap-1.5 ${pushSubscribed ? 'btn-secondary' : 'btn-primary'}`}>
                     {pushLoading ? 'Working...' : pushSubscribed ? 'Disable' : 'Enable'}
                   </button>
                 )}
               </div>
-              {!pushSupported ? (
+              {iosNeedsInstall ? (
+                <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertCircle size={14} /> On iPhone/iPad, push notifications only work after installing this app to your Home Screen (Share &rarr; Add to Home Screen), then opening it from there.</p>
+              ) : !pushSupported ? (
                 <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertCircle size={14} /> This browser doesn't support push notifications.</p>
               ) : (
                 <p className="text-sm text-gray-500">
