@@ -203,7 +203,9 @@ router.post('/saml/callback', handleSamlCallback);
 router.post('/saml/acs', handleSamlCallback);
 
 // ─── WebAuthn / Passkeys (fingerprint, face, security key) ──────────────────
+// Registration is restricted to local accounts: SAML/LDAP identity must remain authoritative.
 router.post('/webauthn/register/options', requireAuth, async (req, res) => {
+  if (req.user.auth_type !== 'local') return res.status(403).json({ error: 'Le passkey sono disponibili solo per account locali' });
   try {
     const options = await webauthnService.generateRegistrationOpts(req, req.user);
     res.json(options);
@@ -214,6 +216,7 @@ router.post('/webauthn/register/verify', requireAuth, [
   body('response').isObject(),
   body('name').optional().isString().trim().isLength({ max: 200 }),
 ], async (req, res) => {
+  if (req.user.auth_type !== 'local') return res.status(403).json({ error: 'Le passkey sono disponibili solo per account locali' });
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
   try {

@@ -208,7 +208,7 @@ export default function Settings() {
   useEffect(() => {
     if (tab === 'apikeys') apikeysApi.list().then(r => setKeys(r.data)).catch(() => {})
     if (tab === 'emailtpl') notificationsApi.templates().then(r => setEmailTemplates(r.data)).catch(() => {})
-    if (tab === 'security') loadPasskeys()
+    if (tab === 'security' && user?.auth_type === 'local') loadPasskeys()
     if (tab === 'general' && isSuperAdmin) {
       setDemoLoading(true)
       settingsApi.getDemoStatus()
@@ -687,41 +687,49 @@ export default function Settings() {
                 <h2 className="font-semibold text-base flex items-center gap-2">
                   <Fingerprint size={16} /> Fingerprint / Face Login (Passkeys)
                 </h2>
-                {passkeySupported && (
+                {passkeySupported && user?.auth_type === 'local' && (
                   <button type="button" onClick={registerPasskey} disabled={passkeyRegistering}
                     className="btn-primary text-sm flex items-center gap-1.5">
                     <Plus size={14} />{passkeyRegistering ? 'Registering...' : 'Add passkey'}
                   </button>
                 )}
               </div>
-              <p className="text-sm text-gray-500">
-                Register your device's fingerprint, face recognition, or a security key to sign in without typing a password, on both mobile and desktop.
-              </p>
-              {!passkeySupported && (
-                <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertCircle size={14} /> This browser doesn't support passkeys.</p>
-              )}
-              {passkeysLoading ? (
-                <p className="text-sm text-gray-400">Loading...</p>
-              ) : passkeys.length === 0 ? (
-                <p className="text-sm text-gray-400">No passkeys registered yet.</p>
+              {user?.auth_type !== 'local' ? (
+                <p className="text-sm text-gray-500 flex items-center gap-1.5">
+                  <Shield size={14} className="shrink-0" /> Your account is managed by {user?.auth_type === 'saml' ? 'SAML SSO' : 'LDAP/AD'}. Passkeys are only available for local accounts, since {user?.auth_type === 'saml' ? 'SAML' : 'LDAP/AD'} remains the sole authority for signing in.
+                </p>
               ) : (
-                <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {passkeys.map(pk => (
-                    <li key={pk.id} className="py-2.5 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{pk.name || 'Unnamed passkey'}</p>
-                        <p className="text-xs text-gray-500">
-                          {pk.device_type === 'multiDevice' ? 'Synced passkey' : 'Device-bound'} · Added {format(new Date(pk.created_at), 'dd/MM/yyyy')}
-                          {pk.last_used_at ? ` · Last used ${format(new Date(pk.last_used_at), 'dd/MM/yyyy HH:mm')}` : ''}
-                        </p>
-                      </div>
-                      <button type="button" onClick={() => setDeleteTargetPasskey(pk)}
-                        className="text-gray-400 hover:text-red-600 shrink-0" title="Remove passkey">
-                        <Trash2 size={16} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <p className="text-sm text-gray-500">
+                    Register your device's fingerprint, face recognition, or a security key to sign in without typing a password, on both mobile and desktop.
+                  </p>
+                  {!passkeySupported && (
+                    <p className="text-sm text-amber-600 flex items-center gap-1.5"><AlertCircle size={14} /> This browser doesn't support passkeys.</p>
+                  )}
+                  {passkeysLoading ? (
+                    <p className="text-sm text-gray-400">Loading...</p>
+                  ) : passkeys.length === 0 ? (
+                    <p className="text-sm text-gray-400">No passkeys registered yet.</p>
+                  ) : (
+                    <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {passkeys.map(pk => (
+                        <li key={pk.id} className="py-2.5 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{pk.name || 'Unnamed passkey'}</p>
+                            <p className="text-xs text-gray-500">
+                              {pk.device_type === 'multiDevice' ? 'Synced passkey' : 'Device-bound'} · Added {format(new Date(pk.created_at), 'dd/MM/yyyy')}
+                              {pk.last_used_at ? ` · Last used ${format(new Date(pk.last_used_at), 'dd/MM/yyyy HH:mm')}` : ''}
+                            </p>
+                          </div>
+                          <button type="button" onClick={() => setDeleteTargetPasskey(pk)}
+                            className="text-gray-400 hover:text-red-600 shrink-0" title="Remove passkey">
+                            <Trash2 size={16} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </div>
           </div>

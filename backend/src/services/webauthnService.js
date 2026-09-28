@@ -133,6 +133,8 @@ async function verifyAuthentication(req, response) {
 
   const user = await getOne(`SELECT * FROM users WHERE id=$1 AND is_active=true`, [credRow.user_id]);
   if (!user) throw new Error('Utente non trovato o disabilitato');
+  // Guard against stale passkeys if the account was later converted to SAML/LDAP.
+  if (user.auth_type !== 'local') throw new Error('Le passkey sono disponibili solo per account locali');
 
   const verification = await verifyAuthenticationResponse({
     response,
