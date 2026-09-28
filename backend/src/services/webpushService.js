@@ -51,7 +51,10 @@ async function removeSubscription(userId, endpoint) {
 async function sendToUser(userId, payload) {
   await _ensureConfigured();
   const subs = await getMany(`SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id=$1`, [userId]);
-  if (subs.length === 0) return;
+  if (subs.length === 0) {
+    logger.info(`[WebPush] No push subscription registered for user ${userId} — nothing to send`);
+    return;
+  }
 
   const body = JSON.stringify(payload);
   await Promise.allSettled(subs.map(async (sub) => {

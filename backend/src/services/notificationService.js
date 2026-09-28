@@ -391,7 +391,8 @@ async function notifyMaintenance(maintenanceId, eventType, extraVars = {}) {
         sendInApp(uid, eventType, titles[eventType] || maint.title, vars.description, 'maintenance', maintenanceId)
       )));
       tasks.push(Promise.all(userIds.map((uid) =>
-        webpushService.sendToUser(uid, { title: titles[eventType] || maint.title, body: vars.description || '', url: `/maintenance/${maintenanceId}` }).catch(() => {})
+        webpushService.sendToUser(uid, { title: titles[eventType] || maint.title, body: vars.description || '', url: `/maintenance/${maintenanceId}` })
+          .catch((err) => logger.warn(`[Notifications] Web push failed for user ${uid}: ${err.message}`))
       )));
     }
     tasks.push(_dispatchWebhooks(eventType, { maintenance: maint, ...extraVars }));
@@ -577,7 +578,8 @@ async function notifyIncident(incidentId, eventType) {
         sendInApp(uid, eventType, `Incident: ${incident.title}`, incident.description, 'incident', incidentId)
       )));
       tasks.push(Promise.all([...userIds].map((uid) =>
-        webpushService.sendToUser(uid, { title: `Incident: ${incident.title}`, body: incident.description || '', url: `/incidents/${incidentId}` }).catch(() => {})
+        webpushService.sendToUser(uid, { title: `Incident: ${incident.title}`, body: incident.description || '', url: `/incidents/${incidentId}` })
+          .catch((err) => logger.warn(`[Notifications] Web push failed for user ${uid}: ${err.message}`))
       )));
     }
     tasks.push(_dispatchWebhooks(eventType, { incident }));

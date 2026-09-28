@@ -2,7 +2,14 @@ const CACHE_NAME = 'gb-maintenance-shell-v1'
 const APP_SHELL = ['/', '/manifest.webmanifest']
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)))
+  // Precache best-effort: cache.addAll() rejects (and aborts the whole install,
+  // leaving the SW never activated — breaking push notifications entirely) if even
+  // one resource doesn't return a plain 200. Cache each entry independently instead.
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => Promise.all(APP_SHELL.map((url) => cache.add(url).catch(() => {}))))
+      .catch(() => {})
+  )
   self.skipWaiting()
 })
 
