@@ -76,7 +76,7 @@ export default function LocalGroups() {
     e.preventDefault()
     // groupsApi.addMember expects { user_id } — for simplicity we show a user_id input
     try { await groupsApi.addMember(selected.id, { user_id: memberEmail }); toast.success('Membro aggiunto'); setMemberEmail(''); loadDetail(selected.id) }
-    catch (err) { toast.error(err.response?.data?.error || 'ID utente non valido') }
+    catch (err) { toast.error(err.response?.data?.error || 'Invalid user ID') }
   }
 
   const handleRemoveMember = async (userId) => {

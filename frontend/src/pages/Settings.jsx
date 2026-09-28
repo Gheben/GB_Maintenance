@@ -289,7 +289,7 @@ export default function Settings() {
       loadPasskeys()
     } catch (err) {
       if (!(err instanceof WebAuthnError) && err?.name !== 'NotAllowedError') {
-        toast.error(err.response?.data?.error || 'Registrazione passkey non riuscita')
+        toast.error(err.response?.data?.error || 'Passkey registration failed')
       }
     } finally {
       setPasskeyRegistering(false)
@@ -302,7 +302,7 @@ export default function Settings() {
       await authApi.webauthnDeleteCredential(deleteTargetPasskey.id)
       toast.success('Passkey rimossa')
       setPasskeys(prev => prev.filter(p => p.id !== deleteTargetPasskey.id))
-    } catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    } catch (err) { toast.error(err.response?.data?.error || 'Error') }
     finally { setDeleteTargetPasskey(null) }
   }
 

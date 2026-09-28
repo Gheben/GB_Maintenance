@@ -138,12 +138,12 @@ export default function Templates() {
   const handleCreate = async (e) => {
     e.preventDefault()
     try { await templatesApi.create(form); toast.success('Template creato'); setShowCreate(false); load() }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const handleDelete = async () => {
     try { await templatesApi.delete(deleteTarget.id); toast.success('Eliminato'); setDeleteTarget(null); load() }
-    catch (err) { toast.error(err.response?.data?.error || 'Errore') }
+    catch (err) { toast.error(err.response?.data?.error || 'Error') }
   }
 
   const notifyTemplates = emailTemplates.filter(t => {
