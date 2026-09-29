@@ -939,6 +939,8 @@ API keys are created from **Settings -> API Keys**.
           description: { type: 'string', example: 'CPU usage at 96% for 10 minutes' },
           severity: { type: 'string', enum: ['critical','high','medium','low'], description: 'Overrides the webhook default severity if provided' },
           source: { type: 'string', example: 'Zabbix', description: 'Prefixed onto the incident title as [source]' },
+          asset_ids: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'Correlates the incident to existing assets, same as POST /incidents' },
+          asset_slugs: { type: 'array', items: { type: 'string' }, example: ['db-prod-01'], description: 'Resolved to asset_ids by slug - convenient when the caller only knows a hostname' },
         } } } } },
         responses: { 201: { description: 'Incident created' }, 401: { description: 'Invalid or disabled token' } },
       },

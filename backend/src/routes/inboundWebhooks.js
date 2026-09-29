@@ -93,6 +93,8 @@ router.post('/receive/:token', receiveLimiter, [
   body('description').optional().isString(),
   body('severity').optional().isString(),
   body('source').optional().isString().trim().isLength({ max: 100 }),
+  body('asset_ids').optional().isArray(),
+  body('asset_slugs').optional().isArray(),
 ], asyncRoute(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -112,6 +114,16 @@ router.post('/receive/:token', receiveLimiter, [
   const severity = SEVERITIES.includes(req.body.severity) ? req.body.severity : matched.default_severity;
   const title = req.body.source ? `[${req.body.source}] ${req.body.title}` : req.body.title;
 
+  // Resolve slugs (e.g. a monitoring tool's hostname) alongside raw UUIDs, matching the format
+  // the regular POST /api/incidents endpoint accepts, so the same affected-scope logic applies.
+  const slugRows = Array.isArray(req.body.asset_slugs) && req.body.asset_slugs.length > 0
+    ? await getMany(`SELECT id FROM assets WHERE slug = ANY($1::varchar[])`, [req.body.asset_slugs])
+    : [];
+  const assetIds = [...new Set([
+    ...(Array.isArray(req.body.asset_ids) ? req.body.asset_ids : []),
+    ...slugRows.map((row) => row.id),
+  ])];
+
   const result = await query(
     `INSERT INTO incidents (title, description, severity, status, started_at, created_by)
      VALUES ($1,$2,$3,'investigating',NOW(),NULL) RETURNING id`,
@@ -122,6 +134,13 @@ router.post('/receive/:token', receiveLimiter, [
     `INSERT INTO incident_updates (incident_id, status, message) VALUES ($1,'investigating',$2)`,
     [id, req.body.description || 'Incident opened via inbound webhook.']
   );
+  for (const assetId of assetIds) {
+    await query(`INSERT INTO incident_assets (incident_id, asset_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, assetId]);
+    const newStatus = ['critical', 'high'].includes(severity) ? 'major_outage' : 'partial_outage';
+    await query(`UPDATE assets SET status=$1, updated_at=NOW() WHERE id=$2`, [newStatus, assetId]);
+    await query(`INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason) VALUES ('asset',$1,$2,$3,$4)`,
+      [assetId, newStatus, `webhook:${matched.name}`, `Incident: ${title}`]);
+  }
   query('UPDATE inbound_webhooks SET last_used_at=NOW() WHERE id=$1', [matched.id]).catch(() => {});
 
   await notifyIncident(id, 'incident_created');
