@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Layout } from '../components/Layout'
 import { Modal, ConfirmDialog } from '../components/Modal'
-import { settingsApi, apikeysApi, maintenanceTypesApi, assetCategoriesApi, notificationsApi, uploadsApi, authApi } from '../api'
+import { settingsApi, apikeysApi, inboundWebhooksApi, maintenanceTypesApi, assetCategoriesApi, notificationsApi, uploadsApi, authApi } from '../api'
 import { startRegistration, browserSupportsWebAuthn, WebAuthnError } from '@simplewebauthn/browser'
 import { toast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
@@ -173,6 +173,15 @@ export default function Settings() {
   const [webhookTesting, setWebhookTesting] = useState(false)
   const [deleteWebhookIdx, setDeleteWebhookIdx] = useState(null)
 
+  // Inbound webhooks state
+  const [inboundWebhooks, setInboundWebhooks] = useState([])
+  const [showInboundForm, setShowInboundForm] = useState(false)
+  const [editingInboundId, setEditingInboundId] = useState(null)
+  const [inboundForm, setInboundForm] = useState({ name: '', default_severity: 'medium' })
+  const [inboundSaving, setInboundSaving] = useState(false)
+  const [newInboundToken, setNewInboundToken] = useState(null)
+  const [deleteInboundIdx, setDeleteInboundIdx] = useState(null)
+
   // Maintenance Types state
   const [mTypes, setMTypes] = useState([])
 
@@ -252,6 +261,7 @@ export default function Settings() {
   useEffect(() => {
     if (tab === 'apikeys') apikeysApi.list().then(r => setKeys(r.data)).catch(() => {})
     if (tab === 'webhooks') settingsApi.getWebhooks().then(r => setWebhooks(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    if (tab === 'webhooks') inboundWebhooksApi.list().then(r => setInboundWebhooks(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     if (tab === 'emailtpl') notificationsApi.templates().then(r => setEmailTemplates(r.data)).catch(() => {})
     if (tab === 'security' && user?.auth_type === 'local') loadPasskeys()
     if (tab === 'general' && isSuperAdmin) {
@@ -467,6 +477,64 @@ export default function Settings() {
       toast.error(err.response?.data?.error || 'Webhook test failed')
     } finally {
       setWebhookTesting(false)
+    }
+  }
+
+  const openCreateInbound = () => {
+    setEditingInboundId(null)
+    setInboundForm({ name: '', default_severity: 'medium' })
+    setShowInboundForm(true)
+  }
+
+  const openEditInbound = (wh) => {
+    setEditingInboundId(wh.id)
+    setInboundForm({ name: wh.name, default_severity: wh.default_severity })
+    setShowInboundForm(true)
+  }
+
+  const saveInboundForm = async (e) => {
+    e.preventDefault()
+    if (!inboundForm.name.trim()) { toast.error('Name is required'); return }
+    setInboundSaving(true)
+    try {
+      if (editingInboundId) {
+        await inboundWebhooksApi.update(editingInboundId, inboundForm)
+        setShowInboundForm(false)
+        inboundWebhooksApi.list().then(r => setInboundWebhooks(Array.isArray(r.data) ? r.data : []))
+        toast.success('Inbound webhook updated')
+      } else {
+        const { data } = await inboundWebhooksApi.create(inboundForm)
+        setNewInboundToken(data.token)
+        setShowInboundForm(false)
+        inboundWebhooksApi.list().then(r => setInboundWebhooks(Array.isArray(r.data) ? r.data : []))
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error saving inbound webhook')
+    } finally {
+      setInboundSaving(false)
+    }
+  }
+
+  const toggleInboundActive = async (wh) => {
+    try {
+      await inboundWebhooksApi.update(wh.id, { is_active: !wh.is_active })
+      setInboundWebhooks(list => list.map(w => w.id === wh.id ? { ...w, is_active: !w.is_active } : w))
+    } catch {
+      toast.error('Error updating inbound webhook')
+    }
+  }
+
+  const confirmDeleteInbound = async () => {
+    if (deleteInboundIdx === null) return
+    const wh = inboundWebhooks[deleteInboundIdx]
+    try {
+      await inboundWebhooksApi.delete(wh.id)
+      setInboundWebhooks(list => list.filter((_, i) => i !== deleteInboundIdx))
+      toast.success('Inbound webhook deleted')
+    } catch {
+      toast.error('Error deleting inbound webhook')
+    } finally {
+      setDeleteInboundIdx(null)
     }
   }
 
@@ -1395,39 +1463,82 @@ export default function Settings() {
         )}
 
         {tab === 'webhooks' && (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-500">Send an HTTP request to an external URL (Microsoft Teams, Slack or a generic endpoint) whenever a maintenance or incident event occurs.</p>
-            <div className="flex justify-end">
-              <button className="btn-primary" onClick={openCreateWebhook}><Plus size={15} />New Webhook</button>
-            </div>
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <h2 className="font-semibold text-base">Outgoing</h2>
+                  <p className="text-sm text-gray-500">Send an HTTP request to an external URL (Microsoft Teams, Slack or a generic endpoint) whenever a maintenance or incident event occurs.</p>
+                </div>
+                <button className="btn-primary" onClick={openCreateWebhook}><Plus size={15} />New Webhook</button>
+              </div>
 
-            <div className="space-y-3">
-              {webhooks.length === 0 ? (
-                <div className="card p-6 text-center text-gray-500 text-sm">No webhooks configured</div>
-              ) : webhooks.map((wh, idx) => (
-                <div key={idx} className="card p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 uppercase">{wh.type || 'generic'}</span>
-                        <button type="button"
-                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${wh.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
-                          onClick={() => toggleWebhookEnabled(idx)}>
-                          {wh.enabled ? 'Enabled' : 'Disabled'}
-                        </button>
+              <div className="space-y-3">
+                {webhooks.length === 0 ? (
+                  <div className="card p-6 text-center text-gray-500 text-sm">No webhooks configured</div>
+                ) : webhooks.map((wh, idx) => (
+                  <div key={idx} className="card p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 uppercase">{wh.type || 'generic'}</span>
+                          <button type="button"
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${wh.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                            onClick={() => toggleWebhookEnabled(idx)}>
+                            {wh.enabled ? 'Enabled' : 'Disabled'}
+                          </button>
+                        </div>
+                        <div className="text-sm font-mono truncate mt-1.5">{wh.url}</div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          {Array.isArray(wh.events) && wh.events.length > 0 ? `${wh.events.length} event${wh.events.length > 1 ? 's' : ''}` : 'All events'}
+                        </div>
                       </div>
-                      <div className="text-sm font-mono truncate mt-1.5">{wh.url}</div>
-                      <div className="text-xs text-gray-400 mt-1">
-                        {Array.isArray(wh.events) && wh.events.length > 0 ? `${wh.events.length} event${wh.events.length > 1 ? 's' : ''}` : 'All events'}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button className="action-icon-btn" onClick={() => openEditWebhook(idx)}><Pencil size={13} /></button>
+                        <button className="action-icon-btn action-icon-btn-danger" onClick={() => setDeleteWebhookIdx(idx)}><Trash2 size={13} /></button>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button className="action-icon-btn" onClick={() => openEditWebhook(idx)}><Pencil size={13} /></button>
-                      <button className="action-icon-btn action-icon-btn-danger" onClick={() => setDeleteWebhookIdx(idx)}><Trash2 size={13} /></button>
                     </div>
                   </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4 border-t border-gray-100 dark:border-gray-700 pt-6">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <h2 className="font-semibold text-base">Incoming</h2>
+                  <p className="text-sm text-gray-500">Let external tools (monitoring, alerting) open an incident here by calling a secret URL. Access is controlled only by that URL — disable or delete it to stop all traffic instantly.</p>
                 </div>
-              ))}
+                <button className="btn-primary" onClick={openCreateInbound}><Plus size={15} />New Inbound Webhook</button>
+              </div>
+
+              <div className="space-y-3">
+                {inboundWebhooks.length === 0 ? (
+                  <div className="card p-6 text-center text-gray-500 text-sm">No inbound webhooks configured</div>
+                ) : inboundWebhooks.map((wh, idx) => (
+                  <div key={wh.id} className="card p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">{wh.name}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 capitalize">{wh.default_severity}</span>
+                          <button type="button"
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${wh.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                            onClick={() => toggleInboundActive(wh)}>
+                            {wh.is_active ? 'Enabled' : 'Disabled'}
+                          </button>
+                        </div>
+                        <div className="text-xs font-mono text-gray-400 mt-1.5">{wh.token_prefix}…</div>
+                        <div className="text-xs text-gray-400 mt-1">{wh.last_used_at ? `Last used: ${format(new Date(wh.last_used_at), 'MM/dd/yyyy HH:mm')}` : 'Never used'}</div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button className="action-icon-btn" onClick={() => openEditInbound(wh)}><Pencil size={13} /></button>
+                        <button className="action-icon-btn action-icon-btn-danger" onClick={() => setDeleteInboundIdx(idx)}><Trash2 size={13} /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -2422,6 +2533,49 @@ export default function Settings() {
       {deleteWebhookIdx !== null && (
         <ConfirmDialog title="Delete Webhook" message={`Delete this webhook (${webhooks[deleteWebhookIdx]?.url})?`} danger confirmLabel="Delete"
           onConfirm={confirmDeleteWebhook} onCancel={() => setDeleteWebhookIdx(null)} />
+      )}
+
+      {/* Inbound webhooks modals */}
+      {showInboundForm && (
+        <Modal title={editingInboundId ? 'Edit Inbound Webhook' : 'New Inbound Webhook'} onClose={() => setShowInboundForm(false)} size="sm">
+          <form onSubmit={saveInboundForm} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Name *</label>
+              <input className="input" required placeholder="e.g. Zabbix" value={inboundForm.name} onChange={e => setInboundForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Default severity</label>
+              <p className="text-xs text-gray-400 mb-1">Used when the caller doesn't specify one.</p>
+              <select className="input" value={inboundForm.default_severity} onChange={e => setInboundForm(f => ({ ...f, default_severity: e.target.value }))}>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button type="button" className="btn-secondary" onClick={() => setShowInboundForm(false)}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={inboundSaving}>{inboundSaving ? 'Saving…' : 'Save'}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {newInboundToken && (
+        <Modal title="Inbound webhook created" onClose={() => setNewInboundToken(null)} size="md">
+          <p className="text-sm text-gray-600 mb-3">Copy this URL and paste it into the external tool (e.g. as a webhook/alert action). It won't be shown again — anyone with this URL can create incidents here.</p>
+          <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border">
+            <code className="flex-1 text-xs break-all">{`${window.location.origin}/api/inbound-webhooks/receive/${newInboundToken}`}</code>
+            <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/api/inbound-webhooks/receive/${newInboundToken}`); toast.success('Copied') }}><Copy size={16} /></button>
+          </div>
+          <p className="text-xs text-gray-400 mt-3">Expected JSON body: <code className="bg-gray-100 px-1 rounded">{'{ "title": "...", "description": "...", "severity": "high", "source": "..." }'}</code> (only <code className="bg-gray-100 px-1 rounded">title</code> is required).</p>
+          <div className="flex justify-end mt-4">
+            <button className="btn-primary" onClick={() => setNewInboundToken(null)}>I've saved the URL</button>
+          </div>
+        </Modal>
+      )}
+      {deleteInboundIdx !== null && (
+        <ConfirmDialog title="Delete Inbound Webhook" message={`Delete "${inboundWebhooks[deleteInboundIdx]?.name}"? Any external tool still using this URL will stop working immediately.`} danger confirmLabel="Delete"
+          onConfirm={confirmDeleteInbound} onCancel={() => setDeleteInboundIdx(null)} />
       )}
       {deleteTargetPasskey && (
         <ConfirmDialog title="Remove Passkey" message={`Remove "${deleteTargetPasskey.name || 'Unnamed passkey'}"? You won't be able to use it to sign in anymore.`} danger confirmLabel="Remove"

@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { body, validationResult } = require('express-validator');
-const { requireAuth, requireOperator, requireAdmin } = require('../middleware/authMiddleware');
+const { requireAuthOrApiKey, requireOperator, requireAdmin } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
 const { notifyIncident } = require('../services/notificationService');
@@ -11,7 +11,7 @@ const { parsePagination } = require('../utils/pagination');
 const PDFDocument = require('pdfkit');
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuthOrApiKey);
 
 const SEVERITIES = ['critical','high','medium','low'];
 const STATUSES = ['investigating','identified','monitoring','resolved'];

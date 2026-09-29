@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { body, validationResult } = require('express-validator');
-const { requireAuth, requireChangeManager, requireAdmin } = require('../middleware/authMiddleware');
+const { requireAuthOrApiKey, requireChangeManager, requireAdmin } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
 const { sendEmailNotification, sendInApp } = require('../services/notificationService');
@@ -10,7 +10,7 @@ const { getAffectedAssets, getAffectedServices } = require('../utils/maintenance
 const { getVisibleAffectedScope, PRIVILEGED_ROLES } = require('../utils/entityVisibility');
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuthOrApiKey);
 
 function affectedScopeTemplateVars(scope) {
   return {

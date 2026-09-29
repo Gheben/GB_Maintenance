@@ -38,6 +38,7 @@ const assetCategoriesRoutes = require('./routes/assetCategories');
 const incidentSeveritiesRoutes = require('./routes/incidentSeverities');
 const licenseRoutes = require('./routes/licenses');
 const supplierRoutes = require('./routes/suppliers');
+const inboundWebhookRoutes = require('./routes/inboundWebhooks');
 const uploadRoutes = require('./routes/uploads');
 
 const app = express();
@@ -376,6 +377,7 @@ app.use('/api/incident-severities', incidentSeveritiesRoutes);
 app.use('/api/licenses', licenseRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/inbound-webhooks', inboundWebhookRoutes);
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/blackout', blackoutRoutes);
 

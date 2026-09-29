@@ -83,7 +83,9 @@ async function requireApiKey(req, res, next) {
   for (const row of rows) {
     if (await bcrypt.compare(key, row.key_hash)) {
       if (!row.is_active) return res.status(403).json({ error: 'User disabled' });
-      req.user = { id: row.owner_id, role: row.role, permissions: row.permissions };
+      const user = await require('../services/authService').getUserById(row.owner_id);
+      if (!user) return res.status(401).json({ error: 'Invalid API key' });
+      req.user = user;
       req.apiKeyId = row.id;
       // Update last_used_at async
       require('../db/database').query('UPDATE api_keys SET last_used_at=NOW() WHERE id=$1', [row.id]);

@@ -277,6 +277,14 @@ export const apikeysApi = {
   delete: (id) => api.delete(`/apikeys/${id}`),
 }
 
+// ─── Inbound Webhooks ──────────────────────────────────────────────────────────
+export const inboundWebhooksApi = {
+  list: () => api.get('/inbound-webhooks'),
+  create: (data) => api.post('/inbound-webhooks', data),
+  update: (id, data) => api.patch(`/inbound-webhooks/${id}`, data),
+  delete: (id) => api.delete(`/inbound-webhooks/${id}`),
+}
+
 // ─── Audit ────────────────────────────────────────────────────────────────────
 export const auditApi = {
   list: (params) => api.get('/audit', { params }),

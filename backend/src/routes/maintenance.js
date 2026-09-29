@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { body, validationResult } = require('express-validator');
 const crypto = require('crypto');
-const { requireAuth, requireOperator, requireAdmin, requireChangeManager } = require('../middleware/authMiddleware');
+const { requireAuthOrApiKey, requireOperator, requireAdmin, requireChangeManager } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
 const { notifyMaintenance, sendEmailNotification, sendInApp } = require('../services/notificationService');
@@ -435,7 +435,7 @@ router.post('/public/owner-approval/respond', [
   res.json({ message: 'Owner response recorded', owner_approval_status: outcome.newOwnerStatus });
 });
 
-router.use(requireAuth);
+router.use(requireAuthOrApiKey);
 
 // ─── GET /api/maintenance ─────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
