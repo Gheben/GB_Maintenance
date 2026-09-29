@@ -97,6 +97,7 @@ router.post('/receive/:token', receiveLimiter, [
   body('asset_slugs').optional().isArray(),
   body('service_ids').optional().isArray(),
   body('service_slugs').optional().isArray(),
+  body('ticket_ref').optional().isString().trim().isLength({ max: 100 }),
 ], asyncRoute(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -135,9 +136,9 @@ router.post('/receive/:token', receiveLimiter, [
   ])];
 
   const result = await query(
-    `INSERT INTO incidents (title, description, severity, status, started_at, created_by)
-     VALUES ($1,$2,$3,'investigating',NOW(),NULL) RETURNING id`,
-    [title, req.body.description || null, severity]
+    `INSERT INTO incidents (title, description, ticket_ref, severity, status, started_at, created_by)
+     VALUES ($1,$2,$3,$4,'investigating',NOW(),NULL) RETURNING id`,
+    [title, req.body.description || null, req.body.ticket_ref || null, severity]
   );
   const id = result.rows[0].id;
   await query(

@@ -435,7 +435,8 @@ curl -X POST https://your-domain/api/inbound-webhooks/receive/gbmih_xxxxxxxxxxxx
     "severity": "high",
     "source": "Zabbix",
     "asset_slugs": ["db-prod-01"],
-    "service_slugs": ["customer-portal"]
+    "service_slugs": ["customer-portal"],
+    "ticket_ref": "TKT-12345"
   }'
 ```
 

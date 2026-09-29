@@ -88,7 +88,7 @@ export default function IncidentDetail() {
 
   const enterEdit = () => {
     if (!incident) return
-    setEditForm({ title: incident.title || '', severity: incident.severity || 'medium', description: incident.description || '' })
+    setEditForm({ title: incident.title || '', severity: incident.severity || 'medium', description: incident.description || '', ticket_ref: incident.ticket_ref || '' })
     setEditMode(true)
   }
 
@@ -189,6 +189,10 @@ export default function IncidentDetail() {
               <label className="block text-sm font-medium mb-1">Description</label>
               <textarea className="input" rows={3} value={editForm.description} onChange={e => setEditForm(f => ({...f, description: e.target.value}))} />
             </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Ticket reference</label>
+              <input className="input" value={editForm.ticket_ref} onChange={e => setEditForm(f => ({...f, ticket_ref: e.target.value}))} placeholder="e.g., TKT-12345" />
+            </div>
           </div>
         ) : (
           <div className="card p-6 space-y-3">
@@ -200,6 +204,7 @@ export default function IncidentDetail() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-gray-500">Opened:</span> <strong>{format(new Date(incident.started_at), 'MM/dd/yyyy HH:mm')}</strong></div>
               {incident.resolved_at && <div><span className="text-gray-500">Resolved:</span> <strong>{format(new Date(incident.resolved_at), 'MM/dd/yyyy HH:mm')}</strong></div>}
+              {incident.ticket_ref && <div><span className="text-gray-500">Ticket:</span> <strong>{incident.ticket_ref}</strong></div>}
             </div>
           </div>
         ))}

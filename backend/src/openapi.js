@@ -943,6 +943,7 @@ API keys are created from **Settings -> API Keys**.
           asset_slugs: { type: 'array', items: { type: 'string' }, example: ['db-prod-01'], description: 'Resolved to asset_ids by slug - convenient when the caller only knows a hostname' },
           service_ids: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'Correlates the incident to existing services, same as POST /incidents' },
           service_slugs: { type: 'array', items: { type: 'string' }, example: ['customer-portal'], description: 'Resolved to service_ids by slug' },
+          ticket_ref: { type: 'string', example: 'TKT-12345', description: 'External ticket/reference number, shown on the incident' },
         } } } } },
         responses: { 201: { description: 'Incident created' }, 401: { description: 'Invalid or disabled token' } },
       },
