@@ -28,7 +28,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'GB Maintenance'
   const options = {
     body: data.body || '',
-    icon: '/icons/icon-192.png',
+    // Custom branding logo when configured (Settings > General), else the default app icon.
+    icon: data.icon || '/icons/icon-192.png',
     // Android renders this as a monochrome silhouette (alpha channel only), so it must be a
     // white-on-transparent image — the full-color app icon shows as a solid white square instead.
     badge: '/icons/badge-96.png',

@@ -407,6 +407,40 @@ router.get('/public-branding', async (req, res) => {
   });
 });
 
+// ─── GET /api/settings/manifest.webmanifest ──────────────────────────────────
+// Dynamic PWA manifest so the installed app's name/icon follow the custom branding
+// (name/short_name drive what Android/iOS show as the app identity for grouped notifications).
+router.get('/manifest.webmanifest', async (req, res) => {
+  const row = await getOne("SELECT value FROM settings WHERE key='general_config'");
+  const general = row ? JSON.parse(row.value || '{}') : {};
+  const defaults = getDefaultGeneralSettings();
+  const appName = general.app_name || defaults.app_name;
+  const brandImage = String(general.app_brand_image_url || '').trim();
+
+  const icons = brandImage
+    ? [{ src: brandImage, sizes: 'any', type: 'image/png', purpose: 'any maskable' }]
+    : [
+        { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+        { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+        { src: '/logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+      ];
+
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.json({
+    name: appName,
+    short_name: appName,
+    description: 'Management of scheduled maintenance, assets, and business services',
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    background_color: '#0f172a',
+    theme_color: '#1e40af',
+    orientation: 'any',
+    icons,
+    categories: ['productivity', 'utilities'],
+  });
+});
+
 // ─── GET /api/settings/data-transfer/options ─────────────────────────────────
 router.get('/data-transfer/options', requireAuth, requireSuperAdmin, async (req, res) => {
   res.json({

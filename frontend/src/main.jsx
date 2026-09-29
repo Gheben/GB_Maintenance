@@ -110,6 +110,20 @@ function applyBrandingToHead(branding) {
   appleTouchLink.href = appImage
 }
 
+// Point the manifest at the backend's dynamic endpoint so the installed PWA's name/icon
+// (used by Android/iOS as the app identity, including for grouped push notifications)
+// follow the custom branding instead of the static default.
+function useDynamicManifest() {
+  let link = document.head.querySelector('link[rel="manifest"]')
+  if (!link) {
+    link = document.createElement('link')
+    link.setAttribute('rel', 'manifest')
+    document.head.appendChild(link)
+  }
+  link.href = '/api/settings/manifest.webmanifest'
+}
+
+useDynamicManifest()
 applyBrandingToHead(getCachedBranding())
 
 if ('serviceWorker' in navigator) {

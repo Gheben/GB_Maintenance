@@ -33,6 +33,22 @@ async function getPublicKey() {
   return JSON.parse(row.value).publicKey;
 }
 
+// Read the current branding so push notifications carry the actual configured app name/logo
+// instead of the hardcoded defaults, matching the identity shown elsewhere in the app.
+async function _getBranding() {
+  const row = await getOne("SELECT value FROM settings WHERE key='general_config'").catch(() => null);
+  if (!row) return { appName: 'GB Maintenance', icon: null };
+  try {
+    const general = JSON.parse(row.value || '{}');
+    return {
+      appName: String(general.app_name || '').trim() || 'GB Maintenance',
+      icon: String(general.app_brand_image_url || '').trim() || null,
+    };
+  } catch {
+    return { appName: 'GB Maintenance', icon: null };
+  }
+}
+
 async function saveSubscription(userId, subscription) {
   const { endpoint, keys } = subscription || {};
   if (!endpoint || !keys?.p256dh || !keys?.auth) throw new Error('Invalid push subscription');
@@ -56,7 +72,12 @@ async function sendToUser(userId, payload) {
     return;
   }
 
-  const body = JSON.stringify(payload);
+  const branding = await _getBranding();
+  const body = JSON.stringify({
+    ...payload,
+    title: payload.title || branding.appName,
+    icon: payload.icon || branding.icon || undefined,
+  });
   await Promise.allSettled(subs.map(async (sub) => {
     try {
       await webpush.sendNotification(
