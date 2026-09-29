@@ -941,6 +941,8 @@ API keys are created from **Settings -> API Keys**.
           source: { type: 'string', example: 'Zabbix', description: 'Prefixed onto the incident title as [source]' },
           asset_ids: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'Correlates the incident to existing assets, same as POST /incidents' },
           asset_slugs: { type: 'array', items: { type: 'string' }, example: ['db-prod-01'], description: 'Resolved to asset_ids by slug - convenient when the caller only knows a hostname' },
+          service_ids: { type: 'array', items: { type: 'string', format: 'uuid' }, description: 'Correlates the incident to existing services, same as POST /incidents' },
+          service_slugs: { type: 'array', items: { type: 'string' }, example: ['customer-portal'], description: 'Resolved to service_ids by slug' },
         } } } } },
         responses: { 201: { description: 'Incident created' }, 401: { description: 'Invalid or disabled token' } },
       },

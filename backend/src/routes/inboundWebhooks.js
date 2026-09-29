@@ -95,6 +95,8 @@ router.post('/receive/:token', receiveLimiter, [
   body('source').optional().isString().trim().isLength({ max: 100 }),
   body('asset_ids').optional().isArray(),
   body('asset_slugs').optional().isArray(),
+  body('service_ids').optional().isArray(),
+  body('service_slugs').optional().isArray(),
 ], asyncRoute(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
@@ -124,6 +126,14 @@ router.post('/receive/:token', receiveLimiter, [
     ...slugRows.map((row) => row.id),
   ])];
 
+  const serviceSlugRows = Array.isArray(req.body.service_slugs) && req.body.service_slugs.length > 0
+    ? await getMany(`SELECT id FROM services WHERE slug = ANY($1::varchar[])`, [req.body.service_slugs])
+    : [];
+  const serviceIds = [...new Set([
+    ...(Array.isArray(req.body.service_ids) ? req.body.service_ids : []),
+    ...serviceSlugRows.map((row) => row.id),
+  ])];
+
   const result = await query(
     `INSERT INTO incidents (title, description, severity, status, started_at, created_by)
      VALUES ($1,$2,$3,'investigating',NOW(),NULL) RETURNING id`,
@@ -140,6 +150,9 @@ router.post('/receive/:token', receiveLimiter, [
     await query(`UPDATE assets SET status=$1, updated_at=NOW() WHERE id=$2`, [newStatus, assetId]);
     await query(`INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason) VALUES ('asset',$1,$2,$3,$4)`,
       [assetId, newStatus, `webhook:${matched.name}`, `Incident: ${title}`]);
+  }
+  for (const serviceId of serviceIds) {
+    await query(`INSERT INTO incident_services (incident_id, service_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [id, serviceId]);
   }
   query('UPDATE inbound_webhooks SET last_used_at=NOW() WHERE id=$1', [matched.id]).catch(() => {});
 

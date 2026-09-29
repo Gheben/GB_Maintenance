@@ -434,11 +434,12 @@ curl -X POST https://your-domain/api/inbound-webhooks/receive/gbmih_xxxxxxxxxxxx
     "description": "db-prod-01 at 96% for 10 minutes",
     "severity": "high",
     "source": "Zabbix",
-    "asset_slugs": ["db-prod-01"]
+    "asset_slugs": ["db-prod-01"],
+    "service_slugs": ["customer-portal"]
   }'
 ```
 
-Only `title` is required; `severity` overrides the webhook's default when provided, and `source` is prefixed onto the incident title (e.g. `[Zabbix] CPU usage above threshold`). `asset_slugs` (or `asset_ids` with internal UUIDs) correlates the incident to existing assets, exactly like the regular incident creation endpoint - affected services/status page are updated the same way. Response:
+Only `title` is required; `severity` overrides the webhook's default when provided, and `source` is prefixed onto the incident title (e.g. `[Zabbix] CPU usage above threshold`). `asset_slugs`/`service_slugs` (or their `_ids` equivalents with internal UUIDs) correlate the incident to existing assets/services, exactly like the regular incident creation endpoint - affected users, subscribers, owners, and the status page are recomputed the same way. Response:
 
 ```json
 { "id": "22222222-2222-2222-2222-222222222222", "message": "Incident created" }
