@@ -352,23 +352,6 @@ const MIGRATIONS = [
         )
       `);
 
-      // ─── INBOUND WEBHOOKS ─────────────────────────────────────────────────
-      // Lets external systems (monitoring tools, scripts) create incidents via a secret token URL.
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS inbound_webhooks (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          name VARCHAR(200) NOT NULL,
-          token_prefix VARCHAR(14) NOT NULL,
-          token_hash VARCHAR(255) NOT NULL,
-          default_severity VARCHAR(20) NOT NULL DEFAULT 'medium',
-          is_active BOOLEAN DEFAULT TRUE,
-          owner_id UUID REFERENCES users(id) ON DELETE SET NULL,
-          last_used_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        )
-      `);
-      await client.query(`CREATE INDEX IF NOT EXISTS idx_inbound_webhooks_prefix ON inbound_webhooks(token_prefix)`);
-
       // ─── AUDIT LOG ────────────────────────────────────────────────────────
       await client.query(`
         CREATE TABLE IF NOT EXISTS audit_log (
@@ -2328,6 +2311,27 @@ const MIGRATIONS = [
       await client.query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS preventive_actions TEXT`);
       await client.query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS rca_completed_at TIMESTAMPTZ`);
       await client.query(`ALTER TABLE incidents ADD COLUMN IF NOT EXISTS rca_completed_by UUID REFERENCES users(id) ON DELETE SET NULL`);
+    }
+  },
+  {
+    version: 56,
+    name: 'inbound_webhooks',
+    up: async (client) => {
+      // Lets external systems (monitoring tools, scripts) create incidents via a secret token URL.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS inbound_webhooks (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(200) NOT NULL,
+          token_prefix VARCHAR(14) NOT NULL,
+          token_hash VARCHAR(255) NOT NULL,
+          default_severity VARCHAR(20) NOT NULL DEFAULT 'medium',
+          is_active BOOLEAN DEFAULT TRUE,
+          owner_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          last_used_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_inbound_webhooks_prefix ON inbound_webhooks(token_prefix)`);
     }
   },
 ];
