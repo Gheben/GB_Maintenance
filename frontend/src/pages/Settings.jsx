@@ -66,6 +66,7 @@ const WEBHOOK_EVENTS = [
   { key: 'maintenance_rejected', label: 'Maintenance rejected' },
   { key: 'incident_created', label: 'Incident created' },
   { key: 'incident_resolved', label: 'Incident resolved' },
+  { key: 'blackout_scheduled', label: 'Blackout scheduled' },
 ]
 const EMPTY_WEBHOOK_FORM = { url: '', type: 'generic', events: [], enabled: true }
 

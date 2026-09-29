@@ -638,7 +638,7 @@ async function notifyIncident(incidentId, eventType) {
 // ─── Webhooks ─────────────────────────────────────────────────────────────────
 // ─── Build a webhook payload matching the target format ──────────────────────
 function _buildWebhookPayload(type, eventType, payload) {
-  const entity = payload.maintenance || payload.incident || {};
+  const entity = payload.maintenance || payload.incident || payload.blackout || {};
   const title = entity.title || eventType;
   const summary = `[${eventType.replace(/_/g, ' ')}] ${title}`;
 
@@ -677,7 +677,7 @@ async function _dispatchWebhooks(eventType, payload) {
 }
 
 module.exports = {
-  sendInApp, sendEmailNotification, sendWebhook, buildWebhookPayload: _buildWebhookPayload,
+  sendInApp, sendEmailNotification, sendWebhook, buildWebhookPayload: _buildWebhookPayload, dispatchWebhooks: _dispatchWebhooks,
   notifyMaintenance, notifyIncident,
   getMaintenanceSubscribers, logNotification
 };

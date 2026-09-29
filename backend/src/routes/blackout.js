@@ -3,7 +3,7 @@ const { body, validationResult } = require('express-validator');
 const { requireAuthOrApiKey, requireChangeManager, requireAdmin } = require('../middleware/authMiddleware');
 const { query, getOne, getMany } = require('../db/database');
 const auditService = require('../services/auditService');
-const { sendEmailNotification, sendInApp } = require('../services/notificationService');
+const { sendEmailNotification, sendInApp, dispatchWebhooks } = require('../services/notificationService');
 const webpushService = require('../services/webpushService');
 const logger = require('../utils/logger');
 const { getAffectedAssets, getAffectedServices } = require('../utils/maintenanceScope');
@@ -318,6 +318,14 @@ router.post('/', requireChangeManager, [
   // Notify affected users (owners/subscribers of the impacted assets/services), non-blocking.
   (async () => {
     try {
+      dispatchWebhooks('blackout_scheduled', {
+        blackout: {
+          title: req.body.name,
+          description: req.body.description || '',
+          start_date: req.body.start_date,
+          end_date: req.body.end_date,
+        },
+      }).catch(() => {});
       const impacted = await getImpactedUsersAndOffices(sids, aids);
       const affectedServiceIds = (await getAffectedServices(aids, sids)).map((service) => service.service_id);
       const emailSubscribers = affectedServiceIds.length > 0 ? await getMany(
