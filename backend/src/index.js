@@ -12,6 +12,12 @@ const { initDb, getOne, query } = require('./db/database');
 const { runMigrations } = require('./db/migrations');
 const { seedSuperAdmin } = require('./services/authService');
 const wsService = require('./services/wsService');
+
+// A rejected promise inside an async route handler (e.g. a DB error) would otherwise crash the
+// whole process (default Node behavior since v15) and take down every user, not just one request.
+process.on('unhandledRejection', (reason) => {
+  logger.error(`Unhandled rejection: ${reason && reason.message ? reason.message : reason}`, { stack: reason && reason.stack });
+});
 const schedulerService = require('./services/schedulerService');
 const probeService = require('./services/probeService');
 

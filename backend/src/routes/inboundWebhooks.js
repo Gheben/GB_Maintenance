@@ -11,6 +11,10 @@ const wsService = require('../services/wsService');
 
 const router = Router();
 
+// Ensures a thrown/rejected error inside an async handler reaches Express's error middleware
+// (res.json/status) instead of becoming an unhandled rejection that crashes the whole process.
+const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
 
 // Guards against token brute-forcing / spam without requiring the caller to authenticate first.
@@ -22,19 +26,19 @@ const receiveLimiter = rateLimit({
 });
 
 // ─── GET /api/inbound-webhooks ────────────────────────────────────────────────
-router.get('/', requireAuth, requireAdmin, async (req, res) => {
+router.get('/', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   const rows = await getMany(
     `SELECT id, name, token_prefix, default_severity, is_active, last_used_at, created_at
      FROM inbound_webhooks ORDER BY created_at DESC`
   );
   res.json(rows);
-});
+}));
 
 // ─── POST /api/inbound-webhooks ───────────────────────────────────────────────
 router.post('/', requireAuth, requireAdmin, [
   body('name').isString().trim().isLength({ min: 1, max: 200 }),
   body('default_severity').optional().isIn(SEVERITIES),
-], async (req, res) => {
+], asyncRoute(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
@@ -52,14 +56,14 @@ router.post('/', requireAuth, requireAdmin, [
 
   // Return the plain token ONCE — never retrievable again
   res.status(201).json({ id, token, message: 'Save this URL/token now — it will not be shown again' });
-});
+}));
 
 // ─── PATCH /api/inbound-webhooks/:id ──────────────────────────────────────────
 router.patch('/:id', requireAuth, requireAdmin, [
   body('name').optional().isString().trim().isLength({ min: 1, max: 200 }),
   body('default_severity').optional().isIn(SEVERITIES),
   body('is_active').optional().isBoolean(),
-], async (req, res) => {
+], asyncRoute(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
@@ -72,14 +76,14 @@ router.patch('/:id', requireAuth, requireAdmin, [
   await query(`UPDATE inbound_webhooks SET ${sets.join(',')} WHERE id=$${i}`, vals);
   await auditService.log(req.user.id, req.user.username, 'inbound_webhook:update', 'inbound_webhook', req.params.id, null, req.ip);
   res.json({ message: 'Updated' });
-});
+}));
 
 // ─── DELETE /api/inbound-webhooks/:id ─────────────────────────────────────────
-router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
+router.delete('/:id', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
   await query(`DELETE FROM inbound_webhooks WHERE id=$1`, [req.params.id]);
   await auditService.log(req.user.id, req.user.username, 'inbound_webhook:delete', 'inbound_webhook', req.params.id, null, req.ip);
   res.json({ message: 'Deleted' });
-});
+}));
 
 // ─── POST /api/inbound-webhooks/receive/:token ────────────────────────────────
 // Public endpoint for external monitoring tools; access is controlled solely by the secret
@@ -89,7 +93,7 @@ router.post('/receive/:token', receiveLimiter, [
   body('description').optional().isString(),
   body('severity').optional().isString(),
   body('source').optional().isString().trim().isLength({ max: 100 }),
-], async (req, res) => {
+], asyncRoute(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
@@ -123,6 +127,6 @@ router.post('/receive/:token', receiveLimiter, [
   await notifyIncident(id, 'incident_created');
   wsService.broadcast({ type: 'incident_created', id, severity });
   res.status(201).json({ id, message: 'Incident created' });
-});
+}));
 
 module.exports = router;
