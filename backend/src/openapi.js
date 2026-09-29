@@ -73,6 +73,7 @@ API keys are created from **Settings -> API Keys**.
     { name: 'Templates',     description: 'Maintenance templates' },
     { name: 'Blackout',      description: 'Blackout periods (maintenance not allowed)' },
     { name: 'ApiKeys',       description: 'API Keys for programmatic access' },
+    { name: 'InboundWebhooks', description: 'Admin-managed secret-token URLs that external tools call to auto-create incidents' },
     { name: 'Audit',         description: 'Audit log' },
   ],
   components: {
@@ -798,7 +799,13 @@ API keys are created from **Settings -> API Keys**.
     },
     '/settings/webhooks': {
       get: { tags: ['Settings'], summary: 'Webhook list', responses: { 200: { description: 'Webhook' } } },
-      put: { tags: ['Settings'], summary: 'Save webhooks', requestBody: { required: true, content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: { url: { type: 'string' }, type: { type: 'string', enum: ['teams','slack','generic'] }, events: { type: 'array', items: { type: 'string' } } } } } } } }, responses: { 200: { description: 'Saved' } } },
+      put: { tags: ['Settings'], summary: 'Save webhooks', requestBody: { required: true, content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: { url: { type: 'string' }, type: { type: 'string', enum: ['teams','slack','generic'] }, events: { type: 'array', items: { type: 'string', enum: ['maintenance_scheduled','maintenance_reminder','maintenance_started','maintenance_completed','maintenance_reopened','maintenance_cancelled','maintenance_rejected','incident_created','incident_resolved','blackout_scheduled'] }, description: 'Empty array = all events' }, enabled: { type: 'boolean' } } } } } } }, responses: { 200: { description: 'Saved' } } },
+    },
+    '/settings/webhooks/test': {
+      post: { tags: ['Settings'], summary: 'Send a sample payload to a webhook URL to verify formatting/connectivity (admin)',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['url'], properties: { url: { type: 'string' }, type: { type: 'string', enum: ['teams','slack','generic'] } } } } } },
+        responses: { 200: { description: 'Test webhook sent' }, 400: { description: 'Webhook test failed' } },
+      },
     },
     '/settings/general': {
       get: { tags: ['Settings'], summary: 'General settings', responses: { 200: { description: 'General settings' } } },
@@ -908,6 +915,33 @@ API keys are created from **Settings -> API Keys**.
     '/apikeys/{id}': {
       patch:  { tags: ['ApiKeys'], summary: 'Update key name/expiration', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Updated' } } },
       delete: { tags: ['ApiKeys'], summary: 'Revoke API key', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Revoked' } } },
+    },
+
+    // ─── INBOUND WEBHOOKS ──────────────────────────────────────────────────────
+    '/inbound-webhooks': {
+      get:  { tags: ['InboundWebhooks'], summary: 'Inbound webhook list (masked, admin)',
+        responses: { 200: { description: 'Inbound webhooks', content: { 'application/json': { schema: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, token_prefix: { type: 'string' }, default_severity: { type: 'string' }, is_active: { type: 'boolean' }, last_used_at: { type: 'string', format: 'date-time', nullable: true } } } } } } } },
+      },
+      post: { tags: ['InboundWebhooks'], summary: 'Create inbound webhook - returns the full token/URL ONLY once (admin)',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, default_severity: { type: 'string', enum: ['critical','high','medium','low'] } } } } } },
+        responses: { 201: { description: 'Created', content: { 'application/json': { schema: { type: 'object', properties: { id: { type: 'string' }, token: { type: 'string', description: 'Full secret token - store it, it will not be visible again' } } } } } } },
+      },
+    },
+    '/inbound-webhooks/{id}': {
+      patch:  { tags: ['InboundWebhooks'], summary: 'Update name/default severity/enabled state (admin)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { name: { type: 'string' }, default_severity: { type: 'string' }, is_active: { type: 'boolean' } } } } } }, responses: { 200: { description: 'Updated' } } },
+      delete: { tags: ['InboundWebhooks'], summary: 'Delete inbound webhook, stopping traffic immediately (admin)', parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Deleted' } } },
+    },
+    '/inbound-webhooks/receive/{token}': {
+      post: { tags: ['InboundWebhooks'], summary: 'Create an incident from an external tool (no login, secured by the URL token)', security: [],
+        parameters: [{ in: 'path', name: 'token', required: true, schema: { type: 'string' }, description: 'The full secret token shown once at creation time' }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['title'], properties: {
+          title: { type: 'string', example: 'Database CPU above threshold' },
+          description: { type: 'string', example: 'CPU usage at 96% for 10 minutes' },
+          severity: { type: 'string', enum: ['critical','high','medium','low'], description: 'Overrides the webhook default severity if provided' },
+          source: { type: 'string', example: 'Zabbix', description: 'Prefixed onto the incident title as [source]' },
+        } } } } },
+        responses: { 201: { description: 'Incident created' }, 401: { description: 'Invalid or disabled token' } },
+      },
     },
 
     // ─── AUDIT ────────────────────────────────────────────────────────────────

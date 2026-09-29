@@ -264,6 +264,7 @@ Settings sections include:
 - LDAP / Active Directory.
 - SAML / SSO.
 - API keys.
+- Webhooks (outgoing to Teams/Slack/generic URLs, and incoming secret-token URLs to auto-create incidents).
 - Branding, app name, app URL, logo and PWA identity.
 - Audit retention and automatic purge.
 - NTP server and timezone verification.
@@ -325,6 +326,7 @@ Main API areas:
 - `/api/services`
 - `/api/maintenance`
 - `/api/incidents`
+- `/api/blackout`
 - `/api/licenses`
 - `/api/suppliers`
 - `/api/notifications`
@@ -332,8 +334,116 @@ Main API areas:
 - `/api/settings`
 - `/api/status`
 - `/api/uploads`
+- `/api/apikeys`
+- `/api/inbound-webhooks`
 
-The frontend uses JWT bearer authentication. API keys can be sent as `X-Api-Key` for supported integrations.
+The frontend uses JWT bearer authentication. Most write endpoints (`incidents`, `maintenance`, `blackout`) also accept an **API Key** sent as the `X-Api-Key` header, which is the recommended way for third-party systems and scripts to integrate — no user login/session is required.
+
+### Authenticating with an API Key
+
+1. In the app, go to `Settings -> API Keys -> New API Key`, give it a name and (optionally) an expiration date.
+2. Copy the generated key immediately — it is shown only once and stored as a hash, it cannot be retrieved again later.
+3. Send it on every request as the `X-Api-Key` header. The key acts with the role/permissions of the user who created it.
+
+```bash
+curl -X POST https://your-domain/api/incidents \
+  -H "X-Api-Key: gbm_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Database Server Upgrade",
+    "severity": "high",
+    "description": "Detected by external monitoring",
+    "asset_ids": ["11111111-1111-1111-1111-111111111111"]
+  }'
+```
+
+Response:
+
+```json
+{ "id": "22222222-2222-2222-2222-222222222222" }
+```
+
+The same pattern works for maintenance windows and blackout periods:
+
+```bash
+# Create a maintenance window
+curl -X POST https://your-domain/api/maintenance \
+  -H "X-Api-Key: gbm_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Firewall firmware update",
+    "type": "planned",
+    "impact_level": "medium",
+    "scheduled_start": "2026-10-01T22:00:00Z",
+    "scheduled_end": "2026-10-02T00:00:00Z",
+    "asset_ids": ["11111111-1111-1111-1111-111111111111"]
+  }'
+
+# Create a blackout period (change-freeze window)
+curl -X POST https://your-domain/api/blackout \
+  -H "X-Api-Key: gbm_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Year-end freeze",
+    "start_date": "2026-12-20",
+    "end_date": "2027-01-05"
+  }'
+```
+
+### Outgoing Webhooks (`Settings -> Webhooks -> Outgoing`)
+
+GB Maintenance can POST a JSON payload to an external URL whenever a maintenance, incident, or blackout event occurs. Configure one or more webhooks with a target URL, a format (`generic`, `teams`, or `slack`), and an optional list of events to filter on (leave empty to receive every event).
+
+Supported events: `maintenance_scheduled`, `maintenance_reminder`, `maintenance_started`, `maintenance_completed`, `maintenance_reopened`, `maintenance_cancelled`, `maintenance_rejected`, `incident_created`, `incident_resolved`, `blackout_scheduled`.
+
+Payload shape by format:
+
+```jsonc
+// generic
+{ "event": "incident_created", "timestamp": "2026-09-29T10:00:00.000Z", "incident": { "title": "...", "severity": "high", "...": "..." } }
+
+// slack
+{ "text": "*[incident created] Database Server Upgrade*\nCPU usage above threshold" }
+
+// teams (classic MessageCard, for the legacy "Incoming Webhook" connector or a Power Automate flow expecting it)
+{
+  "@type": "MessageCard",
+  "@context": "http://schema.org/extensions",
+  "summary": "[incident created] Database Server Upgrade",
+  "themeColor": "1e40af",
+  "title": "[incident created] Database Server Upgrade",
+  "text": "CPU usage above threshold"
+}
+```
+
+Use the **Send test** button in the webhook edit form to verify connectivity/formatting without waiting for a real event.
+
+### Inbound Webhooks (`Settings -> Webhooks -> Incoming`)
+
+Lets an external tool (monitoring, alerting) open an incident here by calling a secret URL — no API key or login required, access is controlled entirely by that URL.
+
+1. `Settings -> Webhooks -> Incoming -> New Inbound Webhook`: give it a name (e.g. "Zabbix") and a default severity.
+2. Copy the generated URL immediately — it is shown only once (`https://your-domain/api/inbound-webhooks/receive/gbmih_...`).
+3. Configure the external tool to POST to that URL:
+
+```bash
+curl -X POST https://your-domain/api/inbound-webhooks/receive/gbmih_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "CPU usage above threshold",
+    "description": "db-prod-01 at 96% for 10 minutes",
+    "severity": "high",
+    "source": "Zabbix"
+  }'
+```
+
+Only `title` is required; `severity` overrides the webhook's default when provided, and `source` is prefixed onto the incident title (e.g. `[Zabbix] CPU usage above threshold`). Response:
+
+```json
+{ "id": "22222222-2222-2222-2222-222222222222", "message": "Incident created" }
+```
+
+Disabling or deleting the inbound webhook in Settings stops all traffic instantly; the endpoint is also rate-limited (30 requests/minute) against abuse.
 
 ## Security Checklist
 

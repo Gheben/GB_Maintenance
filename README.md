@@ -25,7 +25,8 @@ Ideal for IT departments that need to track hardware, software licenses, service
 - 📄 **License Management** — Software licenses with expiry tracking, renewal history, documents, reports, approval workflows, and email notifications
 - ✅ **Approval Workflow** — Token-based public approval page, fully brandable (logo, colors, texts) per-customer
 - 🏢 **Supplier Management** — Supplier registry with contact info, website (with favicon preview), and contract details (SLA, emergency contacts, availability, documents)
-- 🔔 **Notifications** — Configurable email templates, in-app notifications, outbound webhooks, and browser push alerts for maintenance, incidents, and license workflow events
+- 🔔 **Notifications** — Configurable email templates, in-app notifications, outbound webhooks (Teams/Slack/generic), and browser push alerts for maintenance, incidents, and license workflow events
+- 🔌 **Integrations** — API Key authentication for programmatic REST access, plus inbound webhooks (secret-token URLs) so external monitoring tools can auto-create incidents
 - 📊 **Probes** — Scheduled connectivity checks on assets/services with status history
 - 📈 **Dashboard and Reports** — KPIs, expiring licenses, pending owner approvals, maintenance PDF/CSV, uptime, asset, and license reports
 - 🗓️ **Operations Planning** — Calendar, maintenance lifecycle, owner approvals, recurring windows, blackout periods, and affected-scope tracking
