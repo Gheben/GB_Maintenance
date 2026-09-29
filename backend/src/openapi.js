@@ -948,6 +948,19 @@ API keys are created from **Settings -> API Keys**.
         responses: { 201: { description: 'Incident created' }, 401: { description: 'Invalid or disabled token' } },
       },
     },
+    '/inbound-webhooks/receive/{token}/{incidentId}/updates': {
+      post: { tags: ['InboundWebhooks'], summary: 'Add a timeline update to an existing incident, and close it when status is resolved (no login, secured by the URL token)', security: [],
+        parameters: [
+          { in: 'path', name: 'token', required: true, schema: { type: 'string' }, description: 'The full secret token shown once at creation time' },
+          { in: 'path', name: 'incidentId', required: true, schema: { type: 'string', format: 'uuid' }, description: 'The id returned by the create call' },
+        ],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['status', 'message'], properties: {
+          status: { type: 'string', enum: ['investigating', 'identified', 'monitoring', 'resolved'] },
+          message: { type: 'string', example: 'Mitigation applied, monitoring recovery' },
+        } } } } },
+        responses: { 201: { description: 'Update added' }, 401: { description: 'Invalid or disabled token' }, 404: { description: 'Incident not found' } },
+      },
+    },
 
     // ─── AUDIT ────────────────────────────────────────────────────────────────
     '/audit': {

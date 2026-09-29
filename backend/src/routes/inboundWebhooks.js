@@ -4,7 +4,7 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { requireAuth, requireAdmin } = require('../middleware/authMiddleware');
-const { query, getMany } = require('../db/database');
+const { query, getMany, getOne } = require('../db/database');
 const auditService = require('../services/auditService');
 const { notifyIncident } = require('../services/notificationService');
 const wsService = require('../services/wsService');
@@ -16,6 +16,7 @@ const router = Router();
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 const SEVERITIES = ['critical', 'high', 'medium', 'low'];
+const STATUSES = ['investigating', 'identified', 'monitoring', 'resolved'];
 
 // Guards against token brute-forcing / spam without requiring the caller to authenticate first.
 const receiveLimiter = rateLimit({
@@ -24,6 +25,20 @@ const receiveLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// Shared by the create and update receivers: looks up the webhook by token prefix, then confirms
+// the full secret with a hash comparison (mirrors the API key auth pattern used elsewhere).
+async function resolveInboundWebhook(token) {
+  const prefix = token.slice(0, 14);
+  const candidates = await getMany(
+    `SELECT * FROM inbound_webhooks WHERE token_prefix=$1 AND is_active=true`,
+    [prefix]
+  );
+  for (const row of candidates) {
+    if (await bcrypt.compare(token, row.token_hash)) return row;
+  }
+  return null;
+}
 
 // ─── GET /api/inbound-webhooks ────────────────────────────────────────────────
 router.get('/', requireAuth, requireAdmin, asyncRoute(async (req, res) => {
@@ -102,16 +117,7 @@ router.post('/receive/:token', receiveLimiter, [
   const errors = validationResult(req);
   if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-  const token = req.params.token;
-  const prefix = token.slice(0, 14);
-  const candidates = await getMany(
-    `SELECT * FROM inbound_webhooks WHERE token_prefix=$1 AND is_active=true`,
-    [prefix]
-  );
-  let matched = null;
-  for (const row of candidates) {
-    if (await bcrypt.compare(token, row.token_hash)) { matched = row; break; }
-  }
+  const matched = await resolveInboundWebhook(req.params.token);
   if (!matched) return res.status(401).json({ error: 'Invalid or disabled token' });
 
   const severity = SEVERITIES.includes(req.body.severity) ? req.body.severity : matched.default_severity;
@@ -160,6 +166,48 @@ router.post('/receive/:token', receiveLimiter, [
   await notifyIncident(id, 'incident_created');
   wsService.broadcast({ type: 'incident_created', id, severity });
   res.status(201).json({ id, message: 'Incident created' });
+}));
+
+// ─── POST /api/inbound-webhooks/receive/:token/:incidentId/updates ───────────
+// Appends a timeline update to an incident previously created via this (or any) webhook, and
+// closes it when status is 'resolved' — mirrors POST /api/incidents/:id/updates.
+router.post('/receive/:token/:incidentId/updates', receiveLimiter, [
+  body('status').isIn(STATUSES),
+  body('message').isString().trim().isLength({ min: 1 }),
+], asyncRoute(async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+  const matched = await resolveInboundWebhook(req.params.token);
+  if (!matched) return res.status(401).json({ error: 'Invalid or disabled token' });
+
+  const incident = await getOne(`SELECT id FROM incidents WHERE id=$1`, [req.params.incidentId]);
+  if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+  await query(
+    `INSERT INTO incident_updates (incident_id, status, message) VALUES ($1,$2,$3)`,
+    [req.params.incidentId, req.body.status, req.body.message]
+  );
+
+  const wasResolved = req.body.status === 'resolved';
+  await query(
+    `UPDATE incidents SET status=$1${wasResolved ? ', resolved_at=NOW()' : ''}, updated_at=NOW() WHERE id=$2`,
+    [req.body.status, req.params.incidentId]
+  );
+
+  if (wasResolved) {
+    const assets = await getMany('SELECT asset_id FROM incident_assets WHERE incident_id=$1', [req.params.incidentId]);
+    for (const a of assets) {
+      await query(`UPDATE assets SET status='operational', updated_at=NOW() WHERE id=$1`, [a.asset_id]);
+      await query(`INSERT INTO status_history (entity_type, entity_id, status, changed_by, reason) VALUES ('asset',$1,'operational',$2,$3)`,
+        [a.asset_id, `webhook:${matched.name}`, `Incident resolved: ${req.params.incidentId}`]);
+    }
+    await notifyIncident(req.params.incidentId, 'incident_resolved');
+  }
+
+  query('UPDATE inbound_webhooks SET last_used_at=NOW() WHERE id=$1', [matched.id]).catch(() => {});
+  wsService.broadcast({ type: 'incident_updated', id: req.params.incidentId, status: req.body.status });
+  res.status(201).json({ message: 'Update added' });
 }));
 
 module.exports = router;

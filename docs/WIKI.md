@@ -446,6 +446,14 @@ Only `title` is required; `severity` overrides the webhook's default when provid
 { "id": "22222222-2222-2222-2222-222222222222", "message": "Incident created" }
 ```
 
+Use the returned `id` to add timeline updates later, and to close the incident by sending `status: "resolved"` (this restores the correlated assets to `operational` and triggers the `incident_resolved` notifications, same as closing it from the UI):
+
+```bash
+curl -X POST https://your-domain/api/inbound-webhooks/receive/gbmih_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/22222222-2222-2222-2222-222222222222/updates \
+  -H "Content-Type: application/json" \
+  -d '{ "status": "resolved", "message": "Auto-resolved: metric back to normal range" }'
+```
+
 Disabling or deleting the inbound webhook in Settings stops all traffic instantly; the endpoint is also rate-limited (30 requests/minute) against abuse.
 
 ## Security Checklist
