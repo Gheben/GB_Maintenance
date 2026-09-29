@@ -636,6 +636,28 @@ async function notifyIncident(incidentId, eventType) {
 }
 
 // ─── Webhooks ─────────────────────────────────────────────────────────────────
+// ─── Build a webhook payload matching the target format ──────────────────────
+function _buildWebhookPayload(type, eventType, payload) {
+  const entity = payload.maintenance || payload.incident || {};
+  const title = entity.title || eventType;
+  const summary = `[${eventType.replace(/_/g, ' ')}] ${title}`;
+
+  if (type === 'slack') {
+    return { text: `*${summary}*${entity.description ? `\n${entity.description}` : ''}` };
+  }
+  if (type === 'teams') {
+    return {
+      '@type': 'MessageCard',
+      '@context': 'http://schema.org/extensions',
+      summary,
+      themeColor: '1e40af',
+      title: summary,
+      text: entity.description || '',
+    };
+  }
+  return { event: eventType, timestamp: new Date().toISOString(), ...payload };
+}
+
 async function _dispatchWebhooks(eventType, payload) {
   try {
     const row = await getOne("SELECT value FROM settings WHERE key='webhook_config'");
@@ -645,8 +667,9 @@ async function _dispatchWebhooks(eventType, payload) {
 
     for (const wh of webhooks) {
       if (!wh.enabled || !wh.url) continue;
-      if (wh.events && !wh.events.includes(eventType)) continue;
-      await sendWebhook(wh.url, { event: eventType, timestamp: new Date().toISOString(), ...payload });
+      // An empty/missing events list means "all events" (used to silently mean "no events" before).
+      if (Array.isArray(wh.events) && wh.events.length > 0 && !wh.events.includes(eventType)) continue;
+      await sendWebhook(wh.url, _buildWebhookPayload(wh.type, eventType, payload));
     }
   } catch (err) {
     logger.error(`[Notify] _dispatchWebhooks error: ${err.message}`);
@@ -654,7 +677,7 @@ async function _dispatchWebhooks(eventType, payload) {
 }
 
 module.exports = {
-  sendInApp, sendEmailNotification, sendWebhook,
+  sendInApp, sendEmailNotification, sendWebhook, buildWebhookPayload: _buildWebhookPayload,
   notifyMaintenance, notifyIncident,
   getMaintenanceSubscribers, logNotification
 };

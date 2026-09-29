@@ -222,6 +222,7 @@ export const settingsApi = {
   saveSaml: (data) => api.put('/settings/saml', data),
   getWebhooks: () => api.get('/settings/webhooks'),
   saveWebhooks: (data) => api.put('/settings/webhooks', data),
+  testWebhook: (data) => api.post('/settings/webhooks/test', data),
   getGeneral: () => api.get('/settings/general'),
   saveGeneral: (data) => api.put('/settings/general', data),
   getNtp: () => api.get('/settings/ntp'),

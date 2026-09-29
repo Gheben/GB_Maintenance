@@ -787,6 +787,21 @@ router.put('/webhooks', requireAuth, requireAdmin, [
   res.json({ message: 'Webhooks saved' });
 });
 
+router.post('/webhooks/test', requireAuth, requireAdmin, [
+  body('url').isString().trim().isLength({ min: 1 }),
+  body('type').optional().isIn(['teams', 'slack', 'generic']),
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  const { sendWebhook, buildWebhookPayload } = require('../services/notificationService');
+  const payload = buildWebhookPayload(req.body.type || 'generic', 'test', {
+    maintenance: { title: 'Test notification', description: 'This is a test webhook from GB Maintenance.' },
+  });
+  const ok = await sendWebhook(req.body.url, payload);
+  if (!ok) return res.status(400).json({ error: 'Webhook test failed — check the URL and server logs.' });
+  res.json({ message: 'Test webhook sent' });
+});
+
 // ─── GET/PUT /api/settings/general ───────────────────────────────────────────
 router.get('/general', requireAuth, requireSuperAdmin, async (req, res) => {
   const row = await getOne("SELECT value FROM settings WHERE key='general_config'");

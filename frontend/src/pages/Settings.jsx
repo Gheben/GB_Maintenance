@@ -6,7 +6,7 @@ import { startRegistration, browserSupportsWebAuthn, WebAuthnError } from '@simp
 import { toast } from '../components/Toast'
 import { useAuth } from '../contexts/AuthContext'
 import { format } from 'date-fns'
-import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, Clock, RefreshCw, Pencil, GripVertical, Mail, Network, KeyRound, Tag, Cog, Bell, ChevronDown, ChevronRight, Upload, Download, Fingerprint, Lock } from 'lucide-react'
+import { Copy, ExternalLink, Shield, Save, CheckCircle, AlertCircle, Server, XCircle, Plus, Trash2, Eye, EyeOff, Send, Clock, RefreshCw, Pencil, GripVertical, Mail, Network, KeyRound, Tag, Cog, Bell, ChevronDown, ChevronRight, Upload, Download, Fingerprint, Lock, Webhook } from 'lucide-react'
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -55,6 +55,19 @@ function PortalPreview({ general, type }) {
     </div>
   )
 }
+
+const WEBHOOK_EVENTS = [
+  { key: 'maintenance_scheduled', label: 'Maintenance scheduled' },
+  { key: 'maintenance_reminder', label: 'Maintenance reminder' },
+  { key: 'maintenance_started', label: 'Maintenance started' },
+  { key: 'maintenance_completed', label: 'Maintenance completed' },
+  { key: 'maintenance_reopened', label: 'Maintenance reopened' },
+  { key: 'maintenance_cancelled', label: 'Maintenance cancelled' },
+  { key: 'maintenance_rejected', label: 'Maintenance rejected' },
+  { key: 'incident_created', label: 'Incident created' },
+  { key: 'incident_resolved', label: 'Incident resolved' },
+]
+const EMPTY_WEBHOOK_FORM = { url: '', type: 'generic', events: [], enabled: true }
 
 export default function Settings() {
   const { user } = useAuth()
@@ -151,6 +164,15 @@ export default function Settings() {
   const [deleteTargetKey, setDeleteTargetKey] = useState(null)
   const [keyForm, setKeyForm] = useState({ name: '', expires_at: '' })
 
+  // Webhooks state
+  const [webhooks, setWebhooks] = useState([])
+  const [showWebhookForm, setShowWebhookForm] = useState(false)
+  const [editingWebhookIdx, setEditingWebhookIdx] = useState(null)
+  const [webhookForm, setWebhookForm] = useState(EMPTY_WEBHOOK_FORM)
+  const [webhooksSaving, setWebhooksSaving] = useState(false)
+  const [webhookTesting, setWebhookTesting] = useState(false)
+  const [deleteWebhookIdx, setDeleteWebhookIdx] = useState(null)
+
   // Maintenance Types state
   const [mTypes, setMTypes] = useState([])
 
@@ -229,6 +251,7 @@ export default function Settings() {
 
   useEffect(() => {
     if (tab === 'apikeys') apikeysApi.list().then(r => setKeys(r.data)).catch(() => {})
+    if (tab === 'webhooks') settingsApi.getWebhooks().then(r => setWebhooks(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     if (tab === 'emailtpl') notificationsApi.templates().then(r => setEmailTemplates(r.data)).catch(() => {})
     if (tab === 'security' && user?.auth_type === 'local') loadPasskeys()
     if (tab === 'general' && isSuperAdmin) {
@@ -375,6 +398,75 @@ export default function Settings() {
       toast.error(err.response?.data?.error || 'Could not update push notification settings')
     } finally {
       setPushLoading(false)
+    }
+  }
+
+  const openCreateWebhook = () => {
+    setEditingWebhookIdx(null)
+    setWebhookForm(EMPTY_WEBHOOK_FORM)
+    setShowWebhookForm(true)
+  }
+
+  const openEditWebhook = (idx) => {
+    setEditingWebhookIdx(idx)
+    setWebhookForm({ ...EMPTY_WEBHOOK_FORM, ...webhooks[idx], events: Array.isArray(webhooks[idx]?.events) ? webhooks[idx].events : [] })
+    setShowWebhookForm(true)
+  }
+
+  const toggleWebhookFormEvent = (key) => {
+    setWebhookForm(f => ({ ...f, events: f.events.includes(key) ? f.events.filter(e => e !== key) : [...f.events, key] }))
+  }
+
+  const saveWebhookForm = async (e) => {
+    e.preventDefault()
+    if (!webhookForm.url.trim()) { toast.error('URL is required'); return }
+    const next = [...webhooks]
+    if (editingWebhookIdx === null) next.push(webhookForm)
+    else next[editingWebhookIdx] = webhookForm
+    setWebhooksSaving(true)
+    try {
+      await settingsApi.saveWebhooks(next)
+      setWebhooks(next)
+      toast.success('Webhook saved')
+      setShowWebhookForm(false)
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Error saving webhook')
+    } finally {
+      setWebhooksSaving(false)
+    }
+  }
+
+  const toggleWebhookEnabled = async (idx) => {
+    const next = webhooks.map((w, i) => i === idx ? { ...w, enabled: !w.enabled } : w)
+    setWebhooks(next)
+    try { await settingsApi.saveWebhooks(next) }
+    catch { toast.error('Error updating webhook') }
+  }
+
+  const confirmDeleteWebhook = async () => {
+    if (deleteWebhookIdx === null) return
+    const next = webhooks.filter((_, i) => i !== deleteWebhookIdx)
+    try {
+      await settingsApi.saveWebhooks(next)
+      setWebhooks(next)
+      toast.success('Webhook deleted')
+    } catch {
+      toast.error('Error deleting webhook')
+    } finally {
+      setDeleteWebhookIdx(null)
+    }
+  }
+
+  const testWebhookForm = async () => {
+    if (!webhookForm.url.trim()) { toast.error('URL is required'); return }
+    setWebhookTesting(true)
+    try {
+      await settingsApi.testWebhook({ url: webhookForm.url, type: webhookForm.type })
+      toast.success('Test webhook sent — check the target channel/endpoint')
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Webhook test failed')
+    } finally {
+      setWebhookTesting(false)
     }
   }
 
@@ -677,6 +769,7 @@ export default function Settings() {
     ...(isSuperAdmin ? [{ id: 'ldap', label: 'LDAP / AD', icon: Network }] : []),
     ...(isSuperAdmin ? [{ id: 'saml', label: 'SAML / SSO', icon: Shield }] : []),
     { id: 'apikeys',  label: 'API Keys',           icon: KeyRound },
+    { id: 'webhooks', label: 'Webhooks',           icon: Webhook },
     { id: 'general',  label: 'System',             icon: Cog },
   ]
 
@@ -1297,6 +1390,44 @@ export default function Settings() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'webhooks' && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">Send an HTTP request to an external URL (Microsoft Teams, Slack or a generic endpoint) whenever a maintenance or incident event occurs.</p>
+            <div className="flex justify-end">
+              <button className="btn-primary" onClick={openCreateWebhook}><Plus size={15} />New Webhook</button>
+            </div>
+
+            <div className="space-y-3">
+              {webhooks.length === 0 ? (
+                <div className="card p-6 text-center text-gray-500 text-sm">No webhooks configured</div>
+              ) : webhooks.map((wh, idx) => (
+                <div key={idx} className="card p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 uppercase">{wh.type || 'generic'}</span>
+                        <button type="button"
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${wh.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+                          onClick={() => toggleWebhookEnabled(idx)}>
+                          {wh.enabled ? 'Enabled' : 'Disabled'}
+                        </button>
+                      </div>
+                      <div className="text-sm font-mono truncate mt-1.5">{wh.url}</div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {Array.isArray(wh.events) && wh.events.length > 0 ? `${wh.events.length} event${wh.events.length > 1 ? 's' : ''}` : 'All events'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button className="action-icon-btn" onClick={() => openEditWebhook(idx)}><Pencil size={13} /></button>
+                      <button className="action-icon-btn action-icon-btn-danger" onClick={() => setDeleteWebhookIdx(idx)}><Trash2 size={13} /></button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -2242,6 +2373,55 @@ export default function Settings() {
       {deleteTargetKey && (
         <ConfirmDialog title="Delete API Key" message={`Delete "${deleteTargetKey.name}"?`} danger confirmLabel="Delete"
           onConfirm={handleDeleteKey} onCancel={() => setDeleteTargetKey(null)} />
+      )}
+
+      {/* Webhooks modals */}
+      {showWebhookForm && (
+        <Modal title={editingWebhookIdx === null ? 'New Webhook' : 'Edit Webhook'} onClose={() => setShowWebhookForm(false)} size="md">
+          <form onSubmit={saveWebhookForm} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">URL *</label>
+              <input className="input" required placeholder="https://..." value={webhookForm.url} onChange={e => setWebhookForm(f => ({ ...f, url: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Type</label>
+              <select className="input" value={webhookForm.type} onChange={e => setWebhookForm(f => ({ ...f, type: e.target.value }))}>
+                <option value="generic">Generic (raw JSON)</option>
+                <option value="teams">Microsoft Teams</option>
+                <option value="slack">Slack</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Events</label>
+              <p className="text-xs text-gray-400 mb-2">Leave all unchecked to receive every event.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {WEBHOOK_EVENTS.map(ev => (
+                  <label key={ev.key} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={webhookForm.events.includes(ev.key)} onChange={() => toggleWebhookFormEvent(ev.key)} />
+                    {ev.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={webhookForm.enabled} onChange={e => setWebhookForm(f => ({ ...f, enabled: e.target.checked }))} />
+              Enabled
+            </label>
+            <div className="flex justify-between items-center gap-3 pt-1">
+              <button type="button" className="btn-secondary text-sm" disabled={webhookTesting} onClick={testWebhookForm}>
+                <Send size={14} />{webhookTesting ? 'Sending…' : 'Send test'}
+              </button>
+              <div className="flex gap-3">
+                <button type="button" className="btn-secondary" onClick={() => setShowWebhookForm(false)}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={webhooksSaving}>{webhooksSaving ? 'Saving…' : 'Save'}</button>
+              </div>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {deleteWebhookIdx !== null && (
+        <ConfirmDialog title="Delete Webhook" message={`Delete this webhook (${webhooks[deleteWebhookIdx]?.url})?`} danger confirmLabel="Delete"
+          onConfirm={confirmDeleteWebhook} onCancel={() => setDeleteWebhookIdx(null)} />
       )}
       {deleteTargetPasskey && (
         <ConfirmDialog title="Remove Passkey" message={`Remove "${deleteTargetPasskey.name || 'Unnamed passkey'}"? You won't be able to use it to sign in anymore.`} danger confirmLabel="Remove"
