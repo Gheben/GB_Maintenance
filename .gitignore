@@ -30,3 +30,6 @@ data/local-seed/
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
+
+# Local-only diagrams (not for publication)
+*.drawio
